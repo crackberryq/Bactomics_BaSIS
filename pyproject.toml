@@ -11,7 +11,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
-dependencies = ["PyYAML>=6.0,<7"]
+dependencies = ["PyYAML>=6.0,<7", "snakemake==9.6.2"]
 
 [project.urls]
 Repository = "https://github.com/crackberryq/Bactomics_BaSIS"

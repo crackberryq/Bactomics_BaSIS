@@ -8,7 +8,7 @@ Whole-result PF2 caching requires explicit local ProtT5 and classifier-weight pa
 
 These instructions target Linux x86-64 or Ubuntu inside WSL2 on Windows. A Linux terminal is required for the native tool stack; Windows PowerShell is not a substitute for the commands below. Keep working files in the WSL Linux filesystem when practical and use Linux paths in configuration. The recipes are starting specifications, not solved platform lockfiles. Earlier native pilot executions and captured environment identities are retained separately; the full native stack has not been freshly restored during this candidate's software tests. See the deployment bundle's `reproducibility/README.txt` for exact-export and pip-artifact limitations.
 
-## 1. Install the small BaSIS application first
+## 1. Install the BaSIS application first
 
 Use an existing Miniforge/Conda installation, or install Miniforge from its [official distribution](https://github.com/conda-forge/miniforge). Do not install into the existing HybAs environment.
 
@@ -33,7 +33,7 @@ python -m pip install -e '.[workflow]'
 snakemake --version
 ```
 
-Select the scheduler on a configured run with `--engine snakemake`; omitting the flag selects `--engine local`. The workflow baseline is Snakemake 9.6.2. Its upstream package requires Python 3.11 or newer. The Python environment contains BaSIS and its Python dependencies; native biological tools and databases are separate.
+In rc16, Snakemake is a base dependency and the default scheduler. Use `--engine local` explicitly for serial execution. The workflow baseline is Snakemake 9.6.2. Its upstream package requires Python 3.11 or newer. The Python environment contains BaSIS and its Python dependencies; native biological tools and databases are separate.
 
 ## 2. Choose native tools, then create their environments
 
@@ -63,7 +63,7 @@ basis setup-environments --project /absolute/path/workspace --create --env core-
 basis setup-environments --project /absolute/path/workspace --create --env context --env deepsafe
 ```
 
-The default destination is `.basis-envs/` inside the selected workspace; without `--project`, the workspace is the current directory. Recipes are read from the installed package and are not modified. The source-tree wrapper `bash scripts/setup_envs.sh` accepts the same options. Use `--prefix-root /absolute/path/basis-envs` to change it, or `--manager mamba`/`--manager micromamba` for an installed alternative. No database download or genome analysis is part of this helper. An existing prefix is skipped, including an incomplete prefix from a failed installation; inspect it before deciding whether to remove or repair it.
+The default destination is `.basis-envs/` inside the selected workspace; without `--project`, the workspace is the current directory. Recipes are read from the installed package and are not modified. The source-tree wrapper `bash scripts/setup_envs.sh` accepts the same options. Use `--prefix-root /absolute/path/basis-envs` to change it, or `--manager mamba`/`--manager micromamba` for an installed alternative. No database download or genome analysis is part of this helper. In rc16, selected environments are installed and verified through Snakemake. Existing prefixes are checked and preserved; an incomplete prefix produces a failed verification. See [orchestration and retry behavior](ORCHESTRATION.md).
 
 Version ranges allow a package solver to select releases satisfying those ranges; this is not a compatibility guarantee. They do not demonstrate compatibility with every future tool schema. Once a combination passes the native acceptance checks, export exact package records and retain those with the run:
 

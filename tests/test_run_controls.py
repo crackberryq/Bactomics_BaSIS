@@ -45,13 +45,13 @@ class RunControlTests(unittest.TestCase):
 
     def test_implicit_options_clusters_equals_and_order_preserve_run_controls(self):
         variants = [
-            (["-vde", "-c", "fixture.yaml"], "fixture.yaml", True, True, True, "local", False, False, 8),
-            (["--config=fixture.yaml", "-ed"], "fixture.yaml", True, True, False, "local", False, False, 8),
-            (["--cores", "2", "-cfixture.yaml", "-d"], "fixture.yaml", True, False, False, "local", False, False, 2),
-            (["--engine=snakemake", "-e", "-c", "fixture.yaml"], "fixture.yaml", False, True, False, "snakemake", False, False, 8),
-            (["--dry-run", "--config", "fixture.yaml"], "fixture.yaml", False, False, False, "local", True, False, 8),
-            (["--force", "--config=fixture.yaml"], "fixture.yaml", False, False, False, "local", False, True, 8),
-            (["--output", "json", "--config", "fixture.yaml", "--verbose"], "fixture.yaml", False, False, True, "local", False, False, 8),
+            (["-vde", "-c", "fixture.yaml"], "fixture.yaml", True, True, True, "snakemake", False, False, 8),
+            (["--config=fixture.yaml", "-ed"], "fixture.yaml", True, True, False, "snakemake", False, False, 8),
+            (["--cores", "2", "-cfixture.yaml", "-d"], "fixture.yaml", True, False, False, "snakemake", False, False, 2),
+            (["--engine=local", "-e", "-c", "fixture.yaml"], "fixture.yaml", False, True, False, "local", False, False, 8),
+            (["--dry-run", "--config", "fixture.yaml"], "fixture.yaml", False, False, False, "snakemake", True, False, 8),
+            (["--force", "--config=fixture.yaml"], "fixture.yaml", False, False, False, "snakemake", False, True, 8),
+            (["--output", "json", "--config", "fixture.yaml", "--verbose"], "fixture.yaml", False, False, True, "snakemake", False, False, 8),
         ]
         with patch.dict(os.environ, {"BASIS_VERBOSE": "0"}):
             for args, path, deep, extend, verbose, engine, dry_run, force, cores in variants:

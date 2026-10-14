@@ -117,7 +117,7 @@ def list_jobs(workspace):
 def normalized_request(request):
     r = dict(request)
     allowed = {"kind", "config", "deep", "extend", "cores", "memory_mb", "gpus",
-               "envs", "create", "file", "sheet", "root", "input_mode", "base_config", "preview", "results"}
+               "envs", "create", "retry_failed", "engine", "prefix_root", "file", "sheet", "root", "input_mode", "base_config", "preview", "results"}
     if set(r) - allowed:
         raise ValueError("Unknown job options: " + ", ".join(sorted(set(r) - allowed)))
     if r.get("kind") not in {"run", "doctor", "demo", "setup", "import", "audit", "panel"}:
@@ -131,7 +131,7 @@ def normalized_request(request):
         raise ValueError("Select an existing configuration")
     if r["kind"] == "import" and not r.get("file"):
         raise ValueError("Select a sample sheet")
-    for key in ("deep", "extend", "create", "preview"):
+    for key in ("deep", "extend", "create", "preview", "retry_failed"):
         if key in r and not isinstance(r[key], bool):
             raise ValueError(key + " must be boolean")
     for key in ("cores", "memory_mb", "gpus"):
@@ -141,6 +141,17 @@ def normalized_request(request):
         raise ValueError("At most one scheduled GPU is supported")
     if r.get("input_mode", "auto") not in {"auto", "external", "hybas"}:
         raise ValueError("Invalid input mode")
+    if "engine" in r and (r["kind"] not in {"run", "demo", "setup"} or r["engine"] not in {"local", "snakemake"}):
+        raise ValueError("Engine must be local or snakemake for a run, demo or setup job")
+    if r["kind"] in {"run", "setup"}:
+        r.setdefault("engine", "snakemake")
+    if r.get("retry_failed") and r["kind"] != "setup":
+        raise ValueError("retry_failed is only valid for environment setup")
+    if "prefix_root" in r:
+        if r["kind"] != "setup" or not isinstance(r["prefix_root"], str) or not r["prefix_root"].strip():
+            raise ValueError("prefix_root must be an environment parent directory for setup")
+        from .environment_setup import workspace_path
+        r["prefix_root"] = str(workspace_path(r["prefix_root"]))
     if r["kind"] == "setup":
         if not r.get("envs") or any(v not in recipe_names() for v in r["envs"]):
             raise ValueError("Select valid environment recipes")
@@ -186,19 +197,27 @@ def _prepare(directory, request, workspace):
         command += [kind, "-c", str(config), "-v"]
         command += (["-d"] if r.get("deep") else []) + (["-e"] if r.get("extend") else [])
         if kind == "run":
-            command += ["--output", "summary"]
+            command += ["--output", "summary", "--engine", r.get("engine", "snakemake")]
         else:
             outdir = directory / "preflight"
             command += ["--report-dir", str(outdir)]
     elif kind == "demo":
         outdir = directory / "demo"
         command += ["demo", "--outdir", str(outdir), "-d", "-e", "-v", "--output", "summary"]
+        if r.get("engine"):
+            command += ["--engine", r["engine"]]
     elif kind == "setup":
-        command += ["setup-environments", "--workspace", str(workspace)]
+        command += ["setup-environments", "--workspace", str(workspace),
+                    "--engine", r.get("engine", "snakemake"), "--cores", str(r.get("cores", 1))]
+        if r.get("prefix_root"):
+            command += ["--prefix-root", r["prefix_root"]]
         for name in r["envs"]:
             command += ["--env", name]
         if r.get("create"):
-            command += ["--create"]
+            outdir = directory / "setup"
+            command += ["--create", "--report-dir", str(outdir)]
+        if r.get("retry_failed"):
+            command += ["--retry-failed"]
     elif kind == "panel":
         outdir = directory / "panel"
         command += ["control-panel", "--outdir", str(outdir)]
@@ -262,6 +281,14 @@ def submit(workspace, request, *, new_attempt=False):
 
 
 def outcome(kind, code, outdir):
+    if kind == "setup" and outdir:
+        summary = Path(outdir) / "summary.json"
+        if not summary.is_file():
+            return "failed", "No setup summary was produced; inspect the log."
+        result = json.loads(summary.read_text())
+        if code == 0 and result.get("status") == "completed":
+            return "completed", "Selected tool environments verified. Databases and models require separate readiness checks."
+        return "needs_attention", "Environment setup needs attention; inspect setup/summary.json and the log."
     evidence_path = Path(outdir or ".") / ("results/evidence.json" if kind == "demo" else "evidence.json")
     if kind in {"run", "demo"} and evidence_path.is_file():
         evidence = json.loads(evidence_path.read_text())

@@ -1,8 +1,8 @@
 """Plan isolated tool environments using the recipes bundled with BaSIS.
 
 Recipes are installation starting points, not solved environment locks. Existing
-prefixes are preserved. Package data is read-only; destinations belong to an
-explicit workspace or the current working directory.
+prefixes must pass installed-package and executable checks before being reused.
+Package data is read-only; destinations belong to an explicit workspace.
 """
 from __future__ import annotations
 
@@ -52,11 +52,21 @@ def main(argv=None):
                         help="Environment recipe to select; repeatable")
     parser.add_argument("--prefix-root", help="Environment parent; default: WORKSPACE/.basis-envs")
     parser.add_argument("--manager", choices=("conda", "mamba", "micromamba"), default="conda")
+    parser.add_argument("--engine", choices=("snakemake", "local"), default="snakemake",
+                        help="Snakemake schedules environment setup; local runs the same workers serially")
+    parser.add_argument("--cores", type=int, default=1, help="Maximum concurrent setup workers (default: 1)")
+    parser.add_argument("--report-dir", help="New directory for this setup attempt and summary")
+    parser.add_argument("--retry-failed", action="store_true",
+                        help="Repair a failed/interrupted prefix created by this workspace with the same recipe")
     parser.add_argument("--create", action="store_true",
                         help="Create explicitly selected environments; default prints commands only")
     args = parser.parse_args(argv)
     if args.create and not args.environments:
         parser.error("--create requires one or more explicit --env selections")
+    if args.cores < 1:
+        parser.error("--cores must be positive")
+    if args.retry_failed and not args.create:
+        parser.error("--retry-failed requires --create")
     try:
         project = workspace_path(args.project)
         prefix_root = workspace_path(project / (args.prefix_root or ".basis-envs"))
@@ -64,7 +74,14 @@ def main(argv=None):
         if args.create:
             if not shutil.which(args.manager):
                 raise ValueError("Package manager is not on PATH: " + args.manager)
-            prefix_root.mkdir(parents=True, exist_ok=True)
+            from .environment_workflow import run_setup
+            summary, code = run_setup(project, prefix_root, selected, manager=args.manager,
+                                      engine=args.engine, cores=args.cores,
+                                      retry_failed=args.retry_failed, report_dir=args.report_dir)
+            print("Setup summary: " + summary["summary_path"], flush=True)
+            print("Tool environments: " + summary["status"], flush=True)
+            print("Databases and models: not assessed. Run study preflight before analysis.", flush=True)
+            return code
         for name in selected:
             prefix = workspace_path(prefix_root / ("basis-" + name))
             # as_file also works for non-filesystem package providers. The recipe
@@ -74,13 +91,6 @@ def main(argv=None):
                 command = [args.manager, *operation, "--prefix", str(prefix), "--file", str(recipe), "--yes"]
                 print("\n# " + name, flush=True)
                 print("CONDA_CHANNEL_PRIORITY=strict " + shlex.join(command), flush=True)
-                if args.create:
-                    if prefix.exists():
-                        print("Skipped existing prefix: " + str(prefix), flush=True)
-                        print("Verify it separately; an existing directory does not establish completion.", flush=True)
-                    else:
-                        env = dict(os.environ, CONDA_CHANNEL_PRIORITY="strict")
-                        subprocess.run(command, env=env, check=True)
         if not args.create:
             print("\nPlan only: no environments, packages or databases were created or downloaded.")
         print("Recipes are starting points; use captured explicit locks to restore tested package versions.")

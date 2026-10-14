@@ -1,3 +1,11 @@
+# 0.2.0rc16 — workflow orchestration
+
+- Snakemake is now a base dependency and the default CLI/GUI analysis scheduler. Serial local execution remains available.
+- Verified environment installation is coordinated by a setup workflow, with explicit retries and per-attempt records. Existing directories are never treated as proof of installation.
+- Guided workspace navigation and live scheduler output improve setup/run visibility.
+- Source and resource cache validation, scientific thresholds and interpretation policies remain unchanged.
+- Database/model auto-provisioning and independent biological validation remain pending.
+
 # 0.2.0rc15 — GitHub distribution preparation
 
 - Add the user-selected MIT license, author ORCID, and repository metadata.

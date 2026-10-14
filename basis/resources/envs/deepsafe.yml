@@ -13,3 +13,5 @@ dependencies:
   - blast>=2.15,<3
   - hmmer>=3.3,<4
   - seqkit>=2,<3
+  - pftools=3
+  - perl

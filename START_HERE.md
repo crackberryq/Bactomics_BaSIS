@@ -1,4 +1,4 @@
-# Start with BaSIS 0.2.0rc15
+# Start with BaSIS 0.2.0rc16
 
 The GitHub repository contains the application source. The optional local Streamlit interface and CLI use the same analysis engine.
 
@@ -31,7 +31,7 @@ The bundle installer creates a clean `.venv` and downloads Python dependencies. 
 
 ## Before a native study
 
-Configure native tool environments, databases and models. The interface can plan/create tool environments and run preflight; it does not automatically obtain every database. Existing resource configurations can be reused with their paths reviewed for the current computer.
+Configure native tool environments, databases and models. The interface can plan, create and verify tool environments through Snakemake, then run study preflight. Database/model acquisition is not yet fully automated. See [orchestration](docs/ORCHESTRATION.md). Existing resource configurations can be reused with their paths reviewed for the current computer.
 
 Run **Setup → preflight**, then choose your study configuration in **Run**. Use the **Samples** page for Excel/CSV/TSV batches. Follow jobs in **Jobs**, and open linked reports through **Results & export**. Jobs survive browser closure; a computer reboot interrupts them.
 

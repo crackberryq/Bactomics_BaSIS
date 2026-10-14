@@ -5,7 +5,7 @@ A reproducible workflow for bacterial genomic safety investigation, with a local
 
 BaSIS combines screening tools, genomic context, selected-protein follow-up and optional machine-learning evidence. It accepts matching assembly and annotation files from HybAs or external workflows, and supports Excel, CSV and TSV sample sheets.
 
-**Current candidate: 0.2.0rc15.** This update prepares the rc14 interface for GitHub distribution under the MIT license. Scientific methods, selection rules and interpretation thresholds are unchanged. Independent biological validation is pending.
+**Current candidate: 0.2.0rc16.** This update makes Snakemake the default analysis scheduler and adds verified environment setup and guided interface navigation. Scientific methods, selection rules and interpretation thresholds are unchanged. Independent biological validation is pending.
 
 ## Install and open
 
@@ -54,7 +54,7 @@ basis import-samples --file samples.xlsx --root /absolute/path/to/samples \
   --directory study-batch --base-config /absolute/path/to/config.yaml
 ```
 
-The local engine processes samples serially. The optional `workflow` extra enables Snakemake scheduling with declared CPU, memory and GPU budgets.
+Snakemake is installed with BaSIS and is the default CLI/GUI analysis scheduler, using declared CPU, memory and GPU budgets. The serial `--engine local` option remains available. See [orchestration and verified setup](docs/ORCHESTRATION.md).
 
 ## Explore saved results
 

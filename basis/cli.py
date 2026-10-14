@@ -23,7 +23,7 @@ def _run_args(parser):
     parser.add_argument("-d", "--deep", action="store_true", help="Enable adaptive DeepSafe follow-up")
     parser.add_argument("-e", "--extend", action="store_true", help="Enable PathogenFinder2 complementary assessment")
     parser.add_argument("--cores", type=int, help="Total CPU core budget")
-    parser.add_argument("--engine", choices=("local", "snakemake"), default="local", help="local is serial; snakemake schedules independent jobs")
+    parser.add_argument("--engine", choices=("local", "snakemake"), default="snakemake", help="snakemake (default) schedules dependencies and independent jobs; local is serial")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs and show the selected plan without running biological tools")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show stages, candidates, native commands and 30-second heartbeats")
     parser.add_argument("--force", action="store_true", help="Recompute selected analyses instead of using matching caches")
@@ -109,6 +109,8 @@ def parser():
     worker.add_argument("--sample", required=True)
     worker.add_argument("--module", required=True)
     worker.add_argument("--force", action="store_true")
+    worker.add_argument("--receipt", help=argparse.SUPPRESS)
+    worker.add_argument("--upstream-receipts", help=argparse.SUPPRESS)
     return p
 
 
@@ -591,7 +593,8 @@ def _main_parsed(args):
             result = compare_reports(args.old, args.new, args.out)
         elif args.command == "_worker":
             from .pipeline import run_worker
-            run_worker(args.plan, args.sample, args.module, args.force)
+            run_worker(args.plan, args.sample, args.module, args.force,
+                       receipt=args.receipt, upstream_receipts=args.upstream_receipts)
             return 0  # Biological engine failures are data; final launcher exits 2 for incomplete scope.
         else:
             from .pipeline import make_plan, run_pipeline

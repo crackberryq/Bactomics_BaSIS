@@ -45,6 +45,47 @@ class JobTests(unittest.TestCase):
         self.assertEqual(actual["execution"]["cores"], 2)
         self.assertEqual(yaml.safe_load(file.read_text()), cfg)
         self.assertIn("-I", command)
+        self.assertEqual(command[command.index("--engine") + 1], "snakemake")
+
+    def test_engine_selection_is_explicit_and_preserved(self):
+        for engine in ("local", "snakemake"):
+            request = jobs.normalized_request({"kind": "demo", "engine": engine})
+            command, _ = jobs._prepare(self.root, request, self.root)
+            self.assertEqual(command[command.index("--engine") + 1], engine)
+        for request in ({"kind": "demo", "engine": "shell"},
+                        {"kind": "panel", "engine": "snakemake", "results": [str(self.root)]},
+                        {"kind": "demo", "retry_failed": True}):
+            with self.subTest(request=request), self.assertRaises(ValueError):
+                jobs.normalized_request(request)
+
+    def test_setup_attempt_has_discoverable_summary_and_explicit_retry(self):
+        request = jobs.normalized_request({"kind": "setup", "envs": ["minced"],
+                                           "create": True, "retry_failed": True})
+        command, outdir = jobs._prepare(self.root, request, self.root)
+        self.assertEqual(command[command.index("--engine") + 1], "snakemake")
+        self.assertEqual(command[command.index("--report-dir") + 1], outdir)
+        self.assertIn("--retry-failed", command)
+        self.assertEqual(jobs.outcome("setup", 0, outdir)[0], "failed")
+        Path(outdir).mkdir()
+        (Path(outdir) / "summary.json").write_text(json.dumps({"status": "completed"}))
+        self.assertEqual(jobs.outcome("setup", 0, outdir)[0], "completed")
+        self.assertEqual(jobs.outcome("setup", 2, outdir)[0], "needs_attention")
+        (Path(outdir) / "summary.json").write_text(json.dumps({"status": "failed"}))
+        self.assertEqual(jobs.outcome("setup", 0, outdir)[0], "needs_attention")
+
+    def test_setup_preserves_explicit_environment_parent(self):
+        parent = self.root / "earlier-release" / ".basis-envs"
+        parent.mkdir(parents=True)
+        request = jobs.normalized_request({"kind": "setup", "envs": ["minced"],
+                                           "prefix_root": str(parent)})
+        command, outdir = jobs._prepare(self.root, request, self.root)
+        self.assertEqual(command[command.index("--prefix-root") + 1], str(parent))
+        self.assertIsNone(outdir)
+        self.assertFalse((self.root / ".basis-envs").exists())
+        for invalid in ({"kind": "demo", "prefix_root": str(parent)},
+                        {"kind": "setup", "envs": ["minced"], "prefix_root": ""}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                jobs.normalized_request(invalid)
 
     def test_unknown_operations_and_invalid_options_rejected(self):
         for req in ({"kind": "shell"}, {"kind": "demo", "shell": "hi"},

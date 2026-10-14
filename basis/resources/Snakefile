@@ -11,15 +11,28 @@ SAMPLES = [s["sample_id"] for s in PLAN["samples"]]
 MODULES = ALL_MODULES
 PLAN_PATH = str(Path(ROOT) / "provenance" / "plans" / (PLAN["plan_hash"] + ".json"))
 PYTHON = sys.executable
+RUN_ID = os.environ.get("BASIS_SCHEDULER_RUN_ID", PLAN["plan_hash"])
+if not RUN_ID or Path(RUN_ID).name != RUN_ID or RUN_ID in {".", ".."}:
+    raise ValueError("Invalid scheduler run identifier")
+RECEIPTS = str(Path(ROOT) / "provenance" / "scheduler" / RUN_ID)
 
+# Every module writes an execution record, including disabled/withheld modules.
+# Native failures are recorded as data by _worker; infrastructure failures are
+# scheduler failures. The launcher always writes the consolidated report after
+# this DAG has settled and preserves incomplete upstream evidence explicitly.
+# Snakemake removes declared outputs when rerunning a job. Receipts, rather
+# than result.json files, are therefore its outputs: BaSIS retains ownership
+# of result records and can verify/reuse their content-based native caches.
 rule all:
     input:
-        expand(ROOT + "/results/{sample}/{module}/result.json", sample=SAMPLES, module=MODULES),
-        expand(ROOT + "/results/{sample}/deepsafe/result.json", sample=SAMPLES)
+        expand(RECEIPTS + "/{sample}/{module}.json", sample=SAMPLES, module=MODULES),
+        expand(RECEIPTS + "/{sample}/deepsafe.json", sample=SAMPLES)
 
 rule module:
+    input:
+        plan=PLAN_PATH
     output:
-        ROOT + "/results/{sample}/{module}/result.json"
+        RECEIPTS + "/{sample}/{module}.json"
     wildcard_constraints:
         module="|".join(MODULES)
     threads:
@@ -32,13 +45,14 @@ rule module:
         python=PYTHON,
         force="--force" if os.environ.get("BASIS_FORCE") == "1" else ""
     shell:
-        "{params.python:q} -m basis _worker --plan {params.plan:q} --sample {wildcards.sample:q} --module {wildcards.module:q} {params.force}"
+        "{params.python:q} -m basis _worker --plan {params.plan:q} --sample {wildcards.sample:q} --module {wildcards.module:q} --receipt {output:q} {params.force}"
 
 rule deep:
     input:
-        lambda wc: expand(ROOT + "/results/{sample}/{module}/result.json", sample=[wc.sample], module=MODULES)
+        records=lambda wc: expand(RECEIPTS + "/{sample}/{module}.json", sample=[wc.sample], module=MODULES),
+        plan=PLAN_PATH
     output:
-        ROOT + "/results/{sample}/deepsafe/result.json"
+        RECEIPTS + "/{sample}/deepsafe.json"
     threads:
         min(int(PLAN["config"]["deep"].get("threads", 1)), int(PLAN["config"]["execution"]["cores"])) if PLAN["options"]["deep"] else 1
     resources:
@@ -46,6 +60,7 @@ rule deep:
     params:
         plan=PLAN_PATH,
         python=PYTHON,
+        receipt_root=RECEIPTS,
         force="--force" if os.environ.get("BASIS_FORCE") == "1" else ""
     shell:
-        "{params.python:q} -m basis _worker --plan {params.plan:q} --sample {wildcards.sample:q} --module deepsafe {params.force}"
+        "{params.python:q} -m basis _worker --plan {params.plan:q} --sample {wildcards.sample:q} --module deepsafe --receipt {output:q} --upstream-receipts {params.receipt_root:q} {params.force}"

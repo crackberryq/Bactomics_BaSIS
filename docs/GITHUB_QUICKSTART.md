@@ -1,7 +1,7 @@
 # GitHub installation and collaborator quickstart
 
 Repository: https://github.com/crackberryq/Bactomics_BaSIS  
-Package: `bactromics-basis` · Command: `basis` · Candidate: `0.2.0rc15`
+Package: `bactromics-basis` · Command: `basis` · Candidate: `0.2.0rc16`
 
 Use Linux or WSL2, Python 3.11+ and Git. Native scientific tools and resource databases are separate from the Python application. This guide installs from GitHub and does not imply a PyPI release exists.
 
@@ -25,14 +25,14 @@ python -m pip freeze --all > installed-python-packages.txt
 
 Keep `installed-source-commit.txt` with the run record and share that exact SHA with collaborators. Installing from `main` is convenient for trying the current development candidate but does not pin future installations. A dependency inventory is useful provenance; it is not a complete artifact-hashed dependency lock.
 
-`ui` adds Streamlit, `excel` adds `.xlsx` import, and `workflow` adds optional Snakemake scheduling. CSV/TSV and the CLI do not require the first two extras.
+`ui` adds Streamlit and `excel` adds `.xlsx` import. Snakemake is a base dependency and is the default analysis scheduler; the `workflow` extra remains a compatible alias. CSV/TSV and the CLI do not require the first two extras.
 
 ## Confirm the application works
 
 From a fresh output location:
 
 ```bash
-basis demo --outdir synthetic-demo -d -e
+basis demo --outdir synthetic-demo -d -e --engine snakemake
 basis report --evidence synthetic-demo/results/evidence.json --outdir synthetic-report
 basis control-panel --results synthetic-demo/results --outdir synthetic-panel
 basis gui --workspace ~/bactomics/basis-workspace

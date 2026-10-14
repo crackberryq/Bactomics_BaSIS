@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .progress import tracked, emit, stage
+from .progress import tracked, emit, stage, enabled
 
 import copy
 import hashlib
@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -233,8 +234,8 @@ def execute_module(plan: dict, sample: dict, module: str, force=False) -> dict:
     return result
 
 
-@tracked(lambda plan, sample, force=False: f"[{sample['sample_id']}] DeepSafe" if plan["options"]["deep"] else None)
-def execute_deep(plan: dict, sample: dict, force=False) -> dict:
+@tracked(lambda plan, sample, force=False, upstream_records=None: f"[{sample['sample_id']}] DeepSafe" if plan["options"]["deep"] else None)
+def execute_deep(plan: dict, sample: dict, force=False, upstream_records=None) -> dict:
     from .deep import run_deep
     from .deep_reporting import completion_summary
     sid = sample["sample_id"]
@@ -250,7 +251,8 @@ def execute_deep(plan: dict, sample: dict, force=False) -> dict:
     for module in ALL_MODULES:
         decision = module_decision(plan, sample, module)
         if decision["action"] == "run":
-            record = read_json(record_path(plan, sid, module))
+            record = (read_json(record_path(plan, sid, module)) if upstream_records is None
+                      else copy.deepcopy(upstream_records[module]))
             record["module_decision"] = decision
         else:
             record = _base_record(plan, sample, module)
@@ -365,17 +367,114 @@ def execute_deep(plan: dict, sample: dict, force=False) -> dict:
     return result
 
 
-def run_worker(plan_path: str, sample_id: str, module: str, force=False):
+def _scheduler_root(plan: dict, root: str | Path) -> Path:
+    root = Path(root).resolve()
+    expected = (Path(plan["outdir"]) / "provenance" / "scheduler").resolve()
+    if root.parent != expected:
+        raise ValueError("Scheduler receipts must use a run directory beneath provenance/scheduler")
+    return root
+
+
+def _read_scheduler_result(plan: dict, sample_id: str, module: str, root: str | Path) -> dict:
+    """Read exactly the bytes attested by this run's completed worker receipt."""
+    root = _scheduler_root(plan, root)
+    receipt = read_json(root / sample_id / (module + ".json"))
+    if not isinstance(receipt, dict):
+        raise ValueError(f"Scheduler receipt must be a mapping: {sample_id}:{module}")
+    expected = {"schema": "basis-scheduler-receipt-v1", "run_id": root.name,
+                "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
+                "sample_id": sample_id, "module": module}
+    if any(receipt.get(key) != value for key, value in expected.items()):
+        raise ValueError(f"Scheduler receipt identity mismatch: {sample_id}:{module}")
+    path = record_path(plan, sample_id, module)
+    if receipt.get("result_path") != str(path.resolve()):
+        raise ValueError(f"Scheduler receipt result path mismatch: {sample_id}:{module}")
+    payload = path.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != receipt.get("result_sha256"):
+        raise ValueError(f"Scheduler result changed after worker completion: {sample_id}:{module}")
+    record = json.loads(payload)
+    if (not isinstance(record, dict) or record.get("schema_version") != 1
+            or record.get("sample_id") != sample_id
+            or record.get("module") != module
+            or record.get("execution_status") != receipt.get("execution_status")
+            or record.get("input_hashes") != plan["validations"][sample_id]["input_hashes"]):
+        raise ValueError(f"Scheduler result identity mismatch: {sample_id}:{module}")
+    return record
+
+
+def run_worker(plan_path: str, sample_id: str, module: str, force=False, *,
+               receipt: str | None = None, upstream_receipts: str | None = None):
     plan = read_json(plan_path)
     sample = next(s for s in plan["samples"] if s["sample_id"] == sample_id)
+    receipt_path = Path(receipt).resolve() if receipt else None
+    if receipt_path is not None:
+        root = _scheduler_root(plan, receipt_path.parent.parent)
+        if receipt_path != root / sample_id / (module + ".json"):
+            raise ValueError("Worker receipt path does not match its sample and module")
+    records = None
+    if upstream_receipts is not None:
+        if module != "deepsafe" or receipt_path is None:
+            raise ValueError("Upstream receipts are only valid for a scheduled DeepSafe worker")
+        if _scheduler_root(plan, upstream_receipts) != root:
+            raise ValueError("DeepSafe upstream receipts must belong to the same scheduler run")
+        records = {name: _read_scheduler_result(plan, sample_id, name, root) for name in ALL_MODULES}
+    elif module == "deepsafe" and receipt_path is not None:
+        raise ValueError("Scheduled DeepSafe requires current-run upstream receipts")
     if module == "deepsafe":
-        return execute_deep(plan, sample, force)
-    if module not in ALL_MODULES:
+        result = execute_deep(plan, sample, force, upstream_records=records)
+    elif module not in ALL_MODULES:
         raise ValueError(f"Unknown worker module {module}")
-    return execute_module(plan, sample, module, force)
+    else:
+        result = execute_module(plan, sample, module, force)
+    if receipt_path is not None:
+        target = record_path(plan, sample_id, module)
+        atomic_json(receipt_path, {"schema": "basis-scheduler-receipt-v1", "run_id": root.name,
+                    "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
+                    "sample_id": sample_id, "module": module,
+                    "result_path": str(target.resolve()), "result_sha256": sha256_file(target),
+                    "execution_status": result["execution_status"], "recorded_at": now()})
+    return result
+
+
+def _run_scheduler(command, logfile: Path, env: dict):
+    """Save scheduler/worker output and mirror it to verbose stderr.
+
+    A separate reader keeps the ordinary subprocess invocation (and its exit
+    status) unchanged. Worker progress therefore reaches persistent GUI jobs,
+    while machine-readable launcher stdout remains one JSON document.
+    """
+    with logfile.open("w", encoding="utf-8") as log:
+        if not enabled():
+            return subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env)
+        finished = threading.Event()
+
+        def forward():
+            with logfile.open("r", encoding="utf-8", errors="replace") as reader:
+                while not finished.is_set():
+                    line = reader.readline()
+                    if line:
+                        sys.stderr.write(line)
+                        sys.stderr.flush()
+                    else:
+                        finished.wait(0.1)
+                # Drain the final lines after the child has exited.
+                for line in reader:
+                    sys.stderr.write(line)
+                sys.stderr.flush()
+
+        thread = threading.Thread(target=forward, daemon=True)
+        thread.start()
+        try:
+            return subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env)
+        finally:
+            log.flush()
+            finished.set()
+            thread.join()
 
 
 def run_pipeline(plan: dict, engine="local", dry_run=False, force=False) -> tuple[dict, int]:
+    if engine not in {"local", "snakemake"}:
+        raise ValueError("Unknown execution engine: " + str(engine))
     import fcntl
     lock_path = Path(plan["outdir"]) / ".basis.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -408,20 +507,29 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
     outdir = Path(plan["outdir"])
     engine_error = None
     if engine == "snakemake":
+        receipt_root = outdir / "provenance" / "scheduler" / run_id
+        run["scheduler_receipt_dir"] = str(receipt_root)
         snakefile = Path(__file__).parent / "resources" / "Snakefile"
         command = [sys.executable, "-m", "snakemake", "--snakefile", str(snakefile), "--configfile", plan["plan_path"],
                    "--directory", str(outdir), "--cores", str(plan["config"]["execution"]["cores"]),
                    "--resources", f"mem_mb={plan['config']['execution']['memory_mb']}",
-                   f"gpu={plan['config']['execution'].get('gpus', 0)}", "--rerun-incomplete", "--rerun-triggers", "mtime",
+                   f"gpu={plan['config']['execution'].get('gpus', 0)}", "--keep-going", "--rerun-incomplete", "--rerun-triggers", "mtime",
                    "--forcerun", "module", "deep"]
         env = os.environ.copy()
         env["BASIS_FORCE"] = "1" if force else "0"
+        env["BASIS_SCHEDULER_RUN_ID"] = run_id
         env["PYTHONPATH"] = str(Path(__file__).parent.parent) + os.pathsep + env.get("PYTHONPATH", "")
         emit(f"Scheduler log: {outdir / 'snakemake.log'}")
-        with stage("Snakemake scheduling and worker execution"), (outdir / "snakemake.log").open("w", encoding="utf-8") as log:
-            completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env)
-        if completed.returncode:
-            engine_error = f"Snakemake exited {completed.returncode}; see {outdir / 'snakemake.log'}"
+        try:
+            with stage("Snakemake scheduling and worker execution"):
+                completed = _run_scheduler(command, outdir / "snakemake.log", env)
+            if completed.returncode:
+                engine_error = f"Snakemake exited {completed.returncode}; see {outdir / 'snakemake.log'}"
+        except OSError as exc:
+            # Still produce an explicit failed/incomplete report if the
+            # scheduler cannot start. Existing output files are not current
+            # evidence merely because they remain on disk.
+            engine_error = f"Snakemake could not start: {exc}; see {outdir / 'snakemake.log'}"
     else:
         for ordinal, sample in enumerate(plan["samples"], 1):
             emit(f"Sample {ordinal}/{len(plan['samples'])} [{sample['sample_id']}] — starting")
@@ -452,10 +560,19 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
                 record.update(reason=decision["reason"], module_decision=decision)
                 if decision["scope_incomplete"]:
                     record["interpretation"] = "inconclusive"
-            elif engine_error:
-                # A failed scheduler may leave an old result; it is never evidence for this run.
+            elif module == "deepsafe" and not plan["options"]["deep"]:
                 record = _base_record(plan, sample, module)
-                record.update(execution_status="failed", interpretation="inconclusive", error=engine_error)
+                record.update(reason="deepsafe_not_requested", candidates=[])
+            elif engine == "snakemake":
+                try:
+                    record = _read_scheduler_result(plan, sample["sample_id"], module, receipt_root)
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    # A saved result alone cannot establish execution in this
+                    # run. Valid receipts preserve completed independent jobs
+                    # even when another scheduler job failed.
+                    record = _base_record(plan, sample, module)
+                    record.update(execution_status="failed", interpretation="inconclusive",
+                                  error=engine_error or f"Current scheduler receipt unavailable or invalid: {exc}")
             elif path.is_file():
                 record = read_json(path)
             else:
@@ -471,7 +588,7 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
                 if decision["requested"] and record["execution_status"] != "completed":
                     incomplete.append(f"{sample['sample_id']}:{module}")
     run["finished_at"] = now()
-    run["completeness"] = "incomplete" if incomplete else "completed_requested_scope"
+    run["completeness"] = "incomplete" if incomplete or engine_error else "completed_requested_scope"
     run["incomplete_modules"] = incomplete
     if engine_error:
         run["engine_error"] = engine_error
@@ -488,4 +605,4 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
     atomic_json(outdir / "locus_registry.json", build_registry(records))
     atomic_json(outdir / "provenance" / "runs" / f"{run_id}.json", run)
     atomic_json(outdir / "run.json", run)
-    return {"run": run, "artifacts": artifacts, "summary": summary}, 2 if incomplete else 0
+    return {"run": run, "artifacts": artifacts, "summary": summary}, 2 if incomplete or engine_error else 0
