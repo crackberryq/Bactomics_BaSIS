@@ -1,5 +1,7 @@
 """Local control plane contracts, without external biological tools."""
 import json
+from contextlib import redirect_stderr
+import io
 import os
 from pathlib import Path
 import tempfile
@@ -58,6 +60,40 @@ class JobTests(unittest.TestCase):
             with self.subTest(request=request), self.assertRaises(ValueError):
                 jobs.normalized_request(request)
 
+    def test_environment_policy_is_snapshotted_without_changing_scientific_settings(self):
+        cfg = default_config()
+        cfg["modules"]["amrfinder"]["command_prefix"] = ["conda", "run", "-p", "/existing/basis-core-amr"]
+        cfg["modules"]["amrfinder"]["environment_backend"] = "managed"
+        cfg["deep"]["environment_backend"] = "managed"
+        source = self.root / "config.yaml"
+        source.write_text(yaml.safe_dump(cfg))
+        directory = self.root / "job"
+        directory.mkdir()
+        request = jobs.normalized_request({"kind": "run", "config": str(source),
+            "environment_backend": "external", "conda_prefix": str(self.root / "env-cache")})
+        jobs._prepare(directory, request, self.root)
+        actual = yaml.safe_load((directory / "config.yaml").read_text())
+        self.assertEqual(actual["execution"]["environment_backend"], "external")
+        self.assertEqual(actual["execution"]["conda_prefix"], str(self.root / "env-cache"))
+        self.assertTrue(all(section["environment_backend"] == "external" for section in actual["modules"].values()))
+        self.assertEqual(actual["deep"]["environment_backend"], "external")
+        for name, section in actual["modules"].items():
+            self.assertEqual({k: v for k, v in section.items() if k != "environment_backend"},
+                             {k: v for k, v in cfg["modules"][name].items() if k != "environment_backend"})
+        self.assertEqual(actual["deep"]["maximum_candidates"], cfg["deep"]["maximum_candidates"])
+        self.assertEqual(yaml.safe_load(source.read_text()), cfg)
+        self.assertFalse((self.root / "env-cache").exists())
+        auto = self.root / "auto-job"
+        auto.mkdir()
+        jobs._prepare(auto, {**request, "environment_backend": "auto"}, self.root)
+        automatic = yaml.safe_load((auto / "config.yaml").read_text())
+        self.assertEqual(automatic["modules"], cfg["modules"])
+        self.assertEqual(automatic["deep"]["environment_backend"], "managed")
+        for invalid in ({"kind": "demo", "environment_backend": "auto"},
+                        {"kind": "run", "config": str(source), "environment_backend": "unknown"}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                jobs.normalized_request(invalid)
+
     def test_setup_attempt_has_discoverable_summary_and_explicit_retry(self):
         request = jobs.normalized_request({"kind": "setup", "envs": ["minced"],
                                            "create": True, "retry_failed": True})
@@ -86,6 +122,68 @@ class JobTests(unittest.TestCase):
                         {"kind": "setup", "envs": ["minced"], "prefix_root": ""}):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 jobs.normalized_request(invalid)
+
+    def test_resource_preview_and_execution_are_separate(self):
+        config = self.root / "resources.yaml"
+        config.write_text(yaml.safe_dump({"schema_version": 1, "resources": {
+            name: {"backend": "pinned_files", "destination": "db/" + name, "version": "1",
+                "files": [{"path": "references.faa", "source": "input.faa", "sha256": "a"*64}]}
+            for name in ("amrfinder", "genomad")}}))
+        request = jobs.normalized_request({"kind": "resources", "config": str(config),
+            "resources": ["amrfinder", "amrfinder", "genomad"], "execute": False,
+            "cores": 2, "conda_prefix": str(self.root / "env-cache")})
+        command, outdir = jobs._prepare(self.root, request, self.root)
+        self.assertIn("prepare-resources", command)
+        self.assertEqual(command[command.index("-c") + 1], str(self.root / "config.yaml"))
+        from basis.resource_setup import load_resource_config
+        snapshot = load_resource_config(self.root / "config.yaml")
+        self.assertEqual(snapshot["resources"]["amrfinder"]["destination"], str(self.root / "db/amrfinder"))
+        self.assertEqual(snapshot["resources"]["amrfinder"]["files"][0]["source"], str(self.root / "input.faa"))
+        self.assertEqual(command.count("--resource"), 2)
+        self.assertNotIn("--execute", command)
+        self.assertIsNone(outdir)
+        self.assertEqual(command[command.index("--conda-prefix") + 1], str(self.root / "env-cache"))
+        self.assertFalse((self.root / "env-cache").exists())
+        command, outdir = jobs._prepare(self.root, {**request, "execute": True}, self.root)
+        self.assertIn("--execute", command)
+        self.assertEqual(command[command.index("--report-dir") + 1], outdir)
+        self.assertEqual(jobs.outcome("resources", 0, outdir)[0], "failed")
+        Path(outdir).mkdir()
+        (Path(outdir) / "summary.json").write_text(json.dumps({"status": "completed"}))
+        self.assertEqual(jobs.outcome("resources", 0, outdir)[0], "completed")
+        self.assertEqual(jobs.outcome("resources", 2, outdir)[0], "needs_attention")
+
+    def test_resource_options_reject_unsupported_operations_and_names(self):
+        config = self.root / "resources.yaml"
+        config.write_text("schema_version: 1\nresources: {}\n")
+        for request in ({"kind": "demo", "resources": ["amrfinder"]},
+                        {"kind": "resources", "resources": ["amrfinder"]},
+                        {"kind": "resources", "config": str(config), "resources": "amrfinder"},
+                        {"kind": "resources", "config": str(config), "resources": ["../db"]},
+                        {"kind": "resources", "config": str(config), "resources": ["amrfinder"], "execute": "yes"}):
+            with self.subTest(request=request), self.assertRaises(ValueError):
+                jobs.normalized_request(request)
+
+    def test_resource_job_cli_reports_yaml_errors_without_launching_worker(self):
+        config = self.root / "bad-resources.yaml"
+        config.write_text("schema_version: [}\n")
+        request = self.root / "request.json"
+        request.write_text(json.dumps({"kind": "resources", "config": str(config),
+                                       "resources": ["references"], "execute": False}))
+        error = io.StringIO()
+        with patch("basis.jobs.subprocess.Popen") as popen, redirect_stderr(error):
+            self.assertEqual(jobs.main(["start", "--workspace", str(self.root), "--request", str(request)]), 2)
+        self.assertIn("Job error:", error.getvalue())
+        popen.assert_not_called()
+
+    def test_scheduler_progress_reports_only_observed_counts(self):
+        self.assertEqual(jobs.scheduler_progress("Starting workflow\n"), {})
+        progress = jobs.scheduler_progress("localrule deep_domains:\n    input: state.json\n"
+            "10 of 24 steps (41.67%) done\nlocalrule deep_references:\n")
+        self.assertEqual(progress, {"latest_rule": "deep_references", "completed_steps": 10,
+            "scheduled_steps": 24, "scheduler_percent": 41.67})
+        self.assertEqual(jobs.scheduler_progress("99 of 1 steps (9900%) done"), {})
+        self.assertEqual(jobs.scheduler_progress("1 of 0 steps (0%) done"), {})
 
     def test_unknown_operations_and_invalid_options_rejected(self):
         for req in ({"kind": "shell"}, {"kind": "demo", "shell": "hi"},

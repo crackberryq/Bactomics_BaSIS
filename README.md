@@ -5,7 +5,7 @@ A reproducible workflow for bacterial genomic safety investigation, with a local
 
 BaSIS combines screening tools, genomic context, selected-protein follow-up and optional machine-learning evidence. It accepts matching assembly and annotation files from HybAs or external workflows, and supports Excel, CSV and TSV sample sheets.
 
-**Current candidate: 0.2.0rc16.** This update makes Snakemake the default analysis scheduler and adds verified environment setup and guided interface navigation. Scientific methods, selection rules and interpretation thresholds are unchanged. Independent biological validation is pending.
+**Current candidate: 0.3.0rc1.** Snakemake now owns input/resource checks, named analysis rules, nine DeepSafe stages per sample, evidence consolidation, reporting and provenance. The same workflow entry point also provides explicit environment and resource preparation modes. Scientific methods, selection rules and interpretation thresholds are unchanged. Independent biological validation is pending.
 
 ## Install and open
 
@@ -14,16 +14,16 @@ Use Linux or WSL2 with Python 3.11+ and Git. From a new working directory:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install 'bactromics-basis[ui,excel] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@main'
+python -m pip install 'bactromics-basis[ui,excel] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc1'
 basis verify-install
 basis gui --workspace ~/bactomics/basis-workspace
 ```
 
 Open **http://localhost:8501**. The optional Streamlit interface offers setup, sample import, run configuration, persistent jobs, live logs, and report downloads. Closing the browser does not stop a running job. It is intended for one trusted local user, with one job per workspace.
 
-This command installs from GitHub. **No PyPI publication is claimed.** `main` changes over time; pin a full commit SHA for a reproducible installation, as explained in [GitHub quickstart](docs/GITHUB_QUICKSTART.md). Omit `[ui,excel]` for the base CLI package, or choose either extra independently.
+This command installs from GitHub. **No PyPI publication is claimed.** The command selects the `v0.3.0rc1` release tag; record its full commit SHA for a reproducible installation, as explained in [GitHub quickstart](docs/GITHUB_QUICKSTART.md). Omit `[ui,excel]` for the base CLI package, or choose either extra independently.
 
-`pip` installs the Python application. Conda environments, native tools, databases, model weights and GPU drivers require separate setup. Existing study configurations can reuse installed resources. Start with [the quickstart](docs/GITHUB_QUICKSTART.md), [local interface guide](docs/LOCAL_INTERFACE.md), or [tool installation](docs/INSTALL.md).
+`pip` installs the Python application and Snakemake. Install Conda separately; native analysis rules can then create their required tool environments automatically. Existing explicit environment prefixes remain usable. Database preparation is an explicit administrative action with supported backends; model setup and GPU drivers still require their own preparation. Start with [the quickstart](docs/GITHUB_QUICKSTART.md), [local interface guide](docs/LOCAL_INTERFACE.md), or [tool installation](docs/INSTALL.md).
 
 ## Analysis layers
 
@@ -54,7 +54,7 @@ basis import-samples --file samples.xlsx --root /absolute/path/to/samples \
   --directory study-batch --base-config /absolute/path/to/config.yaml
 ```
 
-Snakemake is installed with BaSIS and is the default CLI/GUI analysis scheduler, using declared CPU, memory and GPU budgets. The serial `--engine local` option remains available. See [orchestration and verified setup](docs/ORCHESTRATION.md).
+The CLI and GUI launch the same Snakemake workflow, using declared CPU, memory and GPU budgets. DeepSafe follows completed upstream records, including Extend when enabled. Scientific processing remains in Python called by the rules. The serial `--engine local` option remains for compatibility. See [orchestration and verified setup](docs/ORCHESTRATION.md).
 
 ## Explore saved results
 
@@ -68,6 +68,8 @@ basis control-panel --results /path/to/results --outdir /path/to/new-panel
 Repeat `--results` to link multiple runs. Keep linked study directories in place; the control panel is not a self-contained copy of every linked artifact. See [report navigation](docs/REPORT_NAVIGATION.md).
 
 Execution, assessment coverage and biological interpretation are reported separately. Completed selected candidates can coexist with deferred candidates and an incomplete overall scope. Failed or unassessed modules are not negative findings. Genomic findings, tree support and model scores do not certify organism safety or establish a calibrated probability of pathogenicity.
+
+The preceding `0.2.0rc16` release is preserved separately. See [migration and environment routing](docs/ORCHESTRATION.md#migrating-from-02) before moving an existing study to the new workflow.
 
 ## Reproduce, validate and cite
 

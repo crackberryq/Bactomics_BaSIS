@@ -45,6 +45,7 @@ class SchedulerLauncherTests(unittest.TestCase):
                 result, code = run_pipeline(plan, engine="snakemake")
             self.assertEqual(code, 2)
             self.assertIn("could not start", result["run"]["engine_error"])
+            self.assertEqual(result["run"]["reporting_mode"], "launcher_infrastructure_fallback")
             evidence = json.loads(Path(result["artifacts"]["evidence_json"]).read_text())
             requested = [r for r in evidence["records"] if r["module_decision"]["requested"]]
             self.assertTrue(requested)
@@ -120,9 +121,20 @@ class NativeSchedulerSyntheticTests(unittest.TestCase):
 
     def test_real_dag_waits_for_extend_and_rechecks_cached_source_identity(self):
         plan = make_plan(self.cfg, True, True)
-        first, code, evidence = self.run_plan(plan)
+        with patch("basis.pipeline.render_workflow_report", side_effect=AssertionError("launcher must not render normal reports")):
+            first, code, evidence = self.run_plan(plan)
         self.assertEqual(code, 0, first["run"].get("engine_error"))
         self.assertEqual(first["run"]["engine"], "snakemake")
+        self.assertEqual(first["run"]["reporting_mode"], "snakemake_dag")
+        receipts = Path(first["run"]["scheduler_receipt_dir"])
+        for name in ("consolidated.json", "report-artifacts.json", "outcome.json"):
+            self.assertTrue((receipts / name).is_file())
+        from basis.deep_stages import STAGES
+        for sid in ("DEMO_A", "DEMO_B"):
+            self.assertEqual({p.stem for p in (receipts / sid / "deep-stages").glob("*.json")}, set(STAGES))
+        scheduler_log = (Path(plan["outdir"]) / "snakemake.log").read_text()
+        for name in ("validate_inputs", "amrfinder", "pathogenfinder2", "deep_domains", "deep_phylogeny", "deep_patterns", "capture_provenance"):
+            self.assertIn(name, scheduler_log)
         for deep in evidence["deep_records"]:
             sid = deep["sample_id"]
             upstream = [r for r in evidence["records"] if r["sample_id"] == sid

@@ -234,10 +234,8 @@ def execute_module(plan: dict, sample: dict, module: str, force=False) -> dict:
     return result
 
 
-@tracked(lambda plan, sample, force=False, upstream_records=None: f"[{sample['sample_id']}] DeepSafe" if plan["options"]["deep"] else None)
-def execute_deep(plan: dict, sample: dict, force=False, upstream_records=None) -> dict:
-    from .deep import run_deep
-    from .deep_reporting import completion_summary
+def prepare_deep_execution(plan: dict, sample: dict, force=False, upstream_records=None) -> dict:
+    """Prepare a serializable DeepSafe execution envelope and verify whole-result cache."""
     sid = sample["sample_id"]
     target = record_path(plan, sid, "deepsafe")
     result = _base_record(plan, sample, "deepsafe")
@@ -245,7 +243,7 @@ def execute_deep(plan: dict, sample: dict, force=False, upstream_records=None) -
         result["reason"] = "deepsafe_not_requested"
         result["candidates"] = []
         atomic_json(target, result)
-        return result
+        return {"result": result, "records": [], "config": {}, "work": None, "cache_allowed": False, "stopped": True, "commands": []}
     cache_allowed = False
     records = []
     for module in ALL_MODULES:
@@ -331,40 +329,66 @@ def execute_deep(plan: dict, sample: dict, force=False, upstream_records=None) -
                     emit(f"[{sid}] DeepSafe: verified cache reused")
                     previous['cache_hit']=True;previous['cache_checked_at']=now()
                     atomic_json(target,previous)
-                    return previous
+                    return {"result": previous, "records": records, "config": cfg, "work": str(work), "cache_allowed": cache_allowed, "stopped": True, "cached": True, "started": started, "commands": runner.commands}
             except (ValueError, OSError):
                 pass
         result['cache_hit'] = False
         emit(f"[{sid}] DeepSafe: cache unavailable or recomputation requested; starting analyses")
-        payload = run_deep(sample, records, cfg, work, runner)
-        # Analysis notes supplement execution/provenance warnings; neither
-        # source should erase the other when the payload is merged.
+    except Exception as exc:
+        result.update(execution_status="failed", interpretation="inconclusive", error=str(exc), candidates=[])
+    return {"result": result, "records": records, "config": cfg, "work": str(work),
+            "cache_allowed": cache_allowed, "started": started,
+            "stopped": result.get("execution_status") == "failed", "commands": runner.commands}
+
+
+def finish_deep_execution(plan: dict, sample: dict, envelope: dict, payload=None) -> dict:
+    """Seal a staged or local DeepSafe result with the unchanged evidence contract."""
+    from .deep_reporting import completion_summary
+    target = record_path(plan, sample["sample_id"], "deepsafe")
+    result = envelope["result"]
+    if envelope.get("cached") or not plan["options"]["deep"]:
+        atomic_json(target, result)
+        return result
+    records = envelope["records"]
+    work = Path(envelope["work"])
+    if payload is not None:
         notes = result.get("notes", []) + payload.get("notes", [])
         result.update(payload)
         result["notes"] = notes
-        result["artifacts"] = list(dict.fromkeys([str(runner.logfile)] + payload.get("artifacts", [])))
+        result["artifacts"] = list(dict.fromkeys([str(work / "commands.log")] + payload.get("artifacts", [])))
         result["execution_status"] = "completed"
-    except Exception as exc:
-        result.update(execution_status="failed", interpretation="inconclusive", error=str(exc), candidates=[])
-    # Finalize upstream scope even when the deep stage failed. Requested holds
-    # remain incomplete; explicit sample exclusions are outside requested scope.
     result["upstream_incomplete"] = [r["module"] for r in records
                                      if module_decision(plan, sample, r["module"])["requested"]
                                      and r["execution_status"] != "completed"]
     if result["upstream_incomplete"]:
         result.setdefault("notes", []).append("Candidate selection is incomplete because requested upstream analyses failed or were withheld pending review.")
     result["completion_summary"] = completion_summary(result)
-    result.setdefault("provenance", {})["commands"] = runner.commands
+    result.setdefault("provenance", {})["commands"] = envelope.get("commands", [])
     result["finished_at"] = now()
-    result["elapsed_seconds"] = round(time.monotonic() - started, 4)
-    if result.get('execution_status') == 'completed' and cache_allowed:
+    result["elapsed_seconds"] = round(time.monotonic() - envelope["started"], 4)
+    if result.get("execution_status") == "completed" and envelope["cache_allowed"]:
         from .deep_cache import seal
         try:
-            result['deep_cache'] = seal(result, work)
+            result["deep_cache"] = seal(result, work)
         except OSError as exc:
-            result.setdefault('notes', []).append('Deep cache manifest unavailable: '+str(exc))
+            result.setdefault("notes", []).append("Deep cache manifest unavailable: " + str(exc))
     atomic_json(target, result)
     return result
+
+
+@tracked(lambda plan, sample, force=False, upstream_records=None: f"[{sample['sample_id']}] DeepSafe" if plan["options"]["deep"] else None)
+def execute_deep(plan: dict, sample: dict, force=False, upstream_records=None) -> dict:
+    from .deep import run_deep
+    envelope = prepare_deep_execution(plan, sample, force, upstream_records)
+    payload = None
+    if not envelope["stopped"]:
+        runner = CommandRunner(envelope["config"], Path(envelope["work"]) / "commands.log")
+        try:
+            payload = run_deep(sample, envelope["records"], envelope["config"], Path(envelope["work"]), runner)
+        except Exception as exc:
+            envelope["result"].update(execution_status="failed", interpretation="inconclusive", error=str(exc), candidates=[])
+        envelope["commands"].extend(runner.commands)
+    return finish_deep_execution(plan, sample, envelope, payload)
 
 
 def _scheduler_root(plan: dict, root: str | Path) -> Path:
@@ -509,22 +533,43 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
     if engine == "snakemake":
         receipt_root = outdir / "provenance" / "scheduler" / run_id
         run["scheduler_receipt_dir"] = str(receipt_root)
+        run["reporting_mode"] = "snakemake_dag"
+        from .workflow_runtime import _write as write_workflow_document
+        write_workflow_document(receipt_root / "run-context.json", run)
         snakefile = Path(__file__).parent / "resources" / "Snakefile"
-        command = [sys.executable, "-m", "snakemake", "--snakefile", str(snakefile), "--configfile", plan["plan_path"],
+        command = [sys.executable, "-m", "snakemake", "all", "--snakefile", str(snakefile), "--configfile", plan["plan_path"],
                    "--directory", str(outdir), "--cores", str(plan["config"]["execution"]["cores"]),
                    "--resources", f"mem_mb={plan['config']['execution']['memory_mb']}",
                    f"gpu={plan['config']['execution'].get('gpus', 0)}", "--keep-going", "--rerun-incomplete", "--rerun-triggers", "mtime",
-                   "--forcerun", "module", "deep"]
-        env = os.environ.copy()
+                   ]
+        from .workflow_environments import has_managed_environments, conda_storage
+        managed = has_managed_environments(plan)
+        if managed:
+            command.extend(["--use-conda", "--conda-prefix", conda_storage(plan)])
+        from .native_environment import native_child_environment
+        env, _ = native_child_environment(os.environ, ["conda", "run", "--prefix", sys.prefix])
+        bootstrap = "import sys; sys.path.insert(0, " + repr(str(Path(__file__).parent.parent)) + "); from snakemake.cli import main; main()"
+        command = [sys.executable, "-c", bootstrap, *command[3:]]
         env["BASIS_FORCE"] = "1" if force else "0"
         env["BASIS_SCHEDULER_RUN_ID"] = run_id
-        env["PYTHONPATH"] = str(Path(__file__).parent.parent) + os.pathsep + env.get("PYTHONPATH", "")
         emit(f"Scheduler log: {outdir / 'snakemake.log'}")
         try:
             with stage("Snakemake scheduling and worker execution"):
                 completed = _run_scheduler(command, outdir / "snakemake.log", env)
             if completed.returncode:
                 engine_error = f"Snakemake exited {completed.returncode}; see {outdir / 'snakemake.log'}"
+            else:
+                try:
+                    from .workflow_runtime import read_document
+                    outcome = read_document(receipt_root / "outcome.json")
+                    if (outcome.get("schema") != "basis-workflow-outcome-v1"
+                            or outcome.get("plan_hash") != plan["plan_hash"]
+                            or outcome.get("result", {}).get("run", {}).get("run_id") != run_id
+                            or outcome.get("exit_code") not in (0, 2)):
+                        raise ValueError("Workflow outcome identity mismatch")
+                    return outcome["result"], outcome["exit_code"]
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    engine_error = f"Snakemake did not produce a valid workflow outcome: {exc}"
         except OSError as exc:
             # Still produce an explicit failed/incomplete report if the
             # scheduler cannot start. Existing output files are not current
@@ -547,6 +592,18 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
                 reused = " | cache reused" if deep_record.get("cache_hit") else ""
                 emit(f"[{sample['sample_id']}] DeepSafe: {deep_record.get('execution_status', 'not_recorded')}{reused}")
             emit(f"Sample {ordinal}/{len(plan['samples'])} [{sample['sample_id']}] — execution stages finished")
+    if engine == "snakemake":
+        run["reporting_mode"] = "launcher_infrastructure_fallback"
+        run["reporting_fallback_reason"] = engine_error or "Workflow outcome was not produced"
+    else:
+        run["reporting_mode"] = "local_compatibility"
+    bundle = collect_workflow_evidence(plan, run, engine, receipt_root if engine == "snakemake" else None, engine_error)
+    artifacts = render_workflow_report(bundle, outdir)
+    return capture_workflow_provenance(plan, bundle, artifacts)
+
+def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt_root=None, engine_error=None) -> dict:
+    """Collect only current, attested records into a reporting snapshot."""
+    from .run_summary import build_run_summary
     records, deep_records = [], []
     incomplete = []
     for sample in plan["samples"]:
@@ -594,15 +651,31 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
         run["engine_error"] = engine_error
     summary = build_run_summary(run, plan["samples"], records, deep_records)
     run["batch_summary"] = summary
+    return {"run": run, "samples": plan["samples"], "records": records,
+            "deep_records": deep_records, "summary": summary}
+
+
+def render_workflow_report(bundle: dict, outdir: str | Path) -> dict:
     from .report import write_report
-    artifacts = write_report(run, plan["samples"], records, deep_records, outdir)
-    artifacts.update(write_run_summary(summary, outdir))
+    from .run_summary import write_run_summary
+    outdir = Path(outdir)
+    artifacts = write_report(bundle["run"], bundle["samples"], bundle["records"], bundle["deep_records"], outdir)
+    artifacts.update(write_run_summary(bundle["summary"], outdir))
+    return artifacts
+
+
+def capture_workflow_provenance(plan: dict, bundle: dict, artifacts: dict) -> tuple[dict, int]:
+    outdir = Path(plan["outdir"])
+    run, summary = bundle["run"], bundle["summary"]
+    run_id = run["run_id"]
+    records = bundle["records"]
     archive = outdir / "history" / run_id
-    archive.mkdir(parents=True, exist_ok=False)
+    archive.mkdir(parents=True, exist_ok=True)
     for key in ("evidence_json", "methods_txt", "findings_tsv", "recommendations_tsv", "summary_json", "summary_tsv"):
         shutil.copy2(artifacts[key], archive / Path(artifacts[key]).name)
     run["evidence_snapshot"] = str(archive / "evidence.json")
     atomic_json(outdir / "locus_registry.json", build_registry(records))
     atomic_json(outdir / "provenance" / "runs" / f"{run_id}.json", run)
     atomic_json(outdir / "run.json", run)
-    return {"run": run, "artifacts": artifacts, "summary": summary}, 2 if incomplete or engine_error else 0
+    return {"run": run, "artifacts": artifacts, "summary": summary}, 2 if run["completeness"] == "incomplete" else 0
+

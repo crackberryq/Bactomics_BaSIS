@@ -38,7 +38,8 @@ def default_config() -> dict:
                                       memory_mb=16000, gpus=0,
                                       pf2_source_commit="3837caf6710da5da3038f5d1246dd82ab26e003a")
     return {"schema_version": 1, "project": "BaSIS study", "samples": "samples.tsv", "outdir": "results",
-            "validation_mode": "research", "execution": {"cores": 8, "memory_mb": 32000, "gpus": 0},
+            "validation_mode": "research", "execution": {"cores": 8, "memory_mb": 32000, "gpus": 0,
+                                                         "environment_backend": "auto", "conda_prefix": None},
             "modules": modules, "sample_module_overrides": {},
             "deep": {"motifs": True, "motif_rules": None, "prosite_snapshot": None, "prosite_profiles": False, "profiles_dir": None, "reference_fasta": None, "reference_metadata": None,
                      "reference_search_tool": "blastp", "maximum_candidates": 100,
@@ -76,6 +77,13 @@ def load_config(path: str | Path) -> dict:
     if unknown:
         raise ValueError(f"Unknown module names: {sorted(unknown)}")
     config = merge_dict(default_config(), supplied)
+    if config["execution"].get("environment_backend") not in {"auto", "external", "managed"}:
+        raise ValueError("execution.environment_backend must be auto, external or managed")
+    conda_prefix = config["execution"].get("conda_prefix")
+    if conda_prefix is not None:
+        if not isinstance(conda_prefix, str) or not conda_prefix.strip():
+            raise ValueError("execution.conda_prefix must be a nonempty path or null")
+        config["execution"]["conda_prefix"] = resolve_path(conda_prefix, path.parent)
     for key in ("cores", "memory_mb"):
         value = config["execution"].get(key)
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -87,6 +95,8 @@ def load_config(path: str | Path) -> dict:
     for key in ("samples", "outdir"):
         config[key] = resolve_path(str(config[key]), path.parent)
     for section in list(config["modules"].values()) + [config["deep"]]:
+        if section.get("environment_backend", "auto") not in {"auto", "external", "managed"}:
+            raise ValueError("environment_backend must be auto, external or managed")
         if not isinstance(section.get("command_prefix", []), list) or not all(isinstance(x, str) for x in section.get("command_prefix", [])):
             raise ValueError("command_prefix must be an argv list, not a shell command string")
         if "enabled" in section and not isinstance(section["enabled"], bool):

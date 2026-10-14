@@ -8,12 +8,13 @@ from pathlib import Path
 import shlex
 
 import streamlit as st
+import yaml
 
 from basis import __version__
 from basis.config import load_config
 from basis.environment_setup import recipe_names
 from basis.gui_artifacts import ReportServer
-from basis.jobs import list_jobs, read_job, submit, tail
+from basis.jobs import list_jobs, read_job, scheduler_progress, submit, tail
 from basis.report_citation import AUTHOR, ORCID, citation_text, write_citations
 
 st.set_page_config(page_title="BaSIS · Research workspace", page_icon="🧬", layout="wide")
@@ -36,7 +37,7 @@ button[kind="primary"] {background:#087c78;border-color:#087c78;}
 button[kind="primary"]:hover {background:#066662;border-color:#066662;}
 @media(max-width:760px){.basis-hero{padding:23px;}.basis-hero h1{font-size:1.8rem;}}
 </style>''', unsafe_allow_html=True)
-PAGE_LABELS = {"Overview": "Start here", "Setup": "1 · Tools & resources", "Samples": "2 · Add samples",
+PAGE_LABELS = {"Overview": "Start here", "Setup": "1 · Tool environments", "Resources": "Databases & models", "Samples": "2 · Add samples",
                "Run": "3 · Readiness & run", "Jobs": "Progress & jobs", "Results & export": "4 · Explore results"}
 page = st.sidebar.radio("Your workspace", list(PAGE_LABELS), format_func=PAGE_LABELS.get, key="page")
 st.sidebar.caption(f"BaSIS {__version__} · Local Linux / WSL")
@@ -49,6 +50,7 @@ st.sidebar.caption("Analysis completion and biological interpretation are report
 HEADINGS = {
     "Overview": ("From genome to evidence", "Prepare your tools, add samples and follow a guided analysis. Explore the findings in your interactive BaSIS report."),
     "Setup": ("Prepare your analysis tools", "Plan, install and verify tool environments with Snakemake. Then check the databases and models required by your study."),
+    "Resources": ("Prepare your study resources", "Choose explicitly configured resources, review the plan and let Snakemake coordinate supported downloads and index building."),
     "Samples": ("Bring your samples together", "Import a sample sheet from HybAs or another annotation workflow. Preview every sample before creating your study."),
     "Run": ("Choose your analysis", "Select the evidence layers you need, check readiness and start a reproducible workflow."),
     "Jobs": ("Follow your progress", "See the current activity and live workflow output. Jobs keep running when you leave this page."),
@@ -77,19 +79,27 @@ def environment_inventory(prefix_root):
             if data.get("schema") != "basis-environment-setup-summary-v1":
                 continue
             for entry in data.get("environments", []):
-                expected = prefix_root / ("basis-" + entry.get("name", ""))
-                if entry.get("prefix") and Path(entry["prefix"]).resolve() == expected.resolve():
-                    verified[entry["name"]] = entry.get("status")
+                name = entry.get("recipe_name") or entry.get("name", "")
+                expected = prefix_root / ("basis-" + name)
+                actual = Path(entry["prefix"]).resolve() if entry.get("prefix") else None
+                requested = Path(entry["requested_prefix"]).resolve() if entry.get("requested_prefix") else actual
+                if actual and (requested == expected.resolve() or
+                               entry.get("backend") == "managed" and actual.parent == prefix_root.resolve()):
+                    verified[name] = {"status": entry.get("status"), "prefix": actual,
+                                      "backend": entry.get("backend", "external")}
         except (OSError, ValueError, TypeError):
             continue
     rows = []
     for name in recipe_names():
-        exists = (prefix_root / ("basis-" + name)).is_dir()
+        record = verified.get(name, {})
+        actual = record.get("prefix", prefix_root / ("basis-" + name))
+        exists = actual.is_dir()
         status = "Not installed in selected directory"
         if exists:
             status = {"ready": "Verified during setup", "failed": "Setup verification failed"}.get(
-                verified.get(name), "Folder exists · unverified")
-        rows.append({"Environment": name, "Installation record": status})
+                record.get("status"), "Folder exists · unverified")
+        rows.append({"Environment": name, "Installation record": status,
+                     "Deployment": record.get("backend", "not recorded"), "Environment path": str(actual)})
     return rows
 
 
@@ -101,7 +111,7 @@ def launch(request, new=False):
         next_step("Follow this job →", "Jobs", "follow_submitted_job")
         if job.get("reconnected"):
             st.info("Reconnected to a saved job. To recheck changed inputs or resources, select New attempt in the sidebar.")
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, yaml.YAMLError) as exc:
         st.error(str(exc))
 
 
@@ -183,14 +193,12 @@ if page == "Overview":
 
 elif page == "Setup":
     st.subheader("1. Install tool environments")
-    st.write("Snakemake coordinates installation and verification. Conda creates isolated environments; compatible existing environments are reused after checks.")
+    st.write("Snakemake creates its managed Conda environments from the tool recipes and verifies them. Existing named BaSIS environments in your selected directory are verified and reused without modification.")
     envs = st.multiselect("Select tool environments", recipe_names(), default=["core-amr", "rgi", "diamond", "context", "antismash", "mobsuite", "deepsafe"])
     with st.expander("Advanced installation options"):
         prefix_value = st.text_input("Environment parent directory", value=str(workspace / ".basis-envs"), key="setup_prefix_root")
-        st.caption("Already installed BaSIS tools elsewhere? Select that .basis-envs folder to verify and reuse its environments. Only this directory is checked; study configuration paths are unchanged.")
+        st.caption("New environments use Snakemake-managed cache names. To reuse an earlier installation, select its .basis-envs directory containing basis-ENV folders. Only this directory is checked; study configuration paths are unchanged.")
         setup_cores = st.number_input("Concurrent installation jobs", min_value=1, max_value=4, value=1)
-        retry_failed = st.checkbox("Retry interrupted BaSIS-managed installations", key="retry_failed")
-        st.caption("Retries apply only to installations previously managed by BaSIS. Other existing folders are preserved.")
         st.caption("Recipes are starting specifications. Captured environment locks are required to restore exact tested package versions.")
     prefix_root = (workspace / Path(prefix_value).expanduser()).resolve() if prefix_value.strip() else workspace / ".basis-envs"
     setup_request = {"kind": "setup", "engine": "snakemake", "envs": envs, "cores": int(setup_cores), "prefix_root": str(prefix_root)}
@@ -199,8 +207,9 @@ elif page == "Setup":
         launch({**setup_request, "create": False})
     create = b.checkbox("Allow package downloads for the selected environments", key="allow_packages")
     if b.button("Install missing tool environments", type="primary", disabled=not create or not envs):
-        launch({**setup_request, "create": True, **({"retry_failed": True} if retry_failed else {})})
-    st.info("This installs and verifies tool environments only. Database and model downloads are not yet automated here; they must be configured before analysis.")
+        launch({**setup_request, "create": True})
+    st.info("This step prepares tool environments only. Prepare explicitly configured supported databases on Databases & models, then run study preflight.")
+    next_step("Prepare databases & models →", "Resources", "setup_resources")
     with st.expander("Environment installation records"):
         st.caption("Environment directory: " + str(prefix_root))
         st.dataframe(environment_inventory(prefix_root), hide_index=True)
@@ -216,6 +225,43 @@ elif page == "Setup":
         launch({"kind": "doctor", "config": cfg, "deep": deep, "extend": extend})
     st.caption("Preflight checks declared resources. Native execution and GPU inference are verified by acceptance runs.")
     next_step("Continue to samples →", "Samples", "setup_next")
+
+elif page == "Resources":
+    st.subheader("Explicit database preparation")
+    st.write("Use a resource configuration describing the selected versions, destinations and verification checks. The plan is read-only; downloads and index building start only when you request preparation.")
+    resource_config = st.text_input("Resource configuration path", key="resource_config",
+                                    placeholder="/home/jimi/bactomics/resources.yaml")
+    configured_resources = {}
+    if resource_config:
+        try:
+            from basis.resource_setup import load_resource_config
+            resource_data = load_resource_config(Path(resource_config).expanduser())
+            configured_resources = resource_data["resources"]
+        except (ValueError, OSError, yaml.YAMLError) as exc:
+            st.error(str(exc))
+    selected_resources = st.multiselect("Resources to prepare", list(configured_resources),
+        format_func=lambda name: f"{name} · {configured_resources[name]['backend']}", key="selected_resources")
+    if selected_resources:
+        st.dataframe([{"Resource": name, "Backend": configured_resources[name]["backend"],
+            "Requested version": configured_resources[name].get("version"),
+            "Destination": configured_resources[name].get("destination")} for name in selected_resources], hide_index=True)
+    with st.expander("Advanced resource preparation options"):
+        resource_cores = st.number_input("Resource preparation CPU budget", min_value=1, value=4)
+        resource_conda = st.text_input("Snakemake environment cache (optional)", key="resource_conda_prefix")
+        st.caption("A configured resource environment_prefix reuses that Conda environment. Otherwise Snakemake creates the recipe environment in its cache.")
+    resource_request = {"kind": "resources", "config": resource_config,
+                        "resources": selected_resources, "cores": int(resource_cores)}
+    if resource_conda.strip():
+        resource_request["conda_prefix"] = str((workspace / Path(resource_conda).expanduser()).resolve())
+    a, b = st.columns(2)
+    if a.button("Preview resource plan", disabled=not selected_resources):
+        launch({**resource_request, "execute": False})
+    permit_resources = b.checkbox("Allow downloads and index building for selected resources", key="allow_resources")
+    if b.button("Prepare selected resources", type="primary", disabled=not selected_resources or not permit_resources):
+        launch({**resource_request, "execute": True})
+    st.info("Supported preparation includes AMRFinderPlus, geNomad, antiSMASH, MOB-suite, BacMet and explicitly pinned files. Pinned files alone may still need indexing or tool-specific configuration. Preparation completion does not establish study readiness.")
+    st.caption("Source versions and checksums must be declared in the resource configuration. Analysis runs do not silently update these resources. Saved preparation summaries and manifests are available in Progress & jobs.")
+    next_step("Check study readiness →", "Setup", "resources_preflight")
 
 elif page == "Samples":
     st.subheader("Create a study from a sample sheet")
@@ -257,12 +303,14 @@ elif page == "Run":
     if cfg:
         try:
             config = load_config(Path(cfg).expanduser())
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, yaml.YAMLError) as exc:
             st.error(str(exc))
     if config is not None and st.session_state.get("budget_source") != cfg:
         for field in ("cores", "memory_mb", "gpus"):
             st.session_state["budget_" + field] = config["execution"][field]
         st.session_state["budget_source"] = cfg
+        st.session_state["run_environment_backend"] = "external" if config["execution"].get("environment_backend") == "external" else "auto"
+        st.session_state["run_conda_prefix"] = config["execution"].get("conda_prefix") or str(workspace / ".basis-envs")
     st.subheader("Analysis layers")
     a, b, c = st.columns(3)
     with a, st.container(border=True):
@@ -283,13 +331,24 @@ elif page == "Run":
         gpu = c.number_input("Scheduled GPUs", min_value=0, max_value=1, value=0, key="budget_gpus")
         engine = st.selectbox("Execution engine", ("snakemake", "local"),
                               format_func=lambda value: "Snakemake · recommended" if value == "snakemake" else "Local BaSIS runner")
+        environment_backend = st.selectbox("Environment deployment", ("auto", "external"), key="run_environment_backend",
+            format_func=lambda value: "Automatic · manage missing, reuse configured prefixes" if value == "auto" else "Existing tools only · no automatic environment creation",
+            disabled=engine == "local")
+        run_conda = st.text_input("Snakemake environment cache", value=str(workspace / ".basis-envs"), key="run_conda_prefix")
+        st.caption("Automatic mode uses native Snakemake Conda deployment for stages without a configured command prefix and retains configured per-module deployment overrides. Explicit command prefixes keep using their existing environments. Existing-tools mode overrides deployment for every module and DeepSafe, using configured prefixes or executable PATH without creating environments.")
+        if engine == "local":
+            st.info("The local runner uses existing tools only; automatic Conda deployment requires the Snakemake engine.")
+            environment_backend = "external"
         st.caption("CPU/RAM/GPU values are scheduling budgets. Tool settings and model device choices come from the configuration.")
         if config is not None:
             st.dataframe([{"Module": n, "Enabled in config": m.get("enabled"), "Mode": m.get("mode", "native"),
                            "Executable": m.get("executable"), "Database": m.get("database")} for n, m in config["modules"].items()], hide_index=True)
             st.json({"deep": config["deep"], "sample_module_overrides": config.get("sample_module_overrides", {})})
         fresh = st.checkbox("Create another attempt if these settings have already finished")
-    request = {"config": cfg, "deep": deep, "extend": extend, "cores": int(cores), "memory_mb": int(memory), "gpus": int(gpu)}
+    request = {"config": cfg, "deep": deep, "extend": extend, "cores": int(cores), "memory_mb": int(memory), "gpus": int(gpu),
+               "environment_backend": environment_backend}
+    if run_conda.strip():
+        request["conda_prefix"] = str((workspace / Path(run_conda).expanduser()).resolve())
     a, b = st.columns(2)
     if a.button("Check readiness", disabled=config is None):
         launch({**request, "kind": "doctor"}, fresh)
@@ -317,7 +376,15 @@ elif page == "Jobs":
             st.caption(job.get("message", "Progress refreshes every three seconds. Reconnect after closing the browser using this workspace."))
             st.markdown("#### Live workflow output")
             st.caption("Snakemake scheduling, native tool activity and completion messages appear here. The saved console log retains the full output.")
-            st.code(tail(job["log"]), language=None)
+            console = tail(job["log"])
+            observed = scheduler_progress(console)
+            if observed.get("latest_rule"):
+                st.write("Latest reported workflow step:", observed["latest_rule"].replace("_", " "))
+            if "scheduler_percent" in observed:
+                st.progress(observed["scheduler_percent"] / 100,
+                    text=f"Scheduler: {observed['completed_steps']} of {observed['scheduled_steps']} steps completed")
+                st.caption("Step counts may grow as candidate analyses are scheduled. Scheduler progress does not indicate biological interpretation.")
+            st.code(console, language=None)
             with st.expander("Command and reproducibility record"):
                 st.code(shlex.join(job["command"]), language="bash")
                 st.json(job)

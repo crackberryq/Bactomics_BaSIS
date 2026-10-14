@@ -1,3 +1,11 @@
+# 0.3.0rc1 — Snakemake-owned workflow
+
+- Use one packaged Snakefile entry point with analysis, explicit environment setup and explicit resource preparation modes.
+- Move input/resource checks, named native module jobs, nine DeepSafe stages per sample, consolidation, reporting and provenance into the analysis DAG. Deep stages process the selected candidates within each sample; candidate-level scheduler fan-out is not included.
+- Use native Snakemake `conda:` deployment for supported modules without an explicit command prefix. Preserve existing external prefixes and the legacy local execution option.
+- Add explicit, versioned resource preparation for supported upstream databases and SHA256-pinned files. Preparation writes provenance and never silently refreshes resources during analysis.
+- Preserve scientific thresholds, candidate selection and interpretation policies. The preceding `0.2.0rc16` release remains a separate baseline. Independent biological validation is pending.
+
 # 0.2.0rc16 — workflow orchestration
 
 - Snakemake is now a base dependency and the default CLI/GUI analysis scheduler. Serial local execution remains available.

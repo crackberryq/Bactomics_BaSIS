@@ -124,7 +124,7 @@ def inventory(prefix, recipe):
 
 
 def _command(argv, logfile, *, timeout=180, source_imports=False):
-    print("$ " + shlex.join(map(str, argv)), flush=True)
+    argv = list(map(str, argv))
     env = dict(os.environ, CONDA_CHANNEL_PRIORITY="strict", CONDA_FETCH_THREADS="1",
                CONDA_REMOTE_MAX_RETRIES="5", CONDA_REMOTE_READ_TIMEOUT_SECS="120",
                PYTHONUNBUFFERED="1", PYTHONNOUSERSITE="1", BASIS_VERBOSE="1")
@@ -132,7 +132,12 @@ def _command(argv, logfile, *, timeout=180, source_imports=False):
     # well as when installed in site-packages; Snakemake changes its workdir.
     package_parent = str(Path(__file__).resolve().parent.parent)
     if source_imports:
-        env["PYTHONPATH"] = package_parent
+        from .native_environment import native_child_environment
+        env, _ = native_child_environment(env, ["conda", "run", "--prefix", sys.prefix])
+        if argv[1:3] != ["-m", "snakemake"]:
+            raise ValueError("Source-bound launcher only supports Snakemake")
+        bootstrap = "import sys; sys.path.insert(0, " + repr(package_parent) + "); from snakemake.cli import main; main()"
+        argv = [argv[0], "-c", bootstrap, *argv[3:]]
     else:
         env.pop("PYTHONPATH", None)
         if "--prefix" in argv:
@@ -141,6 +146,7 @@ def _command(argv, logfile, *, timeout=180, source_imports=False):
             # All commands here are explicitly targeted managed environments.
             # Apply the same launcher cleanup for Conda, Mamba and Micromamba.
             env, _ = native_child_environment(env, ["conda", "run", "--prefix", target])
+    print("$ " + shlex.join(argv), flush=True)
     # Pipe output to both the persistent attempt log and GUI/CLI job log.
     from .progress import stage, verbosity
     with logfile.open("a", encoding="utf-8") as log:
@@ -279,53 +285,68 @@ def worker(plan_path, name):
     logfile = Path(entry["log"])
     state = {"schema": "basis-environment-setup-record-v1", "name": name, "prefix": entry["prefix"],
              "plan_hash": plan["plan_hash"], "recipe_sha256": entry["recipe_sha256"],
-             "started_at": now(), "status": "preparing", "operation": "verify", "log": str(logfile)}
+             "started_at": now(), "status": "preparing", "operation": "verify", "log": str(logfile),
+             "backend": entry.get("backend", "legacy"), "recipe_name": name,
+             "requested_prefix": entry["prefix"]}
     try:
         recipe_path = Path(entry["recipe"])
         if sha256_file(recipe_path) != entry["recipe_sha256"]:
             raise ValueError("Recipe differs from captured setup plan")
         recipe = yaml.safe_load(recipe_path.read_text())
-        prefix = workspace_path(entry["prefix"])
-        with _prefix_lock(prefix) as claim_path:
-            claim = json.loads(claim_path.read_text()) if claim_path.is_file() else {}
-            owned = (claim.get("prefix") == str(prefix) and claim.get("workspace") == plan["workspace"]
-                     and claim.get("recipe_sha256") == entry["recipe_sha256"])
-            fresh = not prefix.exists()
-            repair = False
-            if not fresh:
-                try:
-                    state["verification"] = verify(prefix, recipe, name, plan, logfile)
-                    state.update(status="ready", operation="reused")
-                except Exception:
-                    if not (plan["retry_failed"] and owned and claim.get("status") in {"preparing", "failed"}):
-                        raise
-                    repair = True
-            if fresh or repair:
-                state["operation"] = "retry" if repair else "created"
-                claim = {"prefix": str(prefix), "workspace": plan["workspace"],
-                         "recipe_sha256": entry["recipe_sha256"], "status": "preparing",
-                         "attempt": plan["directory"], "updated_at": now()}
-                atomic_json(claim_path, claim)
-                if repair:
-                    operation = ["env", "update"]
-                else:
-                    operation = ["create"] if plan["manager"] == "micromamba" else ["env", "create"]
-                command = [plan["manager_executable"], *operation, "--prefix", str(prefix),
-                           "--file", str(recipe_path)]
-                if not repair or plan["manager"] == "micromamba":
-                    command.append("--yes")
-                try:
-                    response = _command(command, logfile, timeout=86400)
-                    if response.returncode:
-                        raise ValueError("Environment manager exited " + str(response.returncode) + "; retry requires --retry-failed")
-                    state["verification"] = verify(prefix, recipe, name, plan, logfile)
-                    state["status"] = "ready"
-                    claim.update(status="ready", updated_at=now())
-                except Exception:
-                    claim.update(status="failed", updated_at=now())
-                    raise
-                finally:
+        if entry.get("backend") == "managed":
+            from .workflow_environments import managed_prefix
+            prefix = managed_prefix(plan["prefix_root"])
+            state["prefix"] = str(prefix)
+            state["operation"] = "snakemake_deployed"
+            state["verification"] = verify(prefix, recipe, name, plan, logfile)
+            state["status"] = "ready"
+        elif entry.get("backend") == "external":
+            prefix = workspace_path(entry["prefix"])
+            with _prefix_lock(prefix):
+                state["verification"] = verify(prefix, recipe, name, plan, logfile)
+            state.update(status="ready", operation="reused")
+        else:
+            prefix = workspace_path(entry["prefix"])
+            with _prefix_lock(prefix) as claim_path:
+                claim = json.loads(claim_path.read_text()) if claim_path.is_file() else {}
+                owned = (claim.get("prefix") == str(prefix) and claim.get("workspace") == plan["workspace"]
+                         and claim.get("recipe_sha256") == entry["recipe_sha256"])
+                fresh = not prefix.exists()
+                repair = False
+                if not fresh:
+                    try:
+                        state["verification"] = verify(prefix, recipe, name, plan, logfile)
+                        state.update(status="ready", operation="reused")
+                    except Exception:
+                        if not (plan["retry_failed"] and owned and claim.get("status") in {"preparing", "failed"}):
+                            raise
+                        repair = True
+                if fresh or repair:
+                    state["operation"] = "retry" if repair else "created"
+                    claim = {"prefix": str(prefix), "workspace": plan["workspace"],
+                             "recipe_sha256": entry["recipe_sha256"], "status": "preparing",
+                             "attempt": plan["directory"], "updated_at": now()}
                     atomic_json(claim_path, claim)
+                    if repair:
+                        operation = ["env", "update"]
+                    else:
+                        operation = ["create"] if plan["manager"] == "micromamba" else ["env", "create"]
+                    command = [plan["manager_executable"], *operation, "--prefix", str(prefix),
+                               "--file", str(recipe_path)]
+                    if not repair or plan["manager"] == "micromamba":
+                        command.append("--yes")
+                    try:
+                        response = _command(command, logfile, timeout=86400)
+                        if response.returncode:
+                            raise ValueError("Environment manager exited " + str(response.returncode) + "; retry requires --retry-failed")
+                        state["verification"] = verify(prefix, recipe, name, plan, logfile)
+                        state["status"] = "ready"
+                        claim.update(status="ready", updated_at=now())
+                    except Exception:
+                        claim.update(status="failed", updated_at=now())
+                        raise
+                    finally:
+                        atomic_json(claim_path, claim)
     except Exception as exc:
         state.update(status="failed", error=str(exc))
     state["finished_at"] = now()
@@ -343,13 +364,20 @@ def summarize(plan_path, scheduler_error=None):
         try:
             row = json.loads(path.read_text())
             if row.get("plan_hash") != plan["plan_hash"] or row.get("name") != entry["name"] or \
-                    row.get("recipe_sha256") != entry["recipe_sha256"] or row.get("prefix") != entry["prefix"]:
+                    row.get("recipe_sha256") != entry["recipe_sha256"] or row.get("backend", "legacy") != entry.get("backend", "legacy"):
+                raise ValueError("Setup record identity mismatch")
+            if entry.get("backend") == "managed":
+                if not Path(row["prefix"]).is_relative_to(Path(plan["prefix_root"])):
+                    raise ValueError("Managed prefix is outside configured deployment root")
+            elif row.get("prefix") != entry["prefix"]:
                 raise ValueError("Setup record identity mismatch")
             if row.get("status") == "ready" and not row.get("verification", {}).get("probes"):
                 raise ValueError("Ready record lacks executable verification")
-            result = {key: row.get(key) for key in ("name", "prefix", "status", "operation", "error")}
+            result = {key: row.get(key) for key in ("name", "prefix", "status", "operation", "error", "backend", "recipe_name", "requested_prefix")}
         except (OSError, ValueError, TypeError) as exc:
-            result = {"name": entry["name"], "prefix": entry["prefix"], "status": "failed", "error": str(exc)}
+            result = {"name": entry["name"], "recipe_name": entry["name"], "prefix": entry["prefix"],
+                      "requested_prefix": entry["prefix"], "backend": entry.get("backend", "legacy"),
+                      "status": "failed", "error": str(exc)}
         results.append({**result, "record": str(path)})
     summary = {"schema": "basis-environment-setup-summary-v1", "scope": "tool_environments_only",
                "status": "completed" if all(r["status"] == "ready" for r in results) and not scheduler_error else "incomplete",
@@ -376,6 +404,8 @@ def run_setup(workspace, prefix_root, names, *, manager="conda", engine="snakema
     if not executable:
         raise ValueError("Package manager is not on PATH: " + manager)
     if engine == "snakemake":
+        if manager != "conda":
+            raise ValueError("Native Snakemake deployment uses Conda; other managers require explicit --engine local")
         import importlib.util
         if importlib.util.find_spec("snakemake") is None:
             raise ValueError("Snakemake is unavailable in this Python installation; install BaSIS workflow dependencies or use --engine local")
@@ -386,7 +416,7 @@ def run_setup(workspace, prefix_root, names, *, manager="conda", engine="snakema
     directory.mkdir(parents=True)
     (directory / "recipes").mkdir()
     (directory / "environments").mkdir()
-    plan = {"schema": "basis-environment-setup-plan-v1", "basis_version": __version__, "created_at": now(),
+    plan = {"schema": "basis-environment-setup-plan-v1", "workflow_mode": "setup", "basis_version": __version__, "created_at": now(),
             "workspace": str(workspace), "directory": str(directory), "prefix_root": str(prefix_root),
             "manager": manager, "manager_executable": str(Path(executable).absolute()), "engine": engine,
             "cores": cores, "retry_failed": bool(retry_failed), "python": sys.executable,
@@ -394,7 +424,9 @@ def run_setup(workspace, prefix_root, names, *, manager="conda", engine="snakema
     for name, content in recipes.items():
         recipe = directory / "recipes" / (name + ".yml")
         recipe.write_bytes(content)
-        plan["environments"].append({"name": name, "prefix": str(workspace_path(prefix_root / ("basis-" + name))),
+        legacy_prefix = workspace_path(prefix_root / ("basis-" + name))
+        backend = "legacy" if engine == "local" else "external" if legacy_prefix.exists() else "managed"
+        plan["environments"].append({"name": name, "prefix": str(legacy_prefix), "backend": backend,
                                      "recipe": str(recipe), "recipe_sha256": sha256_file(recipe),
                                      "record": str(directory / "environments" / (name + ".json")),
                                      "log": str(directory / "environments" / (name + ".log"))})
@@ -408,9 +440,11 @@ def run_setup(workspace, prefix_root, names, *, manager="conda", engine="snakema
             for name in names:
                 worker(plan_path, name)
         else:
-            with as_file(files("basis").joinpath("resources", "SetupSnakefile")) as snake:
-                command = [sys.executable, "-m", "snakemake", "--snakefile", str(snake), "--configfile", str(plan_path),
+            with as_file(files("basis").joinpath("resources", "Snakefile")) as snake:
+                command = [sys.executable, "-m", "snakemake", "all", "--snakefile", str(snake), "--configfile", str(plan_path),
                            "--directory", str(directory), "--cores", str(cores), "--rerun-incomplete", "--nolock"]
+                if any(e["backend"] == "managed" for e in plan["environments"]):
+                    command += ["--software-deployment-method", "conda", "--conda-prefix", str(prefix_root)]
                 response = _command(command, directory / "snakemake.log", timeout=172800, source_imports=True)
                 if response.returncode:
                     scheduler_error = "Snakemake exited " + str(response.returncode)

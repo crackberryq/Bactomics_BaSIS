@@ -33,12 +33,32 @@ class PreflightTests(unittest.TestCase):
             self.rows.append(row)
         self.manifest = self.root / "samples.tsv"
         self.config = default_config()
+        self.config["execution"]["environment_backend"] = "external"
         self.config["samples"] = str(self.manifest)
         self.config["outdir"] = str(self.root / "results")
         for module in self.config["modules"].values():
             module["enabled"] = False
         self.config["modules"]["amrfinder"].update(enabled=True, executable="fixture-amrfinder")
         self.write_manifest()
+
+    def test_managed_environment_is_planned_without_probing_native_executable(self):
+        self.config["execution"]["environment_backend"] = "auto"
+        with patch("basis.cli.shutil.which", side_effect=lambda name: "/usr/bin/conda" if name == "conda" else None) as which:
+            result = check(self.config, executables=True)
+        self.assertNotEqual(result["status"], "failed")
+        detail = result["sample_checks"][0]["module_checks"]["amrfinder"]
+        self.assertEqual(detail["environment_backend"], "managed")
+        self.assertEqual(detail["environment_readiness"], "planned_snakemake_deployment")
+        self.assertTrue(all(call.args == ("conda",) for call in which.call_args_list))
+
+    def test_managed_deployment_requires_conda_and_preserves_database_checks(self):
+        self.config["execution"]["environment_backend"] = "auto"
+        self.config["modules"]["amrfinder"]["database"] = str(self.root / "missing-database")
+        with patch("basis.cli.shutil.which", return_value=None):
+            result = check(self.config, executables=True)
+        errors = result["sample_checks"][0]["module_checks"]["amrfinder"]["errors"]
+        self.assertTrue(any("Conda is required" in error for error in errors))
+        self.assertTrue(any("database does not exist" in error for error in errors))
 
     def write_manifest(self):
         fields = ["sample_id", "assembly", "proteins", "gff", "input_mode", "taxon", "amrfinder_organism", "genbank", "phenotypes"]

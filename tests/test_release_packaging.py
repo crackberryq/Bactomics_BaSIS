@@ -29,7 +29,7 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertIn("version", metadata["project"]["dynamic"])
         self.assertNotIn("version", metadata["project"])
         self.assertEqual(metadata["tool"]["setuptools"]["dynamic"]["version"]["attr"], "basis.__version__")
-        self.assertEqual(basis.__version__, "0.2.0rc16")
+        self.assertEqual(basis.__version__, "0.3.0rc1")
 
     def test_packaged_recipes_match_captured_recipes(self):
         project = Path(__file__).resolve().parent.parent
@@ -41,7 +41,7 @@ class ReleasePackagingTests(unittest.TestCase):
 
     def test_runtime_assets_are_available_through_package_resources(self):
         root = files("basis").joinpath("resources")
-        for name in ("Snakefile", "SetupSnakefile", "motifs/rules-v1.json", "placement/registry-v2.json", "profiles/cfr_family.yaml"):
+        for name in ("Snakefile", "SetupSnakefile", "rules/setup.smk", "motifs/rules-v1.json", "placement/registry-v2.json", "profiles/cfr_family.yaml"):
             self.assertTrue(root.joinpath(name).is_file(), name)
 
     def test_plan_is_read_only_and_defaults_prefix_to_explicit_workspace(self):
@@ -81,12 +81,12 @@ class ReleasePackagingTests(unittest.TestCase):
         with patch("basis.environment_setup.shutil.which", return_value="/usr/bin/micromamba"), \
              patch("basis.environment_workflow.run_setup", return_value=(summary, 0)) as run, \
              contextlib.redirect_stdout(io.StringIO()):
-            code = environment_setup.main(["--project", str(self.root), "--env", "minced", "--create", "--manager", "micromamba"])
+            code = environment_setup.main(["--project", str(self.root), "--env", "minced", "--create", "--manager", "micromamba", "--engine", "local"])
         self.assertEqual(code, 0)
         args, kwargs = run.call_args
         self.assertEqual(args, (self.root, self.root / ".basis-envs", ("minced",)))
         self.assertEqual(kwargs["manager"], "micromamba")
-        self.assertEqual(kwargs["engine"], "snakemake")
+        self.assertEqual(kwargs["engine"], "local")
 
     def test_installed_package_and_site_packages_destinations_are_rejected(self):
         package_dir = Path(basis.__file__).resolve().parent

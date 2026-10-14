@@ -25,6 +25,14 @@ with Path(os.environ['BASIS_FAKE_CALLS']).open('a') as f:
  'pythonpath':os.environ.get('PYTHONPATH'),'virtualenv':os.environ.get('VIRTUAL_ENV'),
  'pythonhome':os.environ.get('PYTHONHOME'),'pythonuserbase':os.environ.get('PYTHONUSERBASE'),
  'path':os.environ.get('PATH')})+'\n')
+if args == ['info','--json']:
+ print(json.dumps({'conda_prefix':str(Path(sys.argv[0]).parent.parent/'fake-base'),'platform':'linux-64'}));raise SystemExit(0)
+if args == ['--version']:
+ print('conda 24.9.2');raise SystemExit(0)
+if args[:2] == ['config','--get']:
+ print(json.dumps({'get':{'channel_priority':'strict'}}));raise SystemExit(0)
+if args and args[0] == 'clean':
+ print('fake package cleanup');raise SystemExit(0)
 prefix=Path(args[args.index('--prefix')+1])
 if args[0]=='run':
  raise SystemExit(subprocess.run(args[args.index('--prefix')+2:]).returncode)
@@ -36,7 +44,8 @@ if os.environ.get('BASIS_FAKE_FAIL')=='1':
 meta=prefix/'conda-meta';meta.mkdir(exist_ok=True)
 (meta/'history').write_text('fake transaction for software test\n')
 binary=prefix/'bin';binary.mkdir(exist_ok=True)
-if prefix.name.endswith('minced'):
+recipe=Path(args[args.index('--file')+1]).read_text()
+if 'basis-minced' in recipe:
  packages={'minced':'0.4.2','openjdk':'17.0.17'}
  tools={'minced':'minced 0.4.2','java':'openjdk version 17.0.17'}
 else:
@@ -60,6 +69,9 @@ class EnvironmentWorkflowTests(unittest.TestCase):
             path = self.bin / manager
             path.write_text("#!" + sys.executable + "\n" + FAKE_MANAGER)
             path.chmod(0o755)
+        activate = self.root / "fake-base/bin/activate"
+        activate.parent.mkdir(parents=True)
+        activate.write_text('export CONDA_PREFIX="$1"\nexport CONDA_EXE="' + str(self.bin / 'conda') + '"\nexport PATH="$CONDA_PREFIX/bin:$PATH"\n')
         self.calls = self.root / "calls.jsonl"
         self.environment = patch.dict(os.environ, {"PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
                                                   "BASIS_FAKE_CALLS": str(self.calls)})
@@ -219,13 +231,46 @@ class EnvironmentWorkflowTests(unittest.TestCase):
         self.assertEqual(len(result["environments"]), 2)
         directory = Path(result["summary_path"]).parent
         log = (directory / "snakemake.log").read_text()
-        self.assertIn("rule environment", log)
-        self.assertIn("rule summary", log)
+        self.assertIn("rule setup_environment", log)
+        self.assertIn("Creating conda environment", log)
+        self.assertTrue(all(row["backend"] == "managed" for row in result["environments"]))
+        self.assertTrue(all(Path(row["prefix"]).name != "basis-" + row["name"] for row in result["environments"]))
+        self.assertIn("rule setup_summary", log)
         self.assertIn("100%", log)
         plan = workflow.load_plan(directory / "plan.json")
         for entry in plan["environments"]:
             self.assertEqual(Path(entry["recipe"]).read_bytes(), cli.recipe_resource(entry["name"]).read_bytes())
         self.assertTrue(all(call["pythonpath"] is None for call in self.read_calls()))
+        count = len(self.read_calls())
+        repeated, repeated_code = self.run_setup(engine="snakemake", names=("minced", "diamond"), cores=2)
+        self.assertEqual(repeated_code, 0, repeated)
+        self.assertEqual([row["prefix"] for row in repeated["environments"]],
+                         [row["prefix"] for row in result["environments"]])
+        self.assertFalse(any(call["args"][:2] == ["env", "create"] for call in self.read_calls()[count:]))
+
+    @unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake not installed")
+    def test_snakemake_verifies_existing_named_environment_without_deployment(self):
+        original, _ = self.run_setup()
+        prefix = original["environments"][0]["prefix"]
+        count = len(self.read_calls())
+        result, code = self.run_setup(engine="snakemake")
+        self.assertEqual(code, 0, result)
+        row = result["environments"][0]
+        self.assertEqual(row["backend"], "external")
+        self.assertEqual(row["prefix"], prefix)
+        self.assertTrue(all(call["args"][0] == "run" for call in self.read_calls()[count:]))
+
+    @unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake not installed")
+    def test_native_conda_deployment_failure_is_not_reported_as_ready(self):
+        with patch.dict(os.environ, {"BASIS_FAKE_FAIL": "1"}):
+            result, code = self.run_setup(engine="snakemake")
+        self.assertEqual(code, 2)
+        self.assertEqual(result["status"], "incomplete")
+        self.assertEqual(result["environments"][0]["status"], "failed")
+        self.assertIn("Snakemake exited", result["scheduler_error"])
+        directory = Path(result["summary_path"]).parent
+        self.assertIn("simulated interrupted download", (directory / "snakemake.log").read_text())
+        self.assertFalse(Path(result["environments"][0]["record"]).exists())
 
 
 if __name__ == "__main__":

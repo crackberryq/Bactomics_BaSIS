@@ -117,21 +117,22 @@ def list_jobs(workspace):
 def normalized_request(request):
     r = dict(request)
     allowed = {"kind", "config", "deep", "extend", "cores", "memory_mb", "gpus",
-               "envs", "create", "retry_failed", "engine", "prefix_root", "file", "sheet", "root", "input_mode", "base_config", "preview", "results"}
+               "envs", "create", "retry_failed", "engine", "prefix_root", "file", "sheet", "root", "input_mode", "base_config", "preview", "results",
+               "resources", "execute", "conda_prefix", "environment_backend"}
     if set(r) - allowed:
         raise ValueError("Unknown job options: " + ", ".join(sorted(set(r) - allowed)))
-    if r.get("kind") not in {"run", "doctor", "demo", "setup", "import", "audit", "panel"}:
+    if r.get("kind") not in {"run", "doctor", "demo", "setup", "resources", "import", "audit", "panel"}:
         raise ValueError("Unsupported job operation")
     for key in ("config", "file", "base_config"):
         if r.get(key):
             r[key] = str(Path(r[key]).expanduser().resolve(strict=True))
     if r.get("root"):
         r["root"] = str(Path(r["root"]).expanduser().resolve(strict=True))
-    if r["kind"] in {"run", "doctor", "audit"} and not r.get("config"):
+    if r["kind"] in {"run", "doctor", "audit", "resources"} and not r.get("config"):
         raise ValueError("Select an existing configuration")
     if r["kind"] == "import" and not r.get("file"):
         raise ValueError("Select a sample sheet")
-    for key in ("deep", "extend", "create", "preview", "retry_failed"):
+    for key in ("deep", "extend", "create", "preview", "retry_failed", "execute"):
         if key in r and not isinstance(r[key], bool):
             raise ValueError(key + " must be boolean")
     for key in ("cores", "memory_mb", "gpus"):
@@ -150,12 +151,26 @@ def normalized_request(request):
     if "prefix_root" in r:
         if r["kind"] != "setup" or not isinstance(r["prefix_root"], str) or not r["prefix_root"].strip():
             raise ValueError("prefix_root must be an environment parent directory for setup")
-        from .environment_setup import workspace_path
         r["prefix_root"] = str(workspace_path(r["prefix_root"]))
     if r["kind"] == "setup":
         if not r.get("envs") or any(v not in recipe_names() for v in r["envs"]):
             raise ValueError("Select valid environment recipes")
         r["envs"] = sorted(set(r["envs"]))
+    if any(key in r for key in ("resources", "execute")) and r["kind"] != "resources":
+        raise ValueError("Resource options are only valid for resource preparation")
+    if "environment_backend" in r:
+        if r["kind"] not in {"run", "doctor"} or r["environment_backend"] not in {"auto", "external", "managed"}:
+            raise ValueError("Environment deployment must be auto, external or managed for a run or preflight")
+    if "conda_prefix" in r:
+        if r["kind"] not in {"run", "doctor", "resources"} or not isinstance(r["conda_prefix"], str) or not r["conda_prefix"].strip():
+            raise ValueError("conda_prefix must be a writable environment cache directory for analysis or resources")
+        r["conda_prefix"] = str(workspace_path(r["conda_prefix"]))
+    if r["kind"] == "resources":
+        names = r.get("resources")
+        if not isinstance(names, list) or not names or any(
+                not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", name) for name in names):
+            raise ValueError("Select named resources from the resource configuration")
+        r["resources"] = sorted(set(names))
     if r["kind"] == "panel":
         if not isinstance(r.get("results"), list) or not r["results"]:
             raise ValueError("Select result directories")
@@ -189,9 +204,14 @@ def _prepare(directory, request, workspace):
         cfg["outdir"] = str(outdir)
         # A private cache prevents two studies writing the same placement bundle.
         cfg["deep"]["placement_cache_dir"] = str(directory / "placement-cache")
-        for key in ("cores", "memory_mb", "gpus"):
+        for key in ("cores", "memory_mb", "gpus", "environment_backend", "conda_prefix"):
             if key in r:
                 cfg["execution"][key] = r[key]
+        if r.get("environment_backend") == "external":
+            # This explicit UI/CLI-job choice means no stage may create an
+            # environment, including stages with a prior managed override.
+            for section in list(cfg["modules"].values()) + [cfg["deep"]]:
+                section["environment_backend"] = "external"
         config = directory / "config.yaml"
         config.write_text(yaml.safe_dump(cfg, sort_keys=False))
         command += [kind, "-c", str(config), "-v"]
@@ -218,6 +238,22 @@ def _prepare(directory, request, workspace):
             command += ["--create", "--report-dir", str(outdir)]
         if r.get("retry_failed"):
             command += ["--retry-failed"]
+    elif kind == "resources":
+        from .resource_setup import load_resource_config
+        loaded = load_resource_config(r["config"])
+        snapshot = {"schema_version": 1, "resources": {
+            name: {key: value for key, value in row.items() if key not in {"name", "scope"}}
+            for name, row in loaded["resources"].items()}}
+        config = directory / "config.yaml"
+        config.write_text(yaml.safe_dump(snapshot, sort_keys=False))
+        command += ["prepare-resources", "-c", str(config), "--cores", str(r.get("cores", 1))]
+        for name in r["resources"]:
+            command += ["--resource", name]
+        if r.get("conda_prefix"):
+            command += ["--conda-prefix", r["conda_prefix"]]
+        if r.get("execute"):
+            outdir = directory / "resources"
+            command += ["--execute", "--report-dir", str(outdir)]
     elif kind == "panel":
         outdir = directory / "panel"
         command += ["control-panel", "--outdir", str(outdir)]
@@ -281,6 +317,14 @@ def submit(workspace, request, *, new_attempt=False):
 
 
 def outcome(kind, code, outdir):
+    if kind == "resources" and outdir:
+        summary = Path(outdir) / "summary.json"
+        if not summary.is_file():
+            return "failed", "No resource preparation summary was produced; inspect the log."
+        result = json.loads(summary.read_text())
+        if code == 0 and result.get("status") == "completed":
+            return "completed", "Selected resource preparation finished. Check resource scope and run study preflight before analysis."
+        return "needs_attention", "Resource preparation needs attention; inspect resources/summary.json and the log."
     if kind == "setup" and outdir:
         summary = Path(outdir) / "summary.json"
         if not summary.is_file():
@@ -305,6 +349,21 @@ def outcome(kind, code, outdir):
     if kind == "doctor" or (kind == "import" and code == 2):
         return "needs_attention", "Preflight or input checks reported issues; inspect the log."
     return "failed", "Command failed; inspect the saved log."
+
+
+def scheduler_progress(log_text):
+    """Extract observed scheduler progress without inventing analysis completion."""
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", log_text)
+    rules = list(re.finditer(r"(?m)^\s*(?:localrule|rule|checkpoint)\s+([A-Za-z][A-Za-z0-9_]*):\s*$", text))
+    steps = list(re.finditer(r"\b(\d+) of (\d+) steps \((\d+(?:\.\d+)?)%\) done\b", text))
+    result = {}
+    if rules:
+        result["latest_rule"] = rules[-1].group(1)
+    if steps:
+        done, total, percent = steps[-1].groups()
+        if 0 <= int(done) <= int(total) and int(total) > 0 and 0 <= float(percent) <= 100:
+            result.update(completed_steps=int(done), scheduled_steps=int(total), scheduler_percent=float(percent))
+    return result
 
 
 def work(workspace, identifier):
@@ -344,6 +403,7 @@ def tail(path, max_bytes=32000):
 
 
 def main(argv=None):
+    import yaml
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("list", "show", "start", "_work"))
     parser.add_argument("--workspace", required=True)
@@ -363,7 +423,7 @@ def main(argv=None):
             data = submit(args.workspace, json.loads(Path(args.request).read_text()), new_attempt=args.new_attempt)
         print(json.dumps(data, indent=2))
         return 0
-    except (OSError, ValueError, TypeError) as exc:
+    except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
         print("Job error: " + str(exc), file=sys.stderr)
         return 2
 

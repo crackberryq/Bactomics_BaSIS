@@ -1,4 +1,4 @@
-# Local BaSIS interface (rc16)
+# Local BaSIS interface (0.3.0rc1)
 
 The optional interface runs on Linux or WSL2. Analyses use the same installed
 BaSIS CLI and adapters. The browser is a control panel for this computer, not
@@ -18,26 +18,31 @@ analysis instructions, including executable and command-prefix settings.
 ## Workflow
 
 1. **Start here:** follow four guided steps or run a labelled synthetic demo through Snakemake.
-2. **Tools & resources:** preview, create and verify isolated Conda environments
-   through Snakemake. Existing prefixes are preserved and checked. Recorded
-   verification is distinguished from unverified folder presence. Recipes are
-   specifications, not solved platform locks.
-   Run preflight against your study's actual database/model configuration.
-3. **Samples:** preview/import Excel, CSV or TSV using existing batch rules.
+2. **Tool environments:** preview, create and verify isolated Conda environments
+   through the main Snakemake workflow in setup mode. Existing named prefixes are
+   preserved and checked; new managed environments use Snakemake cache names.
+   Recorded verification is distinguished from unverified folder presence. Recipes
+   are specifications, not solved platform locks.
+3. **Databases & models:** select a dedicated resource recipe and its named
+   resources, preview the plan, then explicitly allow preparation. Inspect the
+   supported backend and immutable destination for each selected resource.
+4. **Add samples:** preview/import Excel, CSV or TSV using existing batch rules.
    A local sheet retains its original relative-path base. An uploaded sheet
    needs absolute input paths, or exact sample-name discovery with an explicit
    annotation root. Select the worksheet for multi-sheet workbooks.
-4. **Readiness & run:** select a config, review module modes/exclusions, choose DeepSafe and
+5. **Readiness & run:** select a config, review module modes/exclusions, choose DeepSafe and
    Extend, and review CPU/RAM/GPU budgets loaded from the config. Tool-specific
    device, threads and memory settings remain in that config. A new job gets a
    resolved config snapshot, private results directory and private placement cache.
-   Snakemake is the default runner; the serial local alternative is under Advanced.
-5. **Progress & jobs:** reconnect to saved jobs, read live scheduler/worker logs and inspect the exact
+   Snakemake owns input/resource checks, module execution, nine DeepSafe stages per
+   sample, consolidation, reporting and provenance. The serial local alternative
+   is under Advanced.
+6. **Progress & jobs:** reconnect to saved jobs, read live scheduler/worker logs and inspect the exact
    command, version, source-config checksum and timestamps. One job runs per
    workspace. A second identical submission reconnects; select **New attempt**
    to retry a finished job or recheck changed inputs/resources. Config/sheet
    hashes alone are not proof that referenced resources remain unchanged.
-6. **Results & export:** open existing rich reports and download evidence,
+7. **Explore results:** open existing rich reports and download evidence,
    tables, methods and citations. For older control panels, explicitly add
    the related result directories so sibling links can be served. Broad
    parent folders are unnecessary. A new control panel can be built from an
@@ -50,18 +55,28 @@ interpretation. Model scores and phylogenetic support are not safety verdicts.
 
 ## Installation and resource boundaries
 
-`pip` installs Python components, including the pinned Snakemake scheduler. It does not install Conda, GPU drivers,
-native tools, databases or models. Setup supports explicit environment creation,
-verification and study resource preflight; automatic acquisition/configuration of
-every database is not included in rc16. Existing configured resources and captured restoration
-procedures remain usable. No downloads occur simply by opening the interface.
-The RGI, antiSMASH and MOB-suite recipes are now included in the wheel.
-Unsupported MLST/CRISPRCasFinder adapters remain explicit scope holds.
+`pip` installs Python components, including Snakemake. Conda and GPU drivers are
+separate prerequisites. Supported native rules automatically deploy their Conda
+recipe when no explicit command prefix is set. Existing prefixes remain external
+under the default `auto` policy. Use the setup environment parent for existing
+named environments, or configure `execution.conda_prefix` as the analysis cache
+parent; actual verified prefixes are shown in setup records.
+
+Resource preparation requires an explicit recipe and execution request. Supported
+backends and their version/checksum requirements are documented in
+[resource setup](RESOURCE_SETUP.md). Normal analysis never refreshes databases;
+opening the interface performs no installation or download. Not every database or
+model is automatically prepared, and raw pinned files are not analysis-ready
+indexes. Run readiness checks with the study's actual paths after preparation.
+MLST/CRISPRCasFinder remain normalized-import capabilities.
 
 Closing the interface does not stop jobs. Keep the computer awake; a reboot
 interrupts running analyses. Interrupted jobs are recorded as interrupted,
 never as successfully completed. This version offers new-attempt retries,
-not process checkpoint restoration. Snakemake schedules independent modules and
+not restoration of a process after reboot. Deep stage JSON supports restart
+within one workflow attempt; a new GUI submission does not promise partial-stage
+reuse across attempts. Completed whole-result caches are verified separately.
+Snakemake schedules independent modules and
 samples within declared budgets; the local alternative remains serial. Budgets
 are scheduling declarations, not operating-system memory limits. See [orchestration](ORCHESTRATION.md).
 
@@ -79,5 +94,6 @@ publisher configuration and upload. The approved repository name is
 Do not describe `pip install bactromics-basis` as available on PyPI until a
 release has actually been published and independently installed from there.
 
-The earlier software-validation baseline is preserved. rc16 adds orchestration
-and guided navigation; it does not add independent biological validation.
+The `0.2.0rc16` baseline is preserved separately. Version `0.3.0rc1` changes
+workflow ownership while retaining scientific thresholds and interpretation
+policies. It does not establish independent biological validation.

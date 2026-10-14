@@ -36,6 +36,7 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("verify-install", help="Verify installed source and bundled resource checksums")
     sub.add_parser("setup-environments", help="Plan isolated tool environments; use this command's --help for options")
+    sub.add_parser("prepare-resources", help="Preview or explicitly prepare versioned databases; use this command's --help")
     sub.add_parser("gui", help="Open the optional local Streamlit interface; use gui --help")
     sub.add_parser("jobs", help="Manage persistent local jobs; use jobs --help")
     report = sub.add_parser("report", help="Render saved evidence to a new report without running analyses")
@@ -371,12 +372,24 @@ def check(config, deep=False, extend=False, executables=False):
                         if not path or not Path(path).is_file():
                             detail["errors"].append("imported result missing")
                     else:
-                        prefix = cfg.get("command_prefix", [])
-                        exe = prefix[0] if prefix else cfg["executable"]
-                        if not shutil.which(exe):
-                            detail["errors"].append(f"executable/prefix not found: {exe}")
-                        elif prefix:
-                            detail["warnings"].append("prefix found; executable inside its environment still needs native acceptance testing")
+                        from .workflow_environments import backend_for_job
+                        readiness_plan = {"config": config, "options": {"deep": deep, "extend": extend},
+                                          "module_decisions": decisions}
+                        backend = backend_for_job(readiness_plan, sid, module)
+                        detail["environment_backend"] = backend
+                        if backend == "managed":
+                            detail["environment_readiness"] = "planned_snakemake_deployment"
+                            if not shutil.which("conda"):
+                                detail["errors"].append("Conda is required for Snakemake-managed deployment")
+                            else:
+                                detail["warnings"].append("Snakemake will deploy and verify the native environment; installation is not yet verified")
+                        elif backend == "external":
+                            prefix = cfg.get("command_prefix", [])
+                            exe = prefix[0] if prefix else cfg["executable"]
+                            if not shutil.which(exe):
+                                detail["errors"].append(f"executable/prefix not found: {exe}")
+                            elif prefix:
+                                detail["warnings"].append("prefix found; executable inside its environment still needs native acceptance testing")
                         if module in {"rgi", "vfdb", "bacmet", "genomad"} and not cfg.get("database"):
                             detail["errors"].append("explicit database path required")
                         for key in ("database", "database_manifest", "prot_t5_path", "weights_model"):
@@ -417,7 +430,16 @@ def check(config, deep=False, extend=False, executables=False):
                 resource_checks_performed = True
                 cfg = config["deep"]
                 prefix = cfg.get("command_prefix", [])
-                if prefix and not shutil.which(prefix[0]):
+                from .workflow_environments import backend_for_job
+                backend = backend_for_job({"config": config, "options": {"deep": True}}, "", "deepsafe")
+                if backend == "managed":
+                    if not shutil.which("conda"):
+                        errors.append("DeepSafe: Conda is required for Snakemake-managed deployment")
+                    else:
+                        warnings.append("DeepSafe environment is planned for Snakemake deployment; installation is not yet verified")
+                elif backend == "none":
+                    pass
+                elif prefix and not shutil.which(prefix[0]):
                     errors.append(f"DeepSafe executable prefix not found: {prefix[0]}")
                 elif prefix:
                     warnings.append("DeepSafe prefix found; executables within its environment require native acceptance testing")
@@ -515,6 +537,9 @@ def main(argv=None):
     if argv and argv[0] == "setup-environments":
         from .environment_setup import main as setup_main
         return setup_main(argv[1:])
+    if argv and argv[0] == "prepare-resources":
+        from .resource_setup import main as resource_main
+        return resource_main(argv[1:])
     args = parser().parse_args(_normalize_run_argv(argv))
     from .progress import verbosity
     with verbosity(getattr(args, "verbose", False)):

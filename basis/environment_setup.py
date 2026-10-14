@@ -50,10 +50,10 @@ def main(argv=None):
                         help="Writable workspace; default: current working directory")
     parser.add_argument("--env", action="append", choices=recipe_names(), dest="environments",
                         help="Environment recipe to select; repeatable")
-    parser.add_argument("--prefix-root", help="Environment parent; default: WORKSPACE/.basis-envs")
+    parser.add_argument("--prefix-root", help="Snakemake Conda cache (local: named environment parent); default: WORKSPACE/.basis-envs")
     parser.add_argument("--manager", choices=("conda", "mamba", "micromamba"), default="conda")
     parser.add_argument("--engine", choices=("snakemake", "local"), default="snakemake",
-                        help="Snakemake schedules environment setup; local runs the same workers serially")
+                        help="Snakemake natively deploys Conda recipes; local preserves manager-driven named-prefix setup")
     parser.add_argument("--cores", type=int, default=1, help="Maximum concurrent setup workers (default: 1)")
     parser.add_argument("--report-dir", help="New directory for this setup attempt and summary")
     parser.add_argument("--retry-failed", action="store_true",
@@ -71,6 +71,8 @@ def main(argv=None):
         project = workspace_path(args.project)
         prefix_root = workspace_path(project / (args.prefix_root or ".basis-envs"))
         selected = tuple(dict.fromkeys(args.environments or DEFAULT_ENVIRONMENTS))
+        if args.engine == "snakemake" and args.manager != "conda":
+            raise ValueError("Native Snakemake deployment uses Conda; other managers require explicit --engine local")
         if args.create:
             if not shutil.which(args.manager):
                 raise ValueError("Package manager is not on PATH: " + args.manager)
@@ -90,7 +92,12 @@ def main(argv=None):
                 operation = ["create"] if args.manager == "micromamba" else ["env", "create"]
                 command = [args.manager, *operation, "--prefix", str(prefix), "--file", str(recipe), "--yes"]
                 print("\n# " + name, flush=True)
-                print("CONDA_CHANNEL_PRIORITY=strict " + shlex.join(command), flush=True)
+                if args.engine == "snakemake":
+                    print("Verify existing prefix: " + str(prefix) if prefix.exists() else
+                          "Snakemake conda: " + str(recipe) + " | managed cache: " + str(prefix_root), flush=True)
+                    print("Legacy named-prefix location: " + str(prefix), flush=True)
+                else:
+                    print("CONDA_CHANNEL_PRIORITY=strict " + shlex.join(command), flush=True)
         if not args.create:
             print("\nPlan only: no environments, packages or databases were created or downloaded.")
         print("Recipes are starting points; use captured explicit locks to restore tested package versions.")
