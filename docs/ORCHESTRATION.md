@@ -1,209 +1,114 @@
-# Snakemake orchestration in BaSIS 0.3.0rc1
+# Snakemake orchestration in BaSIS 0.3.0rc2
 
-BaSIS uses one packaged `basis/resources/Snakefile` entry point. The CLI and local
-interface select its analysis, environment-setup or resource-preparation mode.
-Snakemake owns dependencies and resource scheduling; Python workers implement
-scientific parsing, evidence checks and report rendering within its rules.
+BaSIS uses one packaged `basis/resources/Snakefile` entry point. The CLI and local interface launch the same analysis workflow. Snakemake owns dependencies, environment deployment and CPU/memory/GPU scheduling. Python workers implement scientific analyses, parsing, evidence checks and report rendering within its rules.
 
-The Python package installs Snakemake 9.6.2. Conda and, where required, GPU drivers
-must be installed separately. Installing the application with pip does not itself
-install every native tool or download reference data.
+The Python package installs Snakemake 9.6.2. Conda and optional NVIDIA drivers are separate prerequisites. Installing BaSIS with pip installs the controller; the requested first native run prepares its missing tools and resources.
+
+## A normal fresh run
+
+```bash
+basis init --directory study --hybas-dir /absolute/path/to/isolate/annotation
+basis run -c study/config.yaml -d -e -v --cores 4 --output summary
+```
+
+`basis init` defaults to `--preset full`. It enables all 14 native adapters and configures automatic resource preparation. The full preset also enables PROSITE profiles, bounded automatic phylogeny and family placement for DeepSafe when `-d` is requested. `-e` requests Extend. Use `--preset core` for the smaller core module set. Initialization and dry runs do not download resources or execute biological analyses.
+
+New study defaults include:
+
+```yaml
+resources:
+  policy: auto
+  directory: /home/USER/.cache/bactromics-basis
+  preset: full
+execution:
+  environment_backend: auto
+  conda_prefix: /home/USER/.cache/bactromics-basis/environments
+  device: auto
+  cores: 4
+```
+
+These are illustrative paths, not values to paste without changing `USER`. Initialization resolves the actual user cache directory, respects `XDG_CACHE_HOME`, and uses up to four available CPU cores by default. Set `--resource-dir /absolute/path/basis-resources` at initialization to select another shared disk. CPU, memory and GPU settings remain scheduler budgets, not operating-system memory limits.
 
 ## Analysis sequence
 
 The analysis DAG contains:
 
-1. Per-sample input validation and configured resource checks.
-2. Named module rules for the configured screening, context and Extend modules.
-   Independent sample/module jobs can run concurrently within the declared budgets.
-3. Nine DeepSafe stages per sample: preparation and candidate selection, domains,
-   reference retrieval, phylogeny, PROSITE patterns, PROSITE profiles, registry
-   motifs, family placement and finalization. Preparation waits for all upstream
-   result records, including PathogenFinder2 when enabled.
-4. Evidence consolidation, report rendering and final provenance capture.
+1. Per-sample input validation and planned resource preparation/checks.
+2. First-use database/model preparation rules, before the analyses that require them. Their own dependencies include tool environments and prerequisite resource snapshots.
+3. Named module rules for screening, context, typing, CRISPR/Cas and Extend. Independent jobs run within the declared budgets.
+4. Nine DeepSafe stages per sample: preparation/selection, domains, references, phylogeny, PROSITE patterns, PROSITE profiles, registry motifs, family placement and finalization. Selection waits for upstream result records, including Extend when requested.
+5. Evidence consolidation, linked reports and final provenance capture.
 
-DeepSafe stages process the selected candidates within each sample. They are
-separate Snakemake jobs, but each candidate is not a separate scheduled job.
-Eligibility checks still decide which analyses apply; a scheduled stage does not
-mean every candidate receives a tree or a functional assignment. Candidate
-selection, scientific thresholds and interpretation policies are unchanged.
+DeepSafe stages process selected candidates within each sample; each candidate is not a separate scheduler job. Scientific applicability checks still determine whether a candidate receives a tree, placement or motif observation. Prepared reference catalogues and seed panels do not constitute universally validated family classifiers. Deferred, unsupported and unresolved cases remain visible.
 
-```bash
-basis doctor -c study/config.yaml -d -e -v
-basis run -c study/config.yaml -d -e -v --output summary
-```
+HybAs input resolution imports the recorded target and its rank. An automatically assigned phylum requires a matching selected target, positive support, and consistent phylum ancestry in every available enabled Kraken report. The report paths, hashes and ancestry are retained. Missing or conflicting ancestry is left unresolved; user declarations are preserved. A leading species hit does not become a species call. This allows ICEscreen scope to be resolved automatically where the supplied evidence supports Bacillota; matching GenBank is also required.
 
-The launcher still parses configuration, builds the plan, starts Snakemake and
-returns its recorded outcome. It can produce a failure summary if the scheduler
-cannot finish. These controller duties do not implement the normal scientific
-sequence outside the DAG. The standalone `doctor`, `report` and `control-panel`
-commands remain available for inspection and saved-evidence operations.
+The launcher parses configuration, creates the execution plan and starts Snakemake. It can write an incomplete failure summary when the scheduler cannot finish; the normal scientific sequence remains in DAG rules. Standalone `doctor`, `report` and `control-panel` commands remain available for inspection and saved-evidence operations.
 
-## Native tool environments
+## First-use snapshots and reproducibility
 
-Analysis rules use native Snakemake `conda:` recipes. With the default
-`execution.environment_backend: auto`, a supported enabled native module with no
-explicit `command_prefix` gets a managed environment. Snakemake creates it when
-needed. An explicitly configured prefix remains external and is not replaced.
-An import, excluded module or synthetic demonstration needs no tool deployment.
+With `resources.policy: auto`, the planner identifies missing required resource settings. Resource rules acquire or prepare the needed data and bind the resulting paths to consuming jobs. Already configured external resource paths are retained. A missing or invalid explicit path is not silently replaced with a different database.
 
-Managed environments use content-addressed Snakemake directory names. Set their
-shared parent in the study configuration:
+Supported preparation covers the core databases, CARD, VFDB, BacMet, bundled context-tool models, MLST/CRISPRCasFinder resources, PROSITE/ProRule, ProtT5/classifier resources, and DeepSafe reference/domain resources. Only requested consumers require their preparation dependencies. Resource and model acquisition does not submit isolate sequences to remote prediction services.
 
-```yaml
-execution:
-  environment_backend: auto
-  conda_prefix: /home/jimi/bactomics/basis-environments
-  cores: 4
-  memory_mb: 16000
-  gpus: 0
-```
+The shared cache stores provider snapshots under `snapshots/<provider>/<deterministic-key>`, alongside preparation locks and staging directories. Each published snapshot has a manifest with provenance and content checksums. Current-run preparation receipts and logs live beneath `results/provenance/scheduler/<run-id>/bootstrap/`. A first-use provider may resolve an upstream current release; its acquired bytes and identity become the retained snapshot. Subsequent runs verify that snapshot and reuse it without a routine refresh. A new computer downloading on a different date is not guaranteed the same upstream data. Preserve and restore the recorded snapshots for an exact resource match.
 
-The default parent is `.basis-envs` beside the result directory. This is a cache
-location, not a request to create a named `basis-TOOL` environment. Before running
-native tools, BaSIS checks the active environment's installed recipe constraints
-and executable startup and records its identity.
+Failed partial preparations remain in staging with a failed receipt. Missing or modified published snapshot contents fail verification and are not implicitly refreshed. Preparation failures are visible with logs; they cannot become negative biological results. Full resource preparation is distinct from native analysis acceptance and from independent biological validation.
 
-To prepare selected environments ahead of analysis:
+The full DeepSafe resource set combines bundled source-reviewed seed panels and the existing motif/placement registries with the screening reference catalogue and PROSITE resources. Imported screening references remain unreviewed comparators; source-reviewed seed panels retain their recorded coverage gaps. Automatic acquisition does not turn either group into a validated functional classifier.
+
+`basis doctor` is read-only. It identifies planned automatic preparation as planned, rather than claiming that missing tools/databases are installed. Its success does not replace the native run's preparation and verification checks.
+
+## Native environments and device selection
+
+Rules use native Snakemake `conda:` recipes. Under `execution.environment_backend: auto`, a supported native module without an explicit `command_prefix` uses a managed environment. An explicit prefix remains external. Imports, excluded modules and synthetic demonstrations do not need native tool deployment.
+
+Managed environment directories are content-addressed Snakemake caches. New automatic studies place them beneath their shared resource directory. For existing manual configurations without `execution.conda_prefix`, the default parent remains `.basis-envs` beside the result directory. Startup checks record the environment's installed constraints and executable identity. A directory alone is not proof of installation, and recipe constraints are not solved package locks.
+
+New studies use `execution.device: auto`. The launcher checks available NVIDIA hardware for scheduling, then PathogenFinder2 checks CUDA availability in its actual runtime. Auto mode can fall back to CPU. `device: cpu` requests CPU; `device: cuda` requires usable CUDA and fails if it is unavailable. `device: configured` retains the explicit GPU-budget behavior of older configurations. BaSIS does not install or repair GPU drivers.
+
+## Optional preparation before analysis
+
+Environment preparation remains available through the same Snakefile's setup mode:
 
 ```bash
-# Read-only preview
 basis setup-environments --workspace ~/bactomics/basis-workspace \
-  --prefix-root ~/bactomics/basis-environments --env core-amr --env deepsafe
-
-# Explicit preparation and verification through the same Snakefile, in setup mode
+  --prefix-root ~/bactomics/basis-resources/environments --env core-amr --env deepsafe
 basis setup-environments --workspace ~/bactomics/basis-workspace \
-  --prefix-root ~/bactomics/basis-environments --env core-amr --env deepsafe --create
+  --prefix-root ~/bactomics/basis-resources/environments --env core-amr --env deepsafe --create
 ```
 
-Setup recognizes existing `basis-RECIPE` directories under the selected parent as
-external environments and verifies them without replacing them. New environments
-use native Snakemake deployment. Setup records distinguish those backends and
-report the actual prefix. A directory alone is never proof of installation.
-Environment success does not establish database, model or GPU readiness.
+The first command previews; the second installs and verifies. Existing named `basis-RECIPE` directories are verified as external prefixes without replacing them. New environments use native Snakemake deployment. Set the study's `execution.conda_prefix` to the same parent if sharing these environments.
 
-`--engine local` retains the older manager-driven named-prefix setup, including
-Mamba/Micromamba selection. Its `--retry-failed` option applies only to eligible
-tracked local installations; it does not authorize overwriting unrelated prefixes.
-The native Snakemake setup backend uses Conda.
-
-## Explicit resource preparation
-
-Resource administration uses the same main Snakefile in a separate, deliberately
-requested mode. Normal analysis never downloads or refreshes databases through
-these targets. A dedicated YAML recipe declares the chosen resources, versions,
-locations and verification expectations. `basis prepare-resources` previews by
-default; `--execute` is required for preparation.
-
-See [complete resource schemas and examples](RESOURCE_SETUP.md). Supported backends in this candidate are:
-
-| Backend | Preparation scope |
-| --- | --- |
-| `amrfinder` | AMRFinderPlus native database updater |
-| `genomad` | geNomad native database download/extraction |
-| `antismash` | antiSMASH native database preparation |
-| `mobsuite` | MOB-suite native database initialization |
-| `bacmet` | Pinned experimentally confirmed BacMet v2 preparation and DIAMOND index |
-| `pinned_files` | Copy/download explicitly SHA256-pinned source files; no automatic indexing |
-
-For example, this structural recipe captures an existing reviewed reference file.
-Replace the source, version label and SHA256 placeholder with the actual values
-before running it; the placeholder is intentionally invalid.
-
-```yaml
-schema_version: 1
-resources:
-  reviewed_reference_files:
-    backend: pinned_files
-    destination: /absolute/path/databases/reviewed-panel-v1
-    version: reviewed-panel-v1
-    files:
-      - path: proteins.faa
-        source: /absolute/path/reviewed/proteins.faa
-        sha256: REPLACE_WITH_64_HEX_CHARACTERS_FROM_SHA256SUM
-```
+For custom resource snapshots, the explicit administrative mode remains available:
 
 ```bash
-sha256sum /absolute/path/reviewed/proteins.faa
-basis prepare-resources -c resource-recipes.yaml --resource reviewed_reference_files
-basis prepare-resources -c resource-recipes.yaml --resource reviewed_reference_files --execute
+basis prepare-resources -c resource-recipes.yaml --resource chosen_database
+basis prepare-resources -c resource-recipes.yaml --resource chosen_database --execute
 ```
 
-A `pinned_files` entry accepts either a local `source` or an HTTPS `url` for each
-file. It preserves bytes and checks each SHA256; it does not endorse reference
-labels or make a raw FASTA/archive an analysis-ready index. Configure verified
-prepared paths in the study and run its readiness checks afterwards.
-
-Native upstream downloaders can choose their current release. Their recipes must
-explicitly set `allow_upstream_current: true`, declare a non-moving `version`
-label, list `required_paths`, and supply a `version_file` whose trimmed contents
-must exactly match that label or `expected_files` with SHA256 content pins.
-A mismatch fails preparation. Supply `environment_prefix` to retain an existing
-tool environment; otherwise the resource rule uses its managed Conda recipe.
-These controls do not turn an upstream latest-only downloader into a historical
-release download API.
-
-Snapshots contain file checksums and provenance. A prior snapshot is reused only
-when its preparation inputs and recorded contents verify. Changed or partial
-destinations are preserved and require a new empty destination. No resource
-snapshot is silently updated in place. Not every database/model has a preparation
-backend: CARD/VFDB/PROSITE and ProtT5 workflows still need their specific
-acquisition, indexing or configuration steps. Generic pinned files cover only
-source-file acquisition.
+This is an advanced separate interface with its own recipe schema, supported backends and version/content requirements; see [resource administration](RESOURCE_SETUP.md). It is not a prerequisite command sequence for a new automatic full study. A generic pinned-file recipe acquires source files; it does not automatically build an analysis-ready database.
 
 ## Migrating from 0.2
 
-The `v0.2.0rc16` release is preserved separately. Install `v0.3.0rc1` alongside it
-and retain the old study outputs as historical evidence. Use a new result directory
-for the new candidate; a changed source identity can invalidate earlier caches.
+A clean `basis init` study is the recommended starting point for a fresh native evaluation. Earlier installations and results can remain untouched. Existing configurations without an automatic resource policy remain manual; their scientific settings, explicit prefixes and resource paths are not rewritten when a new package is installed.
 
-Existing study configurations with explicit `command_prefix` lists continue to
-use those environments under `auto`. BaSIS does not silently remove prefixes or
-route a requested external executable into a new environment. Missing or invalid
-external prefixes remain errors to resolve.
+To keep an existing environment, retain its argument-list `command_prefix` under `auto`. To adopt managed deployment deliberately, remove that prefix and any absolute executable paths into another environment, then optionally set the module's `environment_backend: managed`. A managed backend with an explicit prefix is rejected. `external` intentionally uses an existing prefix or PATH. The same routing rules apply to DeepSafe.
 
-To adopt managed deployment for a module, deliberately remove its old
-`command_prefix`, use executable names rather than absolute paths into another
-environment, and set `environment_backend: managed` in that module if desired.
-The same fields apply to `deep`. A managed setting with an explicit command
-prefix is rejected as conflicting. A module-level `environment_backend` overrides
-the execution default. Use `external` if intentionally relying on an existing
-prefix or the current PATH. Unsupported native adapters have no managed recipe;
-MLST and CRISPRCasFinder remain normalized-import capabilities.
+Do not copy sample-specific imports, exclusions, embedding caches, reviewed query trees or circularity declarations into an unrelated study. A fresh import without a base configuration uses the full automatic defaults; importing with `--base-config` intentionally retains that configuration and needs review.
 
 ## Scheduling, recovery and evidence
 
-CPU, memory and GPU settings are scheduler budgets, not operating-system memory
-limits. The GUI still allows one job per workspace; that job can contain many
-Snakemake tasks. Verbose output streams scheduler/worker activity into the GUI log
-and stderr while JSON stdout remains machine-readable.
+The GUI allows one job per workspace; that job can contain many Snakemake tasks. Verbose output streams scheduler and worker activity into stderr and GUI logs while JSON stdout remains machine-readable.
 
-Run-specific completion receipts are scheduler outputs. Scientific result files
-remain evidence and are checked before whole-result cache reuse; scheduling does
-not delete them first. Workers verify inputs, resources, tool/source identities
-and required artifacts. `--force` explicitly requests recomputation.
+Run-specific completion receipts are scheduler outputs. Scientific result files remain evidence and are verified before whole-result cache reuse. Inputs, resources, source/tool identities and required artifacts must match. `--force` explicitly requests recomputation; it is not a database refresh operation.
 
-DeepSafe stage JSON supports restart within the same workflow attempt. A new
-`basis run` gets new scheduler receipts and verifies current identities. This
-candidate does not promise automatic reuse of partially completed DeepSafe stages
-across separate invocations. Completed whole-module/DeepSafe caches remain usable
-when their existing verification checks pass.
+DeepSafe stage JSON supports restart within the same workflow attempt. A new `basis run` creates new scheduler receipts and verifies current identities. Automatic reuse of partially completed DeepSafe stages across separate invocations is not promised; completed whole-module/DeepSafe caches remain reusable when verification passes.
 
-Native failures become explicit result records, allowing independent work and
-failure-aware reports to complete. Scheduler failures remain incomplete and
-cannot promote stale outputs into current evidence. Reports distinguish execution,
-assessment coverage and biological interpretation; no-hit, not-assessed and failed
-states remain different.
+Native failures become explicit result records, allowing independent work and failure-aware reporting to complete. Scheduler failures remain incomplete and cannot promote stale outputs into current evidence. Reports distinguish execution, assessment coverage and biological interpretation. No-hit, not-assessed and failed states remain different.
 
 ## Compatibility and validation limits
 
-`basis run --engine local` retains the serial execution option. The programmatic
-`run_pipeline` and small `basis demo` defaults remain local for compatibility;
-select `--engine snakemake` to exercise the DAG. The GUI defaults to Snakemake.
-The historical `workflow` extra remains accepted but is redundant.
+`basis run --engine local` retains serial execution for compatibility; use the default Snakemake engine for automatic first-use preparation. The small synthetic demo and programmatic local APIs do not establish fresh-machine native readiness. The historical `workflow` extra remains accepted but is redundant.
 
-Software verification uses synthetic inputs, real Snakemake scheduling and
-controlled installer/tool doubles. It does not establish live package-download
-success or biological accuracy on another computer. Recipe constraints are not
-exact solved platform locks. Preserve package inventories and resource snapshots,
-then test restoration and independent biological performance separately.
+Software checks exercise synthetic inputs, native schemas, scheduling and controlled installer/tool doubles. They do not establish that every live package download succeeds, every tool runs correctly on a collaborator's computer, or a biological classifier is accurate. Full clean-machine native acceptance and independent biological validation remain pending. Preserve actual environment exports and resource snapshots, then test restoration and biological performance separately.

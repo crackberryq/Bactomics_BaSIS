@@ -276,8 +276,13 @@ def run(module: str, sample: dict, config: dict, outdir: Path, runner) -> dict:
     for key, flag in [("prot_t5_path", "--protT5Path"), ("weights_model", "--weightsModel")]:
         if config.get(key):
             argv += [flag, str(config[key])]
+    from ..devices import verify_inference_device
+    device = verify_inference_device(config, runner)
     runner.run(argv, cwd=outdir)
-    return collect_outputs(sample, config, outdir, runner, native=native)
+    result = collect_outputs(sample, config, outdir, runner, native=native)
+    if device is not None:
+        result.setdefault("metrics", {})["inference_device"] = device
+    return result
 
 
 def collect_outputs(sample, config, outdir, runner, *, native=None):

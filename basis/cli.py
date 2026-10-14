@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 
 from . import __version__
-from .config import ALL_MODULES, CORE, default_config, load_config
+from .config import ALL_MODULES, CORE, default_config, load_config, new_study_config
 from .inputs import load_samples, validate_sample
 from .util import atomic_json, read_json, sha256_file
 
@@ -64,6 +64,8 @@ def parser():
     init = sub.add_parser("init", help="Create configuration and sample-sheet templates")
     init.add_argument("--directory", required=True)
     init.add_argument("--hybas-dir", help="Discover matching Prokka fna/faa/gff sets under an existing HybAs project")
+    init.add_argument("--preset", choices=("core", "full"), default="full", help="Native modules to enable; full includes typing and CRISPR/Cas")
+    init.add_argument("--resource-dir", help="Shared first-run resource cache; default: user cache/bactromics-basis")
     batch = sub.add_parser("import-samples", help="Import an Excel, CSV or TSV batch sheet into a new study")
     batch.add_argument("--file", required=True, help=".xlsx, .csv or .tsv source sheet")
     batch.add_argument("--sheet", help="Worksheet name; required for a workbook with multiple sheets")
@@ -115,20 +117,13 @@ def parser():
     return p
 
 
-def initialize(directory, hybas_dir=None):
+def initialize(directory, hybas_dir=None, preset="full", resource_dir=None):
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=True)
     for name in ("config.yaml", "samples.tsv"):
         if (directory / name).exists():
             raise ValueError(f"Refusing to overwrite existing {directory / name}")
-    config = default_config()
-    # Templates deliberately point to resources that the user must install and identify.
-    for module in ("amrfinder", "rgi", "vfdb", "antismash", "genomad", "mobsuite"):
-        config["modules"][module]["database"] = f"/path/to/databases/{module}"
-    profiles = Path(__file__).parent / "resources" / "profiles"
-    if profiles.exists():
-        shutil.copytree(profiles, directory / "profiles", dirs_exist_ok=True)
-        config["deep"]["profiles_dir"] = "profiles"
+    config = new_study_config(preset, resource_dir)
     rows = []
     if hybas_dir:
         root = Path(hybas_dir).resolve()
@@ -148,19 +143,20 @@ def initialize(directory, hybas_dir=None):
                 from .hybas import enrich_sample
                 enriched = enrich_sample(row)
                 row.update({key: enriched.get(key, "") for key in
-                            ("taxon", "taxon_rank", "taxon_source", "hybas_dir")})
+                            ("taxon", "taxon_rank", "taxon_source", "hybas_dir", "taxon_phylum", "taxon_phylum_source", "taxon_phylum_taxid")})
                 rows.append(row)
         if not rows:
             raise ValueError("No matching .fna/.faa/.gff annotation sets discovered; create the manifest explicitly")
     else:
         rows = [{"sample_id": "AFB02", "assembly": "/path/to/AFB02.fna", "proteins": "/path/to/AFB02.faa", "gff": "/path/to/AFB02.gff"}]
     with (directory / "samples.tsv").open("w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["sample_id", "assembly", "proteins", "gff", "genbank", "taxon", "amrfinder_organism", "phenotypes", "taxon_rank", "taxon_source", "hybas_dir"], delimiter="\t")
+        writer = csv.DictWriter(fh, fieldnames=["sample_id", "assembly", "proteins", "gff", "genbank", "taxon", "amrfinder_organism", "phenotypes", "taxon_rank", "taxon_source", "hybas_dir", "taxon_phylum", "taxon_phylum_source", "taxon_phylum_taxid"], delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
     (directory / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
     return {"config": str(directory / "config.yaml"), "samples": str(directory / "samples.tsv"),
-            "note": "Review sample identity, resource paths and enabled modules before native execution."}
+            "note": "Ready for basis run. Requested missing tools and resources are prepared automatically by Snakemake; first-run downloads may be large.",
+            "resource_policy": "auto", "preset": preset}
 
 
 def import_study(file, directory=None, root=None, sheet=None, input_mode="auto", base_config=None, dry_run=False):
@@ -171,7 +167,7 @@ def import_study(file, directory=None, root=None, sheet=None, input_mode="auto",
     if base_config:
         base_config = str(Path(base_config).expanduser().resolve())
     base_hash = sha256_file(base_config) if base_config else None
-    config = copy.deepcopy(load_config(base_config) if base_config else default_config())
+    config = copy.deepcopy(load_config(base_config) if base_config else new_study_config())
     if base_config and sha256_file(base_config) != base_hash:
         raise ValueError("Base configuration changed during import preparation; retry with a stable file")
     if base_config and (config["deep"].get("circular_contigs") or
@@ -187,9 +183,6 @@ def import_study(file, directory=None, root=None, sheet=None, input_mode="auto",
         "base_config_sha256": base_hash,
         "new_paths": {"samples": "samples.tsv", "outdir": "results", "placement_cache_dir": "placement-cache"},
     }
-    if not base_config:
-        for module in ("amrfinder", "rgi", "vfdb", "antismash", "genomad", "mobsuite"):
-            config["modules"][module]["database"] = f"/path/to/databases/{module}"
     if dry_run:
         result = preview_samples(file, root=root, sheet_name=sheet,
                                  input_mode=input_mode, config=config)
@@ -245,7 +238,7 @@ def sync_hybas(config, sample_id=None, species=None, dry_run=False):
         if species is not None:
             sample = enrich_sample({**sample, "taxon": species, "taxon_rank": "species",
                                     "taxon_source": "user_confirmed"})
-        for key in ("taxon", "taxon_rank", "taxon_source", "hybas_dir"):
+        for key in ("taxon", "taxon_rank", "taxon_source", "hybas_dir", "taxon_phylum", "taxon_phylum_source", "taxon_phylum_taxid"):
             value = str(sample.get(key) or "")
             if row.get(key, "") != value:
                 row[key] = value
@@ -301,6 +294,9 @@ def check(config, deep=False, extend=False, executables=False):
     from .progress import emit
     from .sample_policy import plan_sample_modules, validate_sample_overrides
     from .pipeline import module_config
+    from .bootstrap import plan_auto_resources
+    config, automatic_resources = plan_auto_resources(config, deep, extend)
+    automatic_targets = {target for spec in automatic_resources for target in spec["targets"]}
 
     def outcome(errors, warnings):
         return "failed" if errors else "passed_with_warnings" if warnings else "passed"
@@ -309,6 +305,8 @@ def check(config, deep=False, extend=False, executables=False):
         return message if message.startswith(sid + ":") else f"{sid}: {message}"
 
     global_checks = {"errors": [], "warnings": []}
+    if automatic_resources:
+        global_checks["warnings"].append("First-run resources are planned for Snakemake preparation and verification; this read-only check does not download them.")
     checks, sample_checks, entries = [], [], []
     decisions, input_context = {}, {}
     resource_checks_performed = False
@@ -390,7 +388,7 @@ def check(config, deep=False, extend=False, executables=False):
                                 detail["errors"].append(f"executable/prefix not found: {exe}")
                             elif prefix:
                                 detail["warnings"].append("prefix found; executable inside its environment still needs native acceptance testing")
-                        if module in {"rgi", "vfdb", "bacmet", "genomad"} and not cfg.get("database"):
+                        if module in {"rgi", "vfdb", "bacmet", "genomad"} and not cfg.get("database") and module not in automatic_targets:
                             detail["errors"].append("explicit database path required")
                         for key in ("database", "database_manifest", "prot_t5_path", "weights_model"):
                             if cfg.get(key) and not Path(cfg[key]).exists():
@@ -413,7 +411,8 @@ def check(config, deep=False, extend=False, executables=False):
         try:
             for key in ("reference_fasta", "reference_metadata"):
                 if not config["deep"].get(key):
-                    warnings.append(f"DeepSafe {key} is unset: candidate evidence will remain incomplete until references are supplied")
+                    warnings.append(f"DeepSafe {key}: automatic first-run preparation planned" if "deepsafe" in automatic_targets else
+                                    f"DeepSafe {key} is unset: candidate evidence will remain incomplete until references are supplied")
                 elif not Path(config["deep"][key]).is_file():
                     errors.append(f"DeepSafe {key} does not exist")
             from .references import validate_profiles
@@ -466,6 +465,7 @@ def check(config, deep=False, extend=False, executables=False):
         errors.extend(qualified(row["sample_id"], message) for message in row["errors"])
         warnings.extend(qualified(row["sample_id"], message) for message in row["warnings"])
     return {"schema": "basis-preflight-v1", "status": outcome(errors, warnings),
+            "automatic_resources": automatic_resources,
             "check_options": {"deep": bool(deep), "extend": bool(extend), "executables": bool(executables)},
             "resource_checks_performed": resource_checks_performed,
             "global_checks": global_checks, "sample_checks": sample_checks,
@@ -581,7 +581,7 @@ def _main_parsed(args):
                       "open_gaps": capture["open_gaps"], "native_analyses_run": False,
                       "portable_restore_verified": capture["portable_restore_verified"]}
         elif args.command == "init":
-            result = initialize(args.directory, args.hybas_dir)
+            result = initialize(args.directory, args.hybas_dir, args.preset, args.resource_dir)
         elif args.command == "import-samples":
             from .progress import stage
             with stage("Preview batch inputs" if args.dry_run else "Import batch inputs"):

@@ -25,6 +25,7 @@ MODULE_RECIPES = {
     "antismash": "antismash", "genomad": "context", "integronfinder": "context",
     "mobsuite": "mobsuite", "isescan": "isescan", "icescreen": "icescreen",
     "minced": "minced", "pathogenfinder2": "pathogenfinder2", "deepsafe": "deepsafe",
+    "mlst": "mlst", "crisprcasfinder": "crisprcasfinder",
 }
 
 

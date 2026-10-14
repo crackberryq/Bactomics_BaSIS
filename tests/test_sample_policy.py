@@ -68,7 +68,7 @@ class ScopeDecisionTests(unittest.TestCase):
             self.assertEqual(decisions[module]["action"], "run")
             self.assertEqual(decisions[module]["reason"], "import_requested")
         self.config["modules"]["mlst"]["mode"] = "native"
-        self.assertEqual(plan_sample_modules(self.config, self.sample)["mlst"]["reason"], "adapter_unavailable")
+        self.assertEqual(plan_sample_modules(self.config, self.sample)["mlst"]["action"], "run")
 
     def test_invalid_overrides_fail_instead_of_silently_changing_scope(self):
         cases = [None, [], {"absent": {}}, {"sampleA": []},

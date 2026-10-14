@@ -1,0 +1,1287 @@
+[
+  {
+    "reference_id": "UP_Q9FBG4",
+    "accession": "Q9FBG4",
+    "family": "cfr",
+    "comparison_group": "Cfr",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/Q9FBG4/entry",
+    "sequence_sha256": "fba800392d6140b7063fa3d85ed4c4eb231d04baab250b9e435ceada4abf75f1",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Mammaliicoccus sciuri",
+    "sequence_version": 1,
+    "entry_version": 113,
+    "review_note": "C8 rRNA methylation and resistance in source organism.",
+    "pubmed_ids": "10952608;15471995;19144912",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "10952608"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "19144912"
+      }
+    ],
+    "source_record_sha256": "bc1d9b2db82419ee6047d8439d961312260226384da06d2ab0345349a2b13be9",
+    "retrieved_at_utc": "2026-10-08T18:00:44.015178+00:00"
+  },
+  {
+    "reference_id": "UP_A5HBL2",
+    "accession": "A5HBL2",
+    "family": "cfr",
+    "comparison_group": "Cfr",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/A5HBL2/entry",
+    "sequence_sha256": "fba800392d6140b7063fa3d85ed4c4eb231d04baab250b9e435ceada4abf75f1",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Staphylococcus aureus",
+    "sequence_version": 1,
+    "entry_version": 86,
+    "review_note": "Characterized Cfr; no function transferred to query.",
+    "pubmed_ids": "16091044;16569824;17555436;18391032;21415317;21916495",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_01873"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "16091044"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "18391032"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "21415317"
+      }
+    ],
+    "source_record_sha256": "c79c92a7d0d3103d8f2eeda9e8cabc38f5afcca94e51afa3cc3dbe52f9893dd4",
+    "retrieved_at_utc": "2026-10-08T18:00:44.015495+00:00"
+  },
+  {
+    "reference_id": "UP_P36979",
+    "accession": "P36979",
+    "family": "cfr",
+    "comparison_group": "RlmN",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P36979/entry",
+    "sequence_sha256": "dad7cadf941731cf2b1917696d1b7c5491ea46cbe3c28c615d259cdf11aa5537",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 186,
+    "review_note": "C2 RNA methyltransferase comparator, not a generic safe control.",
+    "pubmed_ids": "16738553;18025251;21415317;21527678;21916495;22891362;24806349;7926684;9205837;9278503",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "18025251"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "21415317"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "22891362"
+      }
+    ],
+    "source_record_sha256": "044e0d5784ac76cf05b7b88d088b4dafc6849de1af1aedcc5bf2e789cbad2f50",
+    "retrieved_at_utc": "2026-10-08T18:00:44.016305+00:00"
+  },
+  {
+    "reference_id": "UP_O34617",
+    "accession": "O34617",
+    "family": "cfr",
+    "comparison_group": "RlmN_related",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/O34617/entry",
+    "sequence_sha256": "2a13e42c63d7ac4410dc1799b1eab2e10b94cf62a783512c5a4fef31e2bd311d",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "homology",
+    "organism": "Bacillus subtilis (strain 168)",
+    "sequence_version": 1,
+    "entry_version": 148,
+    "review_note": "Bacillus RlmN annotation by family rule; contextual reference only.",
+    "pubmed_ids": "9384377;9534248",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_01849"
+      }
+    ],
+    "source_record_sha256": "1f46d2535d5111aece22a22d1d42cd38e4fbd79cd4cf1c0154e88fb842196929",
+    "retrieved_at_utc": "2026-10-08T18:00:44.016541+00:00"
+  },
+  {
+    "reference_id": "UP_Q830Q4",
+    "accession": "Q830Q4",
+    "family": "abc_f",
+    "comparison_group": "LsaA",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/Q830Q4/entry",
+    "sequence_sha256": "624881421c6f79ba5669c53d1e4fc0aa6a9824efca40eec3a607474b30437844",
+    "source_review_status": "UniProtKB unreviewed (TrEMBL)",
+    "evidence_basis": "sequence_linked_experimental",
+    "organism": "Enterococcus faecalis (strain ATCC 700802 / V583)",
+    "sequence_version": 1,
+    "entry_version": 144,
+    "review_note": "Native sequence equals UniParc UPI000005C655 linked to retired A0A4U4C430 / PDB 7NHK; structure construct has mutations/tags and is not used.",
+    "pubmed_ids": "12663927;34117249",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [],
+    "source_record_sha256": "370d670b26f47f5b7166d228954261a7781e4e77e8c3066f80ce3f049da3c8c9",
+    "retrieved_at_utc": "2026-10-08T18:00:44.019015+00:00"
+  },
+  {
+    "reference_id": "UP_P0DX93",
+    "accession": "P0DX93",
+    "family": "abc_f",
+    "comparison_group": "MsrD",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0DX93/entry",
+    "sequence_sha256": "3e3a209ef7407bd30e07ed81c819cdd8d5acf2c1f64a4fb9757d2ab9b791876e",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Streptococcus pneumoniae",
+    "sequence_version": 1,
+    "entry_version": 9,
+    "review_note": "Characterized macrolide-associated ABC-F; not an exact MsrG assignment.",
+    "pubmed_ids": "21273480;37393329",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "37393329"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "37393329"
+      }
+    ],
+    "source_record_sha256": "440d899659e7eed847d9093106205cff1c4ae1f5c281e21c63468127a1194965",
+    "retrieved_at_utc": "2026-10-08T18:00:44.019246+00:00"
+  },
+  {
+    "reference_id": "UP_P0A9W3",
+    "accession": "P0A9W3",
+    "family": "abc_f",
+    "comparison_group": "EttA",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0A9W3/entry",
+    "sequence_sha256": "b5910857234040795a36f8e5fa093485ca40e2c88efaa12681433f93c12f54da",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 2,
+    "entry_version": 139,
+    "review_note": "Translation-regulating ABC-F comparator; not a universal susceptibility control.",
+    "pubmed_ids": "10493123;16738553;1938883;24389465;24389466;24500425;30597160;38661232;40401556;7610040;9278503;9298646",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "24389465"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "24389466"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "38661232"
+      }
+    ],
+    "source_record_sha256": "a3848558f0a50be59d1c749794a458af916ce5581790a015a211ff5a26cf7c0c",
+    "retrieved_at_utc": "2026-10-08T18:00:44.019730+00:00"
+  },
+  {
+    "reference_id": "UP_Q06239",
+    "accession": "Q06239",
+    "family": "vanr",
+    "comparison_group": "VanR",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/Q06239/entry",
+    "sequence_sha256": "495fdd50a25100384b1a43015c72597f87f10e4f7760358aa25c060d01aeb2fa",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Enterococcus faecium",
+    "sequence_version": 1,
+    "entry_version": 129,
+    "review_note": "VanS/VanR resistance-operon regulator in source organism.",
+    "pubmed_ids": "1320585;1556077;8161518;8380148;8494882;8664263",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "1320585"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "1556077"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "8161518"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "8494882"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "8664263"
+      }
+    ],
+    "source_record_sha256": "fdffdcc355cc3c070b20c22f63e3c70474246861a49fd91b5b83506f37ea5bbe",
+    "retrieved_at_utc": "2026-10-08T18:00:44.022675+00:00"
+  },
+  {
+    "reference_id": "UP_P13792",
+    "accession": "P13792",
+    "family": "vanr",
+    "comparison_group": "PhoP",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P13792/entry",
+    "sequence_sha256": "ebd74b7a0f132f66ae0fdd30f6abe985b002b8feb82ded96ae8c267add9817f6",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "curated_annotation",
+    "organism": "Bacillus subtilis (strain 168)",
+    "sequence_version": 4,
+    "entry_version": 178,
+    "review_note": "Bacillus phosphate-regulatory homolog; function must not be inferred from shared response-regulator domains.",
+    "pubmed_ids": "1454550;19383706;3036763;3142862;8045898;9384377;9387221",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [],
+    "source_record_sha256": "5a71da16ecc5453625d9d27e5c421eb5963d559e5891753127312e13d1e71b42",
+    "retrieved_at_utc": "2026-10-08T18:00:44.022923+00:00"
+  },
+  {
+    "reference_id": "UP_P23836",
+    "accession": "P23836",
+    "family": "vanr",
+    "comparison_group": "PhoP",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P23836/entry",
+    "sequence_sha256": "81a25c2ee8a8bd3f02c1ef722ab12f38e813d3f46ff41f429b97fc400c46bb01",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 192,
+    "review_note": "E. coli PhoP context comparator.",
+    "pubmed_ids": "10464230;12123454;12813061;13129944;15126461;1530848;15703297;16738553;1729205;1729240;17545283;20041203;22267510;8905232;9278503;9298644",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000250"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "10464230"
+      }
+    ],
+    "source_record_sha256": "f93b7b124cf59862a31ae704a91d904a4d59d070f1208c888c30ba079f9c7504",
+    "retrieved_at_utc": "2026-10-08T18:00:44.023455+00:00"
+  },
+  {
+    "reference_id": "UP_O31817",
+    "accession": "O31817",
+    "family": "fos",
+    "comparison_group": "FosB",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/O31817/entry",
+    "sequence_sha256": "1a2a267436789d1fbd00ad82edd989b8c11016560991ca3a51dfc9ae66b580c9",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "literature_linked",
+    "organism": "Bacillus subtilis (strain 168)",
+    "sequence_version": 1,
+    "entry_version": 127,
+    "review_note": "Bacillus FosB experimentally characterized; not an exact FosM comparator.",
+    "pubmed_ids": "11244082;9384377",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [],
+    "source_record_sha256": "054a7ec9886febf0a011b5bec194838ca9b6fe80bf918c31eb90ad38e67b9e32",
+    "retrieved_at_utc": "2026-10-08T18:00:44.024906+00:00"
+  },
+  {
+    "reference_id": "UP_P0AC81",
+    "accession": "P0AC81",
+    "family": "fos",
+    "comparison_group": "GloA",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0AC81/entry",
+    "sequence_sha256": "c8203a05674787d2d3ccc56547eb40307268bd00a275bfa57422ff89152b0086",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 140,
+    "review_note": "Glyoxalase-family biochemical comparator; not assumed a phylogenetic outgroup.",
+    "pubmed_ids": "10913283;16738553;23506073;23536188;23646895;25670698;9047352;9278503;9628737",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "10913283"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "23536188"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "25670698"
+      }
+    ],
+    "source_record_sha256": "8465575c02393c6ffdd96e24e19d360231f255162d7463f08c84dd8ef81a7f41",
+    "retrieved_at_utc": "2026-10-08T18:00:44.025530+00:00"
+  },
+  {
+    "reference_id": "UP_B1HZM2",
+    "accession": "B1HZM2",
+    "family": "fos",
+    "comparison_group": "FosB_related",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/B1HZM2/entry",
+    "sequence_sha256": "f438a1ff06a976c1e7a17d4d9d90aed8d61d5720018eaf91e5df7ff2e1913ac5",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "homology",
+    "organism": "Lysinibacillus sphaericus (strain C3-41)",
+    "sequence_version": 2,
+    "entry_version": 79,
+    "review_note": "Lysinibacillus background annotation; experimental function not established here.",
+    "pubmed_ids": "18296527",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_01512"
+      }
+    ],
+    "source_record_sha256": "9ad5a26f5b8a22e04abc639ff396a62df39b8e1dc4bcb95e4bd569260d419e2f",
+    "retrieved_at_utc": "2026-10-08T18:00:44.025697+00:00"
+  },
+  {
+    "reference_id": "UP_Q9R381",
+    "accession": "Q9R381",
+    "family": "aac6",
+    "comparison_group": "AAC6",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/Q9R381/entry",
+    "sequence_sha256": "91a6ea91b9a4406c4fda0d90f86e949d1f437250dd68bc0de0113ef3a36c3e9c",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Salmonella enteritidis",
+    "sequence_version": 1,
+    "entry_version": 89,
+    "review_note": "Characterized AAC(6)-Iy; regulatory context affects phenotype.",
+    "pubmed_ids": "10542165;15123251;18095712",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "10542165"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "15123251"
+      }
+    ],
+    "source_record_sha256": "9a6c7087d3745f7535d6c950b67d75dd390a09d6b739d0bfc1792aee48b5ce13",
+    "retrieved_at_utc": "2026-10-08T18:00:44.026883+00:00"
+  },
+  {
+    "reference_id": "UP_Q54441",
+    "accession": "Q54441",
+    "family": "aac6",
+    "comparison_group": "AAC6",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/Q54441/entry",
+    "sequence_sha256": "a1d05bee59b1771479061aa76738b59757cb0aa86975a032a41092dd2b4d19fc",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Serratia marcescens",
+    "sequence_version": 1,
+    "entry_version": 84,
+    "review_note": "Characterized AAC(6)-Ic comparator.",
+    "pubmed_ids": "1354954",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "1354954"
+      }
+    ],
+    "source_record_sha256": "3a4e3fb57a835148b0e20f2e4bc8341dc9dc0a78f4b74284b17ee8cd9dc44662",
+    "retrieved_at_utc": "2026-10-08T18:00:44.027016+00:00"
+  },
+  {
+    "reference_id": "UP_P19650",
+    "accession": "P19650",
+    "family": "aac6",
+    "comparison_group": "AAC6",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P19650/entry",
+    "sequence_sha256": "ed5b1cf83d3658a6100084f4e48615bfa8835d5318551ee0eb78f1647668bdae",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Klebsiella pneumoniae",
+    "sequence_version": 1,
+    "entry_version": 114,
+    "review_note": "Characterized aminoglycoside acetyltransferase comparator.",
+    "pubmed_ids": "1963948;2841303",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "2841303"
+      }
+    ],
+    "source_record_sha256": "b8271f246629162bb9f51c0d407229164b0c049d2276321191bedf1c1f9d470b",
+    "retrieved_at_utc": "2026-10-08T18:00:44.027134+00:00"
+  },
+  {
+    "reference_id": "UP_P0A944",
+    "accession": "P0A944",
+    "family": "aac6",
+    "comparison_group": "RimI",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0A944/entry",
+    "sequence_sha256": "467c52351f3bca459fa2b209157cef3463aeb3dcf929e0c44a6d1490446d12d8",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 142,
+    "review_note": "Protein-acetylating GNAT comparator; alignability must be checked before any tree.",
+    "pubmed_ids": "16738553;2828880;30352934;30967468;6991870;7610040;8366044;9278503",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "2828880"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "30352934"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "6991870"
+      }
+    ],
+    "source_record_sha256": "479fef0809b3d52c5dd2b32327c4c9d7bebfecf2122072dcfa0f081e4a3659af",
+    "retrieved_at_utc": "2026-10-08T18:00:44.027366+00:00"
+  },
+  {
+    "reference_id": "UP_P41791",
+    "accession": "P41791",
+    "family": "bmc",
+    "comparison_group": "EutM",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P41791/entry",
+    "sequence_sha256": "506d4704dc1903588880550ea78d5fe1bb13053a7da6415d74e2408ae97bcc1f",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Salmonella typhimurium (strain LT2 / SGSC1412 / ATCC 700720)",
+    "sequence_version": 1,
+    "entry_version": 123,
+    "review_note": "Microcompartment structural comparator, not standalone virulence evidence.",
+    "pubmed_ids": "10464203;11677609;16291677;16585748;22428024;23585538;27063436;28585808;29531136;3045078;7868611",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000250",
+        "source": "UniProtKB",
+        "id": "P0ABF4"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "22428024"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "27063436"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "28585808"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "16585748"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "23585538"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "16291677"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "23585538"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "7868611"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "29531136"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "3045078"
+      }
+    ],
+    "source_record_sha256": "8ecdf6631965684c3e22bf30b52f3b543e33dfe799abadc1ccdc0b301f21f099",
+    "retrieved_at_utc": "2026-10-08T18:00:44.028549+00:00"
+  },
+  {
+    "reference_id": "UP_P0ABF4",
+    "accession": "P0ABF4",
+    "family": "bmc",
+    "comparison_group": "EutM",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0ABF4/entry",
+    "sequence_sha256": "67510b245f33d8a5a2a73e27864af02880cd4d7f37a6f1e6398712cb5deb064e",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 117,
+    "review_note": "E. coli EutM structural comparator.",
+    "pubmed_ids": "16738553;20044574;20851901;9205837;9278503",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "20044574"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "20851901"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "20044574"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "20851901"
+      }
+    ],
+    "source_record_sha256": "bbff8dd03de8666c54cc044f893c0265dbf9010e7bf1cf36c18c83b0ef2ff019",
+    "retrieved_at_utc": "2026-10-08T18:00:44.029082+00:00"
+  },
+  {
+    "reference_id": "UP_P0A1C7",
+    "accession": "P0A1C7",
+    "family": "bmc",
+    "comparison_group": "PduA",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0A1C7/entry",
+    "sequence_sha256": "c6b3234279ee20ab02039abdf8edce7bb22b423302c801c1e8823370822af778",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Salmonella typhimurium (strain LT2 / SGSC1412 / ATCC 700720)",
+    "sequence_version": 1,
+    "entry_version": 96,
+    "review_note": "Related propanediol microcompartment shell comparator.",
+    "pubmed_ids": "10498708;11677609;11844753;12923081;18296526;20870711;21239588;22927404;24014666;24747050;25646976;25713376;26283792;27063436;27561553;28475631;28585808;28829618;31845931;33227310;8071226;9352910",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "11844753"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "12923081"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "21239588"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "22927404"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "24747050"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "25713376"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "27561553"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "28585808"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "33227310"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "20870711"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "24747050"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "25646976"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "26283792"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "28829618"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "18296526"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "25713376"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "28475631"
+      }
+    ],
+    "source_record_sha256": "cf96af2c9469ed32623128c0056f2f85ab4f4c9088b222748ad8575b39c67b64",
+    "retrieved_at_utc": "2026-10-08T18:00:44.030238+00:00"
+  },
+  {
+    "reference_id": "UP_P80244",
+    "accession": "P80244",
+    "family": "clpp",
+    "comparison_group": "ClpP_Bacillus",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P80244/entry",
+    "sequence_sha256": "c60d21a244a990f692757c4b5e7b27da8b484c20919bfc6bbfcd6aff468d9339",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Bacillus subtilis (strain 168)",
+    "sequence_version": 3,
+    "entry_version": 172,
+    "review_note": "Proteostasis comparator.",
+    "pubmed_ids": "11395451;1362210;16899079;20305655;22080375;31155236;8012595;9384377;9643546",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_00444"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "11395451"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "16899079"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "20305655"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "31155236"
+      }
+    ],
+    "source_record_sha256": "c81a2651d7b710512e7ddb9438f908841529ef0d97fab99fe971f3e3b7305379",
+    "retrieved_at_utc": "2026-10-08T18:00:44.032240+00:00"
+  },
+  {
+    "reference_id": "UP_Q9RQI6",
+    "accession": "Q9RQI6",
+    "family": "clpp",
+    "comparison_group": "ClpP_Listeria",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/Q9RQI6/entry",
+    "sequence_sha256": "4f3422317a8fbebd80f123ffd5d84d8b490bed76cdde5668f55ef14937d46ad8",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "literature_linked",
+    "organism": "Listeria monocytogenes serovar 1/2a (strain ATCC BAA-679 / EGD-e)",
+    "sequence_version": 1,
+    "entry_version": 148,
+    "review_note": "Source-organism virulence phenotype is context-specific, not transferable by homology.",
+    "pubmed_ids": "10760131;11679669",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_00444"
+      }
+    ],
+    "source_record_sha256": "761d5366bab7dcf80beea37b39907083dd1c7c748e7eaebd71392ec7e1ff34fb",
+    "retrieved_at_utc": "2026-10-08T18:00:44.034064+00:00"
+  },
+  {
+    "reference_id": "UP_P0A6G7",
+    "accession": "P0A6G7",
+    "family": "clpp",
+    "comparison_group": "ClpP_Ecoli",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0A6G7/entry",
+    "sequence_sha256": "b027a0b811987bd858a3b188bb8cc1cfe5cc82bb2d4df72330d5f9e957c8123b",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 167,
+    "review_note": "Proteostasis comparator across taxa.",
+    "pubmed_ids": "12941278;15371343;16406682;16682229;16738553;20637416;20851345;2197275;2211522;22412352;24375411;8093059;8407953;8831780;9278503;9298644;9390554",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_00444"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "12941278"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "15371343"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "24375411"
+      }
+    ],
+    "source_record_sha256": "3395c37492da08289bd73d4f39bd78d7bd7a7a0f9ccf47863c55068a397cadd7",
+    "retrieved_at_utc": "2026-10-08T18:00:44.034988+00:00"
+  },
+  {
+    "reference_id": "UP_P37711",
+    "accession": "P37711",
+    "family": "vany",
+    "comparison_group": "VanY",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P37711/entry",
+    "sequence_sha256": "b7bcffe13b9e252ee705646a7d4814a0c8af859b80dfba727f28c4bb7672bbca",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Enterococcus faecium",
+    "sequence_version": 1,
+    "entry_version": 115,
+    "review_note": "Characterized D,D-carboxypeptidase; not required for resistance in cited E. faecium context; not vanM-specific.",
+    "pubmed_ids": "1398115;1510448;8380148;9257766",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "1398115"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "1510448"
+      },
+      {
+        "evidenceCode": "ECO:0000305"
+      }
+    ],
+    "source_record_sha256": "acc9dd624ce6d0d551e896f944174b6c4ade9bf51b1c2f3e906812305f0f812f",
+    "retrieved_at_utc": "2026-10-08T18:00:44.036354+00:00"
+  },
+  {
+    "reference_id": "UP_Q9X3P3",
+    "accession": "Q9X3P3",
+    "family": "vant",
+    "comparison_group": "VanT",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/Q9X3P3/entry",
+    "sequence_sha256": "971110b1ef2a9ca137a4850d921ffc10123985a96fc470a57467c3a7c23058d6",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Enterococcus gallinarum",
+    "sequence_version": 1,
+    "entry_version": 133,
+    "review_note": "Serine/alanine racemase with extended architecture; not vanG-specific.",
+    "pubmed_ids": "10209740;10817725;10878136;15728903",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "10209740"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "10817725"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "10878136"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "15728903"
+      }
+    ],
+    "source_record_sha256": "8a6000eb7db9070e924c433064cab24a21bc695b809aa2f2fbbbb6b7ab35b822",
+    "retrieved_at_utc": "2026-10-08T18:00:44.038261+00:00"
+  },
+  {
+    "reference_id": "UP_P0A6B4",
+    "accession": "P0A6B4",
+    "family": "vant",
+    "comparison_group": "Alr",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0A6B4/entry",
+    "sequence_sha256": "9f22557e041e45be4e0914ab09d30d5f3dfaa571f02acb0f33747b8792b15f1b",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 145,
+    "review_note": "Alanine-racemase comparator.",
+    "pubmed_ids": "16738553;18434499;3907634;6323420;8265357;8335265;9278503",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "18434499"
+      }
+    ],
+    "source_record_sha256": "32e7905b31578ade54b8957f8c629a023d14593d81c040914d9087b761f92dc4",
+    "retrieved_at_utc": "2026-10-08T18:00:44.038741+00:00"
+  },
+  {
+    "reference_id": "UP_P10725",
+    "accession": "P10725",
+    "family": "vant",
+    "comparison_group": "Alr_related",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P10725/entry",
+    "sequence_sha256": "d27a04d5e505669eb719787034343e7803e5ed040e060fa477659a99dfcf05e2",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "homology",
+    "organism": "Bacillus subtilis (strain 168)",
+    "sequence_version": 2,
+    "entry_version": 164,
+    "review_note": "Bacillus alanine racemase annotation; substrate specificity not inferred for query.",
+    "pubmed_ids": "9384377",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_01201"
+      }
+    ],
+    "source_record_sha256": "ccb47552cb57a5f71e63991e885c49ed91a4c938c012788f336f4aa72b0402fd",
+    "retrieved_at_utc": "2026-10-08T18:00:44.038922+00:00"
+  },
+  {
+    "reference_id": "UP_O87866",
+    "accession": "O87866",
+    "family": "qac",
+    "comparison_group": "QacG_annotation",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/O87866/entry",
+    "sequence_sha256": "859c24733c6c2254125470850f23ed04636ea68b934f05a20253528399e5458a",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "curated_annotation",
+    "organism": "Staphylococcus sp. (strain ST94)",
+    "sequence_version": 1,
+    "entry_version": 72,
+    "review_note": "QacG annotated reference; not treated as direct QacG-specific experimental validation.",
+    "pubmed_ids": "9631545",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [],
+    "source_record_sha256": "65b8acd30fd550bfe9c796523b62969cf23d18de7099a23dd8a965292710a289",
+    "retrieved_at_utc": "2026-10-08T18:00:44.040473+00:00"
+  },
+  {
+    "reference_id": "UP_P23895",
+    "accession": "P23895",
+    "family": "qac",
+    "comparison_group": "EmrE",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P23895/entry",
+    "sequence_sha256": "ef2609217dd96e4497a66ea32c6e1f73d348cd3934b723ec6fa4df9e0acb7927",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 187,
+    "review_note": "Characterized broad-substrate SMR transporter; not a negative control.",
+    "pubmed_ids": "10681497;11443233;11574548;12590142;1320256;14633977;14755055;14970332;15044024;15111102;15371426;15882076;15919996;16049002;16373573;16672221;16738553;17003034;17005200;17185584;17360700;18024586;18295794;1936950;20308069;20508091;20551331;22100111;22178925;22942246;23042996;23920359;24448799;29114048;30287687;7896833;9050242;9278503;9688273",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "10681497"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "11574548"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "15371426"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "18024586"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "18295794"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "22942246"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "23042996"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "24448799"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "29114048"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "30287687"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "7896833"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "9050242"
+      }
+    ],
+    "source_record_sha256": "627a4a2163ccf284f15c83c19c18760bdf4c94c37ddce9cb842802f4c98b3d49",
+    "retrieved_at_utc": "2026-10-08T18:00:44.041493+00:00"
+  },
+  {
+    "reference_id": "UP_Q47747",
+    "accession": "Q47747",
+    "family": "vanw",
+    "comparison_group": "VanW_context",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/Q47747/entry",
+    "sequence_sha256": "b94496d01ebdc4253ea4a7723f7f41d320f0c959ab07baa6b2ca3cba0f6c9d5e",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "function_unresolved",
+    "organism": "Enterococcus faecalis (strain ATCC 700802 / V583)",
+    "sequence_version": 1,
+    "entry_version": 93,
+    "review_note": "VanB-associated VanW reference. Specific molecular function and causal resistance role remain unresolved.",
+    "pubmed_ids": "12663927;8631706",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [],
+    "source_record_sha256": "f027a1bd35f50c1bb14ab74ee39779cb79ecc4124dc679638d9d0a34f6c6b3d3",
+    "retrieved_at_utc": "2026-10-08T18:00:44.042476+00:00"
+  },
+  {
+    "reference_id": "UP_P9WGY7",
+    "accession": "P9WGY7",
+    "family": "rpoc",
+    "comparison_group": "RpoC_Mtb",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P9WGY7/entry",
+    "sequence_sha256": "f49ca436073b605ec2de76d9ed721a9af28a2d1c7868d0f0bdbe76083c66ada8",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Mycobacterium tuberculosis (strain ATCC 25618 / H37Rv)",
+    "sequence_version": 1,
+    "entry_version": 67,
+    "review_note": "Canonical RNA polymerase sequence, NOT a resistance-mutant reference.",
+    "pubmed_ids": "11929527;21969609;22570422;8031050;9634230",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_01322"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "22570422"
+      }
+    ],
+    "source_record_sha256": "b6ed357f15509bce75ee3f59e2058b27507bf5d10ed896e82ecae57374df7420",
+    "retrieved_at_utc": "2026-10-08T18:00:44.045353+00:00"
+  },
+  {
+    "reference_id": "UP_P37871",
+    "accession": "P37871",
+    "family": "rpoc",
+    "comparison_group": "RpoC_Bacillus",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P37871/entry",
+    "sequence_sha256": "d05fb61592b102a9fdff646ab9b031174b741b438698c8d0210562d881137fa8",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Bacillus subtilis (strain 168)",
+    "sequence_version": 4,
+    "entry_version": 164,
+    "review_note": "RNA polymerase comparator; no Mtb mutation transfer.",
+    "pubmed_ids": "18289874;19383706;21710567;33339820;33339827;6802805;7592585;7657605;8969501;9384377",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_01322"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "18289874"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "33339820"
+      }
+    ],
+    "source_record_sha256": "b0aafc6fc0030c797a6f8bbc3e02831e50de0f99e8e0579a33e48fac44b9d60d",
+    "retrieved_at_utc": "2026-10-08T18:00:44.047673+00:00"
+  },
+  {
+    "reference_id": "UP_P0A8T7",
+    "accession": "P0A8T7",
+    "family": "rpoc",
+    "comparison_group": "RpoC_Ecoli",
+    "role": "reference",
+    "review_status": "reviewed",
+    "source": "https://www.uniprot.org/uniprotkb/P0A8T7/entry",
+    "sequence_sha256": "724511fc297bfadc125a55cc504bd405988ae3fc47401a28747804c9f8952b35",
+    "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+    "evidence_basis": "experimental",
+    "organism": "Escherichia coli (strain K12)",
+    "sequence_version": 1,
+    "entry_version": 178,
+    "review_note": "RNA polymerase comparator across taxa.",
+    "pubmed_ids": "1095419;1646077;16738553;18723842;19903881;21696463;24843001;32871103;36697824;6266829;6278450;6287430;8265357;9278503;9298644",
+    "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+    "review_date": "2026-10-08",
+    "function_evidence_codes": [
+      {
+        "evidenceCode": "ECO:0000255",
+        "source": "HAMAP-Rule",
+        "id": "MF_01322"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "1646077"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "24843001"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "24843001"
+      },
+      {
+        "evidenceCode": "ECO:0000305",
+        "source": "PubMed",
+        "id": "24843001"
+      },
+      {
+        "evidenceCode": "ECO:0000269",
+        "source": "PubMed",
+        "id": "32871103"
+      }
+    ],
+    "source_record_sha256": "8e65710449f036c06bde445308d143c77d9b5713b7daaa9057ccb553fa1f69f7",
+    "retrieved_at_utc": "2026-10-08T18:00:44.051466+00:00"
+  }
+]

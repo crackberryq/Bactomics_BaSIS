@@ -1,6 +1,6 @@
 # Per-sample preflight and exclusions
 
-BaSIS 0.2.0rc7 adds a saved, offline preflight report and structured diagnostics for each readable sample row. It also corrects the existing report's scope labels: globally disabled modules are no longer counted as explicit study exclusions.
+BaSIS provides a saved, offline preflight report and structured diagnostics for each readable sample row. Globally disabled modules are distinct from explicit study exclusions.
 
 ## Review before execution
 
@@ -12,6 +12,8 @@ basis doctor -c study/config.yaml -d -e -v --report-dir preflight-resources
 Each report directory must be new. Open its `index.html`. The directory contains the JSON check record and tabular exports for sample outcomes and module scope. The CLI still writes JSON to stdout and progress to stderr. Exit code 2 means preflight found errors; a report is still written for an inspectable failed preflight. Existing report destinations are refused.
 
 `validate` checks annotation consistency and declared scope. `doctor` adds the existing checks for executable or command-prefix availability, declared resource paths and configured resource budgets. A found environment launcher does not verify the tool inside that environment. Neither command runs a native analysis, downloads resources or certifies biological suitability. Optional `-d` checks the configured DeepSafe resources; `-e` includes the extension's declared scope.
+
+With `resources.policy: auto`, first-run resources awaiting preparation are reported as planned, with a warning that their contents have not yet been downloaded or verified. Doctor still checks inputs, explicit existing paths and Conda availability. Passing this preview does not guarantee a later network download or native build will succeed. The normal Snakemake run prepares those resources before dependent analyses.
 
 ## Interpret the states
 

@@ -59,6 +59,10 @@ def module_config(config: dict, module: str, sample: dict) -> dict:
 
 @tracked("Validate inputs and build execution plan")
 def make_plan(config: dict, deep: bool, extend: bool) -> dict:
+    from .devices import configure_devices
+    from .bootstrap import plan_auto_resources
+    config = configure_devices(config, extend)
+    config, bootstrap_resources = plan_auto_resources(config, deep, extend)
     samples = load_samples(config["samples"])
     validate_sample_overrides(config, samples)
     decisions = {s["sample_id"]: plan_sample_modules(config, s, extend) for s in samples}
@@ -79,6 +83,8 @@ def make_plan(config: dict, deep: bool, extend: bool) -> dict:
             "enabled_modules": enabled, "enabled_modules_by_sample": enabled_by_sample,
             "module_decisions": decisions, "options": {"deep": bool(deep), "extend": bool(extend)},
             "outdir": str(outdir.resolve())}
+    if bootstrap_resources:
+        plan["bootstrap_resources"] = bootstrap_resources
     plan["plan_hash"] = hash_object(plan)
     planpath = outdir / "provenance" / "plans" / f"{plan['plan_hash']}.json"
     if not planpath.exists():
@@ -212,6 +218,8 @@ def execute_module(plan: dict, sample: dict, module: str, force=False) -> dict:
                 adapter = importlib.import_module("basis.adapters.extend")
             elif module == "minced":
                 adapter = importlib.import_module("basis.adapters.minced")
+            elif module in {"mlst", "crisprcasfinder"}:
+                adapter = importlib.import_module("basis.adapters.typing_defense")
             else:
                 adapter = importlib.import_module("basis.adapters.context")
             payload = adapter.run(module, sample, config, work, runner)
@@ -543,7 +551,8 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
                    f"gpu={plan['config']['execution'].get('gpus', 0)}", "--keep-going", "--rerun-incomplete", "--rerun-triggers", "mtime",
                    ]
         from .workflow_environments import has_managed_environments, conda_storage
-        managed = has_managed_environments(plan)
+        from .bootstrap import bootstrap_uses_conda
+        managed = has_managed_environments(plan) or bootstrap_uses_conda(plan)
         if managed:
             command.extend(["--use-conda", "--conda-prefix", conda_storage(plan)])
         from .native_environment import native_child_environment
@@ -576,6 +585,8 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
             # evidence merely because they remain on disk.
             engine_error = f"Snakemake could not start: {exc}; see {outdir / 'snakemake.log'}"
     else:
+        if plan.get("bootstrap_resources"):
+            raise ValueError("Automatic first-run resource preparation requires --engine snakemake")
         for ordinal, sample in enumerate(plan["samples"], 1):
             emit(f"Sample {ordinal}/{len(plan['samples'])} [{sample['sample_id']}] — starting")
             for module in ALL_MODULES:
@@ -645,6 +656,9 @@ def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt
                 if decision["requested"] and record["execution_status"] != "completed":
                     incomplete.append(f"{sample['sample_id']}:{module}")
     run["finished_at"] = now()
+    if plan.get("bootstrap_resources") and receipt_root is not None:
+        from .bootstrap import bootstrap_audit
+        run["resource_preparation"] = bootstrap_audit(plan, receipt_root)
     run["completeness"] = "incomplete" if incomplete or engine_error else "completed_requested_scope"
     run["incomplete_modules"] = incomplete
     if engine_error:

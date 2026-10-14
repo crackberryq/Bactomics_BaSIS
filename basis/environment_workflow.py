@@ -54,6 +54,18 @@ PROBES = {
                   (("snakemake",), ["--version"], r"\d+\.\d+", (0,))],
     "minced": [(("minced",), ["--version"], r"minced", (0,)),
                (("java",), ["-version"], r"version", (0,))],
+    "mlst": [(("mlst",), ["--version"], r"mlst.*2\.35", (0,)),
+             (("mlst",), ["--check"], r"mlst|check|scheme", (0,))],
+    "crisprcasfinder": [(("perl",), ["-e", "use Bio::AlignIO; use Bio::SeqIO; use Bio::DB::Fasta; print qq(BaSIS BioPerl probe OK\\n)"], r"BaSIS BioPerl probe OK", (0,)),
+                         (("macsyfinder",), ["--version"], r"macsyfinder.*2\.0", (0,)),
+                         (("vmatch",), ["-version"], r"vmatch|2\.3\.1", (0,)),
+                         (("mkvtree",), ["-version"], r"mkvtree|2\.3\.1", (0,)),
+                         (("vsubseqselect",), ["-version"], r"vsubseqselect|2\.3\.1", (0,)),
+                         (("muscle",), ["-version"], r"muscle.*5\.", (0,)),
+                         (("prodigal",), ["-v"], r"prodigal", (0,)),
+                         (("fuzznuc",), ["-version"], r"EMBOSS", (0,)),
+                         (("needle",), ["-version"], r"EMBOSS", (0,)),
+                         (("hmmsearch",), ["-h"], r"HMMER", (0,))],
     "pathogenfinder2": [(("pathogenfinder2",), ["--version"], r"\d+\.\d+", (0,))],
 }
 

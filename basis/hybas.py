@@ -13,6 +13,7 @@ from .util import sha256_file
 from .input_context import taxonomy_is_missing
 
 OPERATIONAL_SOURCE = "hybas_kraken_operational_target"
+PHYLUM_SOURCE = "hybas_selected_target_ancestry"
 _KEY = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
 _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _MISSING = {"", "NA", "N/A", "none", "None", "null"}
@@ -117,15 +118,16 @@ def _percentage(value, label):
 
 def _read_report(path, role, sources, disabled, warnings, target_taxid=""):
     result = {"status": "disabled" if disabled else "not_found", "top_species": [],
-              "target_match": None}
+              "target_match": None, "target_ancestry": []}
     if not path.exists():
         return result
     _source(path, role + "_report", sources)
+    result["source"] = dict(sources[-1])
     if disabled:
         if path.stat().st_size:
             warnings.append(f"{role}: nonempty report ignored because HybAs declares Kraken disabled")
         return result
-    species, seen, count = [], set(), 0
+    species, seen, count, ancestors = [], set(), 0, []
     with path.open(encoding="utf-8-sig", newline="") as handle:
         for line, row in enumerate(csv.reader(handle, delimiter="\t"), 1):
             if not row:
@@ -143,13 +145,111 @@ def _read_report(path, role, sources, disabled, warnings, target_taxid=""):
             record = {"percentage": percentage, "clade_reads": int(clade),
                       "direct_reads": int(direct), "rank": rank,
                       "taxid": taxid, "name": name}
+            depth = len(row[5]) - len(row[5].lstrip(" "))
+            while ancestors and ancestors[-1][0] >= depth:
+                ancestors.pop()
+            ancestors.append((depth, {"rank": rank, "taxid": taxid, "name": name}))
             if target_taxid and taxid == target_taxid:
                 result["target_match"] = record
+                result["target_ancestry"] = [dict(node) for _, node in ancestors]
             if rank == "S":
                 species.append(record)
+    if sha256_file(path) != result["source"]["sha256"]:
+        raise ValueError(f"HybAs Kraken report changed while being read: {path}")
     result.update(status="available" if count else "empty", rows=count,
                   top_species=sorted(species, key=lambda r: (-r["percentage"], r["taxid"]))[:3])
     return result
+
+
+def _phylum_resolution(selected, taxonomy_status, reads):
+    """Resolve only the recorded target's lineage, never a leading read hit.
+
+    Every available enabled report must contain the identical selected target,
+    positive clade support and the same phylum ancestor. Missing platforms are
+    disclosed; an available report missing the target or hierarchy blocks reuse.
+    """
+    result = {"status": "unresolved", "reason": "selected_target_not_resolved",
+              "source": PHYLUM_SOURCE, "selected_target": copy.deepcopy(selected),
+              "phylum": None, "evidence": [], "ignored_reports": []}
+    for platform, data in reads.items():
+        if data["status"] != "available":
+            result["ignored_reports"].append({"platform": platform, "status": data["status"],
+                                               "source": copy.deepcopy(data.get("source"))})
+            continue
+        ancestors = data.get("target_ancestry", [])
+        phylum = next((dict(node) for node in reversed(ancestors) if node["rank"] == "P"), None)
+        result["evidence"].append({"platform": platform, "source": copy.deepcopy(data.get("source")),
+                                   "target_match": copy.deepcopy(data.get("target_match")),
+                                   "ancestors": copy.deepcopy(ancestors), "phylum": phylum})
+    if taxonomy_status != "resolved" or selected.get("rank") not in {"G", "S"}:
+        return result
+    if not result["evidence"]:
+        result["reason"] = "no_available_enabled_kraken_reports"
+        return result
+    for evidence in result["evidence"]:
+        match = evidence["target_match"]
+        if not match:
+            result["reason"] = "selected_target_missing_from_available_report"
+            return result
+        if any(match[key] != selected.get(key) for key in ("taxid", "rank", "name")):
+            result["reason"] = "selected_target_identity_conflict"
+            return result
+        if match["clade_reads"] <= 0:
+            result["reason"] = "selected_target_without_positive_clade_support"
+            return result
+        if not evidence["phylum"]:
+            result["reason"] = "selected_target_phylum_ancestor_missing"
+            return result
+    identities = {(e["phylum"]["taxid"], e["phylum"]["name"].casefold()) for e in result["evidence"]}
+    # These two recorded names are taxonomic synonyms for the same phylum ID.
+    if identities and all(taxid == "1239" and name in {"bacillota", "firmicutes"}
+                          for taxid, name in identities):
+        identities = {("1239", "bacillota")}
+    if len(identities) != 1:
+        result["reason"] = "phylum_ancestry_conflict_between_reports"
+        return result
+    result.update(status="resolved", reason="selected_target_ancestry_agrees",
+                  phylum=dict(result["evidence"][0]["phylum"]))
+    return result
+
+
+def _enrich_phylum(result, context):
+    resolution = _phylum_resolution(context["selected_target"], context["taxonomy_status"],
+                                    context["read_taxonomy"])
+    context["phylum_resolution"] = resolution
+    old_auto = result.get("taxon_phylum_source") == PHYLUM_SOURCE
+    declared = not taxonomy_is_missing(result.get("taxon_phylum")) and not old_auto
+    if declared:
+        if not _present(result.get("taxon_phylum_source")):
+            result["taxon_phylum_source"] = "sample_sheet"
+        resolution["sample_assignment"] = "explicit_declaration_preserved"
+        if resolution["status"] == "resolved":
+            recorded = resolution["phylum"]
+            names = {_text(result["taxon_phylum"]).casefold(), recorded["name"].casefold()}
+            agrees = len(names) == 1 or (recorded["taxid"] == "1239" and names <= {"bacillota", "firmicutes"})
+            if not agrees:
+                context["warnings"].append("Declared phylum conflicts with HybAs selected-target ancestry; "
+                                           "the explicit declaration was retained and requires review")
+        return
+    target = context["selected_target"]
+    taxon, selected_name = _text(result.get("taxon")).casefold(), target.get("name", "").casefold()
+    if (not taxonomy_is_missing(taxon) and taxon != selected_name
+            and not (target.get("rank") == "G" and taxon.startswith(selected_name + " "))):
+        resolution["sample_assignment"] = "held_declared_taxon_differs_from_selected_target"
+    elif resolution["status"] == "resolved":
+        result.update(taxon_phylum=resolution["phylum"]["name"], taxon_phylum_source=PHYLUM_SOURCE,
+                      taxon_phylum_taxid=resolution["phylum"]["taxid"])
+        resolution["sample_assignment"] = "verified_target_ancestry"
+        return
+    else:
+        resolution["sample_assignment"] = "not_assigned"
+    if old_auto:
+        for key in ("taxon_phylum", "taxon_phylum_source", "taxon_phylum_taxid"):
+            result.pop(key, None)
+    context["warnings"].append("Phylum could not be assigned automatically from the selected HybAs target: "
+                               + resolution.get("sample_assignment", resolution["reason"]) + " ("
+                               + resolution["reason"] + "). Review the target ancestry in available Kraken reports "
+                               "or supply an independently reviewed taxon_phylum; phylum-scoped modules remain held.")
 
 
 def _legacy_target(summaries):
@@ -251,6 +351,8 @@ def enrich_sample(sample: dict) -> dict:
             raise ValueError("input_mode external conflicts with hybas_dir; remove hybas_dir or choose hybas/auto")
         if result.get("taxon_source") == OPERATIONAL_SOURCE:
             raise ValueError("External input cannot claim an imported HybAs taxonomy source")
+        if result.get("taxon_phylum_source") == PHYLUM_SOURCE:
+            raise ValueError("External input cannot claim an imported HybAs phylum source")
         result.pop("hybas_context", None)
         if not taxonomy_is_missing(result.get("taxon")):
             result.setdefault("taxon_source", "sample_sheet")
@@ -398,4 +500,5 @@ def enrich_sample(sample: dict) -> dict:
         agrees = declared == target or (selected["rank"] == "G" and declared.startswith(target + " "))
         if valid and not agrees:
             warnings.append(f"Declared taxon {result['taxon']!r} differs from HybAs operational target {selected['name']!r}; declared taxon retained")
+    _enrich_phylum(result, context)
     return result

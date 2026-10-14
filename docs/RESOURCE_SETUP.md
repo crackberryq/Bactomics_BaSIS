@@ -1,9 +1,14 @@
 # Explicit resource preparation
 
-BaSIS 0.3.0rc1 uses the same packaged Snakefile for analysis, environment setup,
-and resource preparation. Resource preparation is an administrative target:
-an ordinary `basis run` checks configured resources and does not download a new
-database release. The commands below do not change study configurations.
+BaSIS 0.3.0rc2 uses the same packaged Snakefile for analysis, environment setup,
+and resource preparation. Fresh full-preset studies prepare missing requested
+resources automatically during `basis run`; a separate recipe is not required.
+The first successful preparation records the source, resolved version and file
+checksums. Later runs verify and reuse that snapshot without silently refreshing it.
+
+This page describes the optional administrative workflow for explicit resource
+recipes and custom destinations. Its commands do not change study configurations.
+Existing manual configurations retain their explicit resource paths and policy.
 
 Create a separate YAML file with `schema_version: 1` and a `resources` mapping.
 Each named resource has its own immutable snapshot destination. A plan is

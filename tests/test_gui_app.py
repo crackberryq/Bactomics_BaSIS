@@ -57,8 +57,6 @@ class GuiAppTests(unittest.TestCase):
              patch("basis.jobs.submit") as submit:
             app = AppTest.from_file(str(Path(basis.__file__).with_name("gui_app.py")), default_timeout=30).run()
             app.button(key="start_01").click().run()
-            self.assertEqual(app.session_state["page"], "Setup")
-            app.button(key="setup_next").click().run()
             self.assertEqual(app.session_state["page"], "Samples")
             app.button(key="samples_next").click().run()
             self.assertEqual(app.session_state["page"], "Run")

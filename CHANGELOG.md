@@ -1,3 +1,13 @@
+# 0.3.0rc2 — automatic first native run
+
+- Make new `basis init` studies and fresh sample imports use the full native preset with automatic resource preparation. `basis run -d -e` schedules missing environment, database and model preparation inside the normal Snakemake DAG.
+- Share verified resource snapshots in a configurable user cache. Record first-use sources, versions and content hashes; reuse verified snapshots without automatic refresh. Preserve explicitly configured resources and older manual policies.
+- Add native MLST and CRISPRCasFinder capabilities, bringing the full preset to 14 native adapters. Module applicability, prerequisite and interpretation checks remain explicit.
+- Import a phylum automatically from consistent selected-target ancestry across available enabled HybAs Kraken reports. Preserve user declarations and the recorded genus/species rank; retain ancestry and source hashes and hold unresolved scope.
+- Add automatic Extend device selection with runtime verification and CPU fallback; explicit CUDA requests fail when unavailable.
+- Enable PROSITE profiles and eligible automatic phylogeny/family placement in new full studies. Comparator eligibility, bounded follow-up, scientific thresholds and evidence limitations remain in force.
+- Document a clean pip-install, initialize, run workflow without historical migration helpers. Existing studies are not rewritten. Full clean-machine native acceptance and independent biological validation remain pending.
+
 # 0.3.0rc1 — Snakemake-owned workflow
 
 - Use one packaged Snakefile entry point with analysis, explicit environment setup and explicit resource preparation modes.

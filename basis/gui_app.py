@@ -37,8 +37,9 @@ button[kind="primary"] {background:#087c78;border-color:#087c78;}
 button[kind="primary"]:hover {background:#066662;border-color:#066662;}
 @media(max-width:760px){.basis-hero{padding:23px;}.basis-hero h1{font-size:1.8rem;}}
 </style>''', unsafe_allow_html=True)
-PAGE_LABELS = {"Overview": "Start here", "Setup": "1 · Tool environments", "Resources": "Databases & models", "Samples": "2 · Add samples",
-               "Run": "3 · Readiness & run", "Jobs": "Progress & jobs", "Results & export": "4 · Explore results"}
+PAGE_LABELS = {"Overview": "Start here", "Samples": "1 · Add samples", "Run": "2 · Run analysis",
+               "Jobs": "3 · Progress & jobs", "Results & export": "4 · Explore results",
+               "Setup": "Advanced · tool environments", "Resources": "Advanced · databases & models"}
 page = st.sidebar.radio("Your workspace", list(PAGE_LABELS), format_func=PAGE_LABELS.get, key="page")
 st.sidebar.caption(f"BaSIS {__version__} · Local Linux / WSL")
 with st.sidebar.expander("Workspace details"):
@@ -48,7 +49,7 @@ with st.sidebar.expander("Workspace details"):
 st.sidebar.markdown(f"[{AUTHOR} · ORCID]({ORCID})")
 st.sidebar.caption("Analysis completion and biological interpretation are reported separately.")
 HEADINGS = {
-    "Overview": ("From genome to evidence", "Prepare your tools, add samples and follow a guided analysis. Explore the findings in your interactive BaSIS report."),
+    "Overview": ("From genome to evidence", "Add samples and start your analysis. New studies prepare their required tools and resources automatically, then produce an interactive evidence report."),
     "Setup": ("Prepare your analysis tools", "Plan, install and verify tool environments with Snakemake. Then check the databases and models required by your study."),
     "Resources": ("Prepare your study resources", "Choose explicitly configured resources, review the plan and let Snakemake coordinate supported downloads and index building."),
     "Samples": ("Bring your samples together", "Import a sample sheet from HybAs or another annotation workflow. Preview every sample before creating your study."),
@@ -164,13 +165,13 @@ if page == "Overview":
     cards = st.columns(4)
     for col, number, heading, detail, label, target in zip(
         cards, ("01", "02", "03", "04"),
-        ("Tools & resources", "Add samples", "Check & run", "Explore results"),
-        ("Install tool environments, then check study resources.",
-         "Import Excel, CSV or TSV with sample names or input paths.",
-         "Choose Safety, DeepSafe and Extend. Check readiness first.",
+        ("Add samples", "Run analysis", "Follow progress", "Explore results"),
+        ("Import Excel, CSV or TSV with sample names or input paths.",
+         "Choose Safety, DeepSafe and Extend. First-run setup is automatic.",
+         "Follow environment setup, downloads and analysis in the live log.",
          "Open rich reports, trees and the supporting evidence."),
-        ("Open setup →", "Add samples →", "Prepare a run →", "Open results →"),
-        ("Setup", "Samples", "Run", "Results & export")):
+        ("Add samples →", "Prepare a run →", "View progress →", "Open results →"),
+        ("Samples", "Run", "Jobs", "Results & export")):
         with col, st.container(border=True):
             st.markdown(f'<div class="basis-step">Step {number}</div>', unsafe_allow_html=True)
             st.markdown("### " + heading)
@@ -192,7 +193,8 @@ if page == "Overview":
             next_step("View saved jobs →", "Jobs", "recent_jobs")
 
 elif page == "Setup":
-    st.subheader("1. Install tool environments")
+    st.subheader("Prepare tool environments in advance")
+    st.info("New studies install required environments during the normal run. Use this optional page to prepare them in advance.")
     st.write("Snakemake creates its managed Conda environments from the tool recipes and verifies them. Existing named BaSIS environments in your selected directory are verified and reused without modification.")
     envs = st.multiselect("Select tool environments", recipe_names(), default=["core-amr", "rgi", "diamond", "context", "antismash", "mobsuite", "deepsafe"])
     with st.expander("Advanced installation options"):
@@ -293,8 +295,8 @@ elif page == "Samples":
         launch({**request, "preview": True})
     if b.button("Create new study", disabled=not source):
         launch({**request, "preview": False})
-    st.caption("Each import writes a new study inside its job folder. Open the import job for its configuration path, then check readiness before analysis.")
-    next_step("Continue to readiness & run →", "Run", "samples_next")
+    st.caption("Each import writes a new study inside its job folder. Open the import job for its configuration path, then start analysis. New studies use automatic resource preparation unless you supply an existing base configuration.")
+    next_step("Continue to run analysis →", "Run", "samples_next")
 
 elif page == "Run":
     st.subheader("Choose your study")
@@ -311,6 +313,8 @@ elif page == "Run":
         st.session_state["budget_source"] = cfg
         st.session_state["run_environment_backend"] = "external" if config["execution"].get("environment_backend") == "external" else "auto"
         st.session_state["run_conda_prefix"] = config["execution"].get("conda_prefix") or str(workspace / ".basis-envs")
+    if config is not None and config.get("resources", {}).get("policy") == "auto":
+        st.info("Automatic first-run setup is enabled. Snakemake checks inputs, installs required tool environments, and prepares missing databases and models. The first run can involve large downloads; later runs reuse verified resources.")
     st.subheader("Analysis layers")
     a, b, c = st.columns(3)
     with a, st.container(border=True):
@@ -354,7 +358,7 @@ elif page == "Run":
         launch({**request, "kind": "doctor"}, fresh)
     if b.button("Start analysis", type="primary", disabled=config is None):
         launch({**request, "kind": "run", "engine": engine}, fresh)
-    st.caption("Check readiness before the first run or after changing inputs. Each job gets its own configuration, results and placement cache. Repeated clicks reconnect to the same job unless another finished attempt is explicitly requested.")
+    st.caption("Input checks run automatically when you start. Check readiness provides an optional preview without downloads. Each job gets its own configuration, results and placement cache. Repeated clicks reconnect to the same job unless another finished attempt is explicitly requested.")
 
 elif page == "Jobs":
     st.subheader("Progress and saved jobs")

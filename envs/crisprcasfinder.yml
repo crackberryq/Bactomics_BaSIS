@@ -1,0 +1,18 @@
+# CRISPRCasFinder source and CASFinder models are separately pinned resources.
+# Source GPL-3.0-or-later; CASFinder models CC BY-NC-SA 4.0; Vmatch license separate.
+name: basis-crisprcasfinder
+channels: [conda-forge, bioconda, nodefaults]
+dependencies:
+  - python=3.10
+  - perl
+  - perl-bioperl-core
+  - perl-xml-simple
+  - perl-digest-md5
+  - macsyfinder=2.0
+  - hmmer=3.4
+  - emboss=6.6.0
+  - blast>=2.16,<3
+  - vmatch=2.3.1
+  - muscle=5.3
+  - prodigal=2.6.3
+  - curl

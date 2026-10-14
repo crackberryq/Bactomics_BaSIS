@@ -1,5 +1,9 @@
 # Deploy BaSIS 0.2.0rc13
 
+This is the historical rc13 deployment procedure. For the current rc2 pip
+installation, automatic first-run preparation and fresh study workflow, use
+[installation](INSTALL.md) and [the quickstart](GITHUB_QUICKSTART.md).
+
 The deployment bundle installs the consolidated application alongside the working pilot setup. It includes a wheel, source distribution, source tree, software-test records and captured environment provenance. It has not been publicly published, and no DOI or software license grant is implied by this bundle.
 
 ## Install alongside the pilot environment
@@ -50,7 +54,7 @@ basis setup-environments --project /absolute/path/workspace --env minced
 
 These commands print plans only. Add `--create` and explicit `--env` selections when installation is intended. Recipes are bundled with the installed package and are read-only; environment destinations default to the workspace's `.basis-envs`. The helper supports Conda, Mamba and Micromamba, skips existing prefixes, and does not download databases or run analyses.
 
-The eight bundled recipes are starting specifications. To reproduce recorded installed package versions, review the separate captured exports and their limitations in [reproducibility/README.txt](../reproducibility/README.txt). The isolate1 optional-module helper remains study-specific; it is not a general automatic taxonomic configuration service.
+The eight bundled recipes are starting specifications. To reproduce recorded installed package versions, review the separate captured exports and their limitations in `reproducibility/README.txt` in the original rc13 deployment bundle. The isolate1 optional-module helper remains study-specific; it is not a general automatic taxonomic configuration service.
 
 ## Refresh reports and navigate saved runs
 

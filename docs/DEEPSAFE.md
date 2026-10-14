@@ -1,9 +1,15 @@
-# DeepSafe follow-up in BaSIS 0.1
+# DeepSafe follow-up
 
 DeepSafe converts existing normalized screening findings into bounded, inspectable
 candidate investigations. It is a research evidence workflow, not a validated
 functional or organism-safety classifier. Enabling it does not create a new
 phenotype measurement or validate an isolate for a particular use.
+
+In rc2, a fresh full-preset study prepares the reference catalogue, domain database
+and PROSITE resources automatically when DeepSafe is requested with `-d`. It also
+enables motif, pattern and profile scans, bounded automatic phylogeny and family
+placement, subject to candidate eligibility and comparator evidence gates.
+Existing manual configurations retain their explicit settings and resources.
 
 ## What runs automatically
 
@@ -46,6 +52,7 @@ is context evidence, not proof of transferability.
 
 ## Configuration
 
+The following is a custom configuration example, not the fresh full-preset defaults.
 Place these keys in the DeepSafe configuration mapping:
 
 ```yaml
@@ -79,7 +86,7 @@ executables:
   hmmscan: hmmscan
 ```
 
-Identity and coverage values are percentages, not fractions. These defaults are
+Identity and coverage values are percentages, not fractions. These example values are
 exploratory retrieval settings, **not biologically validated decision thresholds**.
 The search retains each reference's highest-scoring individual HSP and records
 query and reference coverage for that HSP; it does not join disconnected HSPs into

@@ -35,6 +35,15 @@ module. Native files remain intact.
 
 ## Configuration
 
+A fresh full-preset study requested with `-e` automatically prepares the pinned
+local ProtT5 model and classifier resources before inference. Existing explicit
+paths are preserved. With `execution.device: auto`, the workflow probes NVIDIA
+capacity and verifies CUDA inside the inference environment, recording a CPU
+fallback when unavailable. Drivers remain an external prerequisite; BaSIS does
+not install them. `metrics.inference_device` and command logs retain the device
+check. The table below describes adapter keys and manual overrides; automatic
+resource preparation supplies the local model paths and identities.
+
 Use these keys inside the `pathogenfinder2` module configuration:
 
 | Key | Default | Meaning |
@@ -99,9 +108,11 @@ resolution. A changed FASTA, corrupt HDF5, missing manifest, or changed model
 identity blocks reuse. The main workflow should additionally fingerprint
 these paths and any local model/weight artifacts in its run provenance.
 
-The default remotely fetched ProtT5 model is not fully fixed by a PF2 source
-commit. For long-term reproducibility, use a reviewed local model and an
-immutable model identity/digest. The manifest clearly records this limitation.
+For a manual configuration that permits upstream-default model fetching, the
+ProtT5 model is not fully fixed by a PF2 source commit. The automatic full preset
+instead supplies a pinned local model snapshot. For manual long-term reuse, use a
+reviewed local model and an immutable model identity/digest; the manifest records
+the identity available for that run.
 Supplying an identity string alone does not verify the local model's bytes;
 the outer workflow must record their digest. The source revision in the
 manifest describes the supported adapter contract; use the pinned environment

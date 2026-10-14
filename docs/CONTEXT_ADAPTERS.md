@@ -1,9 +1,10 @@
 # Native context adapters
 
 These adapters report predictions and genomic context. They do not classify an
-organism as safe. Software dependencies and databases are external; this release
-contains parser and failure-path tests. Update 25 also checks live MinCED test inputs;
-native acceptance on each user installation and biological validation remain separate.
+organism as safe. Fresh full-preset studies prepare requested native dependencies and resources
+through Snakemake. Existing explicit paths remain supported. Parser and failure-path
+tests and earlier pilot runs are separate from clean-machine native acceptance and
+independent biological validation.
 
 ## Supported interfaces
 
@@ -14,8 +15,10 @@ native acceptance on each user installation and biological validation remain sep
 | `mobsuite` | `mob_recon`; `contig_report.txt` | Required prepared `database` directory |
 | `integronfinder` | `integron_finder`; `.integrons` plus `.summary` | `topology: linear` (default) or `circular`; `local_max: true` (default) |
 | `isescan` | `isescan.py`; input-basename `.tsv` | Uses the engine's installed databases |
-| `icescreen` | ICEscreen 1.3.3 CLI; `*_detected_ME.tsv` plus `.summary` | Required `sample.genbank` and explicit `phylum: bacillota` |
+| `icescreen` | ICEscreen 1.3.3 CLI; `*_detected_ME.tsv` plus `.summary` | Matching `sample.genbank` and in-scope phylum declaration or verified HybAs ancestry |
 | `minced` | MinCED 0.4.2 `-gffFull`; text and GFF | No database; Java runtime |
+| `mlst` | MLST 2.35.0; matching JSON and full TSV | Bundled PubMLST snapshot; optional reviewed scheme selection |
+| `crisprcasfinder` | CRISPRCasFinder 4.3.2; validated JSON and underlying Cas outputs | CASFinder 3.1.0 models and native dependencies; supported Linux x86-64 environment |
 
 Every module accepts `executable` and `threads`; the shared runner handles
 `command_prefix`, timeout, commands, stderr and nonzero exits. There is no shell
@@ -26,13 +29,17 @@ stale results. Use a fresh run directory.
 ICEscreen requires an annotated GenBank record including nucleotide ORIGIN.
 The adapter copies it into an isolated input folder and runs the documented
 `icescreen --galaxy -g INPUT_DIR -o OUTPUT_DIR -j JOBS --phylum bacillota` interface. Its
-signature-protein reference resources must be prepared by the tool's installer.
-The taxonomic restriction is not inferred from a string species name.
+signature-protein resources are prepared by the automatic provider, or supplied
+through an existing configured resource path. Its phylum argument is derived from
+the sample's recorded scope; a species or genus string alone is insufficient.
 
-Optional CRISPRCasFinder and MLST native execution is **not implemented**
-in this release. These are characterization analyses, not required safety
-screens. If needed, use the application's validated normalized-result import
-with tool/database provenance. No dummy success or negative output is generated.
+MLST and CRISPRCasFinder have native adapters in the full preset. An unassigned
+MLST scheme or sequence type is completed, inconclusive typing. CRISPRCasFinder
+retains component candidates separately from typed Cas systems. Its short-contig
+unordered mode and ordered-mode circular algorithm assumption are recorded;
+neither establishes physical chromosome circularity. These are characterization
+analyses, not organism-safety classifiers. Their third-party licensing remains
+separate from BaSIS's MIT license; see [installation](INSTALL.md).
 
 ## Interpretation and coordinate rules
 

@@ -75,9 +75,6 @@ def plan_sample_modules(config: dict, sample: dict, extend: bool = False) -> dic
             continue
         if module == "amrfinder" and not sample.get("amrfinder_organism"):
             warnings.append("organism_specific_coverage_not_configured")
-        if module in {"mlst", "crisprcasfinder"}:
-            decisions[module] = _decision("withheld", True, "adapter_unavailable", warnings)
-            continue
         if module == "icescreen":
             phylum = str(sample.get("taxon_phylum") or "").strip()
             context = {"taxon_phylum": phylum, "taxon_phylum_source": "sample_declaration" if phylum else "not_recorded"}

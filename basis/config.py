@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 from pathlib import Path
 
 import yaml
@@ -13,7 +14,7 @@ ALL_MODULES = CORE + OPTIONAL + ["pathogenfinder2"]
 EXECUTABLES = {"amrfinder": "amrfinder", "rgi": "rgi", "vfdb": "diamond", "bacmet": "diamond",
                "antismash": "antismash", "genomad": "genomad", "mobsuite": "mob_recon",
                "integronfinder": "integron_finder", "isescan": "isescan.py", "icescreen": "icescreen",
-               "crisprcasfinder": "CRISPRCasFinder.pl", "minced": "minced", "mlst": "mlst",
+               "crisprcasfinder": "perl", "minced": "minced", "mlst": "mlst",
                "pathogenfinder2": "pathogenfinder2"}
 PATH_KEYS = {"database", "database_manifest", "result", "profiles_dir", "reference_fasta", "reference_metadata",
              "prot_t5_path", "weights_model", "embeddings", "embeddings_manifest", "db_proteins", "metadata", "domain_database", "tree_review_registry", "motif_rules", "prosite_snapshot", "placement_registry", "placement_cache_dir"}
@@ -34,6 +35,7 @@ def default_config() -> dict:
     modules["genomad"].update(database=None, memory_mb=12000)
     modules["mobsuite"].update(database=None)
     modules["antismash"].update(database=None, memory_mb=12000)
+    modules["crisprcasfinder"].update(database=None, version_args=[])
     modules["pathogenfinder2"].update(enabled=True, attention=True, attention_top_n=20, map=False,
                                       memory_mb=16000, gpus=0,
                                       pf2_source_commit="3837caf6710da5da3038f5d1246dd82ab26e003a")
@@ -65,6 +67,29 @@ def merge_dict(base: dict, update: dict) -> dict:
     return result
 
 
+def new_study_config(preset="full", resource_dir=None) -> dict:
+    """Usable clean-install defaults; legacy loaded configurations stay explicit.
+
+    Downloads are tasks of the requested run, never an effect of initialization.
+    The first verified snapshot is reused and is not implicitly refreshed.
+    """
+    if preset not in {"core", "full"}:
+        raise ValueError("Study preset must be core or full")
+    config = default_config()
+    cache = Path(resource_dir).expanduser() if resource_dir else Path(
+        os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "bactromics-basis"
+    config["resources"] = {"policy": "auto", "directory": str(cache.resolve()), "preset": preset}
+    config["execution"].update(cores=min(4, os.cpu_count() or 1),
+                               conda_prefix=str(cache.resolve() / "environments"), device="auto")
+    if preset == "full":
+        for module in config["modules"].values():
+            module["enabled"] = True
+        config["deep"].update(prosite_profiles=True, auto_phylogeny=True,
+                              family_placement=True)
+    config["deep"]["placement_cache_dir"] = "placement-cache"
+    return config
+
+
 def load_config(path: str | Path) -> dict:
     path = Path(path).resolve()
     with path.open(encoding="utf-8") as handle:
@@ -77,6 +102,13 @@ def load_config(path: str | Path) -> dict:
     if unknown:
         raise ValueError(f"Unknown module names: {sorted(unknown)}")
     config = merge_dict(default_config(), supplied)
+    resources = config.get("resources", {})
+    if not isinstance(resources, dict) or resources.get("policy", "manual") not in {"manual", "auto"}:
+        raise ValueError("resources.policy must be auto or manual")
+    if resources.get("directory"):
+        resources["directory"] = resolve_path(str(resources["directory"]), path.parent)
+    if config["execution"].get("device", "configured") not in {"configured", "auto", "cpu", "cuda"}:
+        raise ValueError("execution.device must be configured, auto, cpu or cuda")
     if config["execution"].get("environment_backend") not in {"auto", "external", "managed"}:
         raise ValueError("execution.environment_backend must be auto, external or managed")
     conda_prefix = config["execution"].get("conda_prefix")

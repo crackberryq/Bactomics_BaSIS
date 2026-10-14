@@ -1,4 +1,4 @@
-# External annotated input — 0.2.0rc6
+# External annotated input — 0.3.0rc2
 
 BaSIS can use a bacterial assembly and matching annotations produced outside HybAs. Kraken output is not required. Set `input_mode` to `external` to skip adjacent HybAs metadata, even when the files happen to use an `isolate/annotation/` folder layout.
 
@@ -21,13 +21,12 @@ Explicit paths are relative to the source sheet, or absolute; file stems and ext
 
 ```bash
 basis import-samples --file samples.csv --input-mode external --dry-run -v
-basis import-samples --file samples.csv --input-mode external --directory study-external \
-  --base-config /absolute/path/to/reviewed-resource-config.yaml
+basis import-samples --file samples.csv --input-mode external --directory study-external
 basis validate -c study-external/config.yaml -v
 basis doctor -c study-external/config.yaml -d -e -v
 ```
 
-Use the same row/command options for preview and import. A nonblank per-row `input_mode` overrides the command default. Omitting `--base-config` creates placeholder resource paths; those require configuration before analysis. A base configuration retains its declared modules, thresholds and import modes; review them for the new sample.
+Use the same row/command options for preview and import. A nonblank per-row `input_mode` overrides the command default. Omitting `--base-config` creates the full preset with automatic first-run resources. Import downloads nothing; the normal Snakemake run prepares missing requested environments, databases and models. A base configuration retains its declared modules, thresholds and import modes; review them for the new sample.
 
 The steps answer different questions:
 
@@ -36,7 +35,7 @@ The steps answer different questions:
 | `import-samples --dry-run` | Sheet structure and file identity; creates no study. |
 | `import-samples` | Creates a new manifest, source-sheet snapshot and audit; does not run analyses. |
 | `validate` | Existing sequence consistency checks and declared module decisions; does not check installed tools or resources. |
-| `doctor` | Adds configured executable/resource checks for the requested scope; it does not execute native analyses. |
+| `doctor` | Checks requested prerequisites and existing explicit resources; automatic first-run resources are reported as planned. It does not download resources or execute native analyses. |
 
 `-v` adds stages and 30-second heartbeats to stderr. JSON stays on stdout.
 

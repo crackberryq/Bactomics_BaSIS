@@ -57,13 +57,13 @@ class WorkflowEnvironmentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "conflicts"):
             envs.environment_for_job(self.plan, "sample1", "minced")
 
-    def test_unsupported_adapters_are_withheld_without_generic_recipe(self):
-        self.plan["config"]["modules"]["mlst"]["enabled"] = True
+    def test_typing_and_defense_have_dedicated_native_recipes(self):
+        for module in ("mlst", "crisprcasfinder"):
+            self.plan["config"]["modules"][module]["enabled"] = True
         self.plan["module_decisions"] = {"sample1": plan_sample_modules(self.plan["config"], self.plan["samples"][0])}
-        self.assertIsNone(envs.environment_for_job(self.plan, "sample1", "mlst"))
-        self.plan["module_decisions"]["sample1"]["mlst"]["action"] = "run"
-        with self.assertRaisesRegex(ValueError, "unsupported module"):
-            envs.environment_for_job(self.plan, "sample1", "mlst")
+        for module in ("mlst", "crisprcasfinder"):
+            self.assertEqual(self.plan["module_decisions"]["sample1"][module]["action"], "run")
+            self.assertTrue(str(envs.environment_for_job(self.plan, "sample1", module)).endswith(module + ".yml"))
 
     def test_activation_requires_managed_location_and_completed_transaction(self):
         with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(ValueError, "activate"):

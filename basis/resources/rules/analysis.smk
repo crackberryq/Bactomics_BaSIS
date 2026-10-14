@@ -7,6 +7,7 @@ from pathlib import Path
 from basis.config import ALL_MODULES
 from basis.sample_policy import module_decision
 from basis.workflow_environments import environment_for_job
+from basis.bootstrap import bootstrap_dependencies
 
 PLAN = config
 ROOT = PLAN["outdir"]
@@ -46,6 +47,9 @@ rule all:
         RECEIPTS + "/outcome.json"
 
 
+include: "bootstrap.smk"
+
+
 rule validate_inputs:
     input:
         plan=PLAN_PATH,
@@ -62,7 +66,8 @@ rule validate_inputs:
 rule check_configured_resources:
     input:
         validation=RECEIPTS + "/{sample}/input-validation.json",
-        plan=PLAN_PATH
+        plan=PLAN_PATH,
+        prepared=lambda wc: bootstrap_dependencies(PLAN, wc.sample, wc.module)
     output:
         RECEIPTS + "/{sample}/checks/{module}.json"
     wildcard_constraints:

@@ -34,4 +34,4 @@ include = ["basis*"]
 version = {attr = "basis.__version__"}
 
 [tool.setuptools.package-data]
-basis = ["resources/*", "resources/rules/*.smk", "resources/envs/*.yml", "resources/envs/*.yaml", "resources/profiles/*.yaml", "resources/motifs/*.json", "resources/placement/*.json", "resources/placement/*.faa", "resources/placement/*.txt"]
+basis = ["resources/*", "resources/rules/*.smk", "resources/envs/*.yml", "resources/envs/*.yaml", "resources/profiles/*.yaml", "resources/motifs/*.json", "resources/placement/*.json", "resources/placement/*.faa", "resources/placement/*.txt", "resources/comparators/reviewed-v1/*", "resources/comparators/reviewed-v1/profiles/*.yaml"]

@@ -1,4 +1,4 @@
-# Batch inputs in BaSIS 0.2.0rc8
+# Batch inputs in BaSIS 0.3.0rc2
 
 The batch importer creates a new study with `samples.tsv`, `config.yaml`, an original-sheet snapshot and `import-audit.json`. It never runs annotation or analysis tools. One sample sheet can contain several isolates; the normal run produces a consolidated report.
 
@@ -21,12 +21,11 @@ Use `examples/batch/samples.xlsx` or `sample_names.tsv`. The required column is 
 ```bash
 basis import-samples --file samples.xlsx \
   --root /absolute/path/to/bactomics \
-  --directory study-batch \
-  --base-config /absolute/path/to/existing/config.yaml
+  --directory study-batch
 basis doctor -c study-batch/config.yaml -d -e
 ```
 
-The destination must not exist. `--base-config` reuses resolved tool/resource configuration but assigns fresh sample, result and placement-cache paths. It preserves declared thresholds and module selections, including import-mode settings. Without a base config, resource paths are placeholders requiring configuration. Existing sample-specific exclusions must name samples present in the new sheet.
+The destination must not exist. `--base-config` reuses resolved tool/resource configuration but assigns fresh sample, result and placement-cache paths. It preserves declared thresholds and module selections, including import-mode settings. Without a base config, the importer creates the full preset with automatic first-run resources. Import itself downloads nothing; the normal Snakemake run prepares missing requested resources. Existing sample-specific exclusions must name samples present in the new sheet.
 
 The importer refuses to transfer circular-contig declarations or a circular IntegronFinder topology from a base configuration. Those concern a particular assembly and need separate review for new samples. A default linear setting is not confirmation of physical chromosome topology.
 
@@ -54,7 +53,7 @@ A sheet can instead supply `sample_id`, `assembly`, `proteins` and `gff`, plus o
 
 The command's `--input-mode` supplies a default; a nonblank row value takes precedence. External input needs matching nucleotide FASTA, protein FASTA and GFF CDS identifiers and translations. GenBank is optional generally but required for native ICEscreen. An assembly alone receives an `annotation_required` error; annotation is not automatically generated. No Kraken output is required for external annotated input, and absent taxonomy is never inferred from a file name.
 
-Optional metadata columns are `taxon`, `taxon_rank`, `taxon_source`, `amrfinder_organism`, `taxon_phylum`, `phenotypes` and `hybas_dir`. `phenotypes` is a path to the existing JSON format. `taxon_phylum` is an explicit declaration, not a classification performed by the importer. Preserve its underlying evidence separately.
+Optional metadata columns are `taxon`, `taxon_rank`, `taxon_source`, `amrfinder_organism`, `taxon_phylum`, `phenotypes` and `hybas_dir`. `phenotypes` is a path to the existing JSON format. A supplied `taxon_phylum` remains a declaration. For HybAs inputs, a blank phylum can be filled from consistent, exact selected-target ancestry in available enabled Kraken reports, with source hashes recorded. Species is never inferred from a genus target.
 
 ## Excel and table validation
 
@@ -63,7 +62,7 @@ Optional metadata columns are `taxon`, `taxon_rank`, `taxon_source`, `amrfinder_
 Excel requires `openpyxl==3.1.5`. The deployment installer offers `--with-excel` to install it and `et-xmlfile==2.0.0` into the new venv; this explicitly permits a dependency download. The current clean deployment installer downloads Python dependencies; source checkouts use pip. Older frozen release installers may differ. A conventional wheel installation can select the optional extra:
 
 ```bash
-python -m pip install '/path/to/bactromics_basis-0.2.0rc8-py3-none-any.whl[excel]'
+python -m pip install '/path/to/bactromics_basis-0.3.0rc2-py3-none-any.whl[excel]'
 ```
 
 CSV/TSV import works without the Excel dependency. BaSIS reads formulas as formulas so it can reject them; it does not trust Excel's cached computed values. The original sheet is copied, checksummed and made read-only. Import validates table structure and file identity; `basis validate` or `basis doctor` performs sequence consistency checks. Import and execution each record their own hashes.
@@ -84,7 +83,7 @@ sample_module_overrides:
 
 These overrides only exclude modules and require a reason. They cannot activate a globally disabled module or alter thresholds. Unknown sample/module IDs fail validation. A deliberate exclusion reduces requested scope. A requested module held because prerequisites are missing remains incomplete.
 
-Unknown taxonomy produces an advisory for requested broad screenings, not a universal block. Native ICEscreen requires matching GenBank and an explicit in-scope sample phylum declaration; absent or conflicting scope information yields a recorded hold. The policy uses declarations only and does not map a genus to a lineage. Unsupported native adapters are held; existing normalized-import support remains available. This is prerequisite and declared-scope checking, not a general biological suitability classifier.
+Unknown taxonomy produces an advisory for requested broad screenings, not a universal block. Native ICEscreen requires matching GenBank and an in-scope sample phylum supplied by the user or resolved from verified HybAs selected-target ancestry. Missing or conflicting scope information yields a recorded hold; a genus name alone is not mapped to a lineage. This is prerequisite and declared-scope checking, not a general biological suitability classifier.
 
 `basis doctor`, local execution and Snakemake use the same decisions. `--force` does not bypass holds. The report's **Inputs and module scope** section shows provenance, planned action, actual execution and reasons. `module-scope.tsv` exports those fields. Saved historical evidence without decisions is labeled as not recorded; report refresh does not invent a new assessment.
 
@@ -96,7 +95,7 @@ After reviewing preflight for the desired scope:
 basis run -c study-batch/config.yaml -d -e -v
 ```
 
-The local engine processes samples serially. The optional Snakemake engine schedules jobs within the existing CPU, memory and GPU budgets. Keep the configuration, sample manifest, import audit, original sheet, software identity and resource snapshots with the outputs. Module completion, deferred candidates and unresolved interpretation remain separate report states.
+The default Snakemake engine prepares automatic first-run resources and schedules jobs within the configured CPU, memory and GPU budgets. The local compatibility engine processes samples serially and requires existing tools and manually prepared resources. Keep the configuration, sample manifest, import audit, original sheet, software identity and resource snapshots with the outputs. Module completion, deferred candidates and unresolved interpretation remain separate report states.
 
 This candidate is installed alongside earlier releases. The recovered pilot integration check is separate from independent biological validation. Software checks do not establish biological accuracy.
 

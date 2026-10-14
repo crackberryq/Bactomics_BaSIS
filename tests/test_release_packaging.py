@@ -29,7 +29,7 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertIn("version", metadata["project"]["dynamic"])
         self.assertNotIn("version", metadata["project"])
         self.assertEqual(metadata["tool"]["setuptools"]["dynamic"]["version"]["attr"], "basis.__version__")
-        self.assertEqual(basis.__version__, "0.3.0rc1")
+        self.assertEqual(basis.__version__, "0.3.0rc2")
 
     def test_packaged_recipes_match_captured_recipes(self):
         project = Path(__file__).resolve().parent.parent
@@ -41,7 +41,7 @@ class ReleasePackagingTests(unittest.TestCase):
 
     def test_runtime_assets_are_available_through_package_resources(self):
         root = files("basis").joinpath("resources")
-        for name in ("Snakefile", "SetupSnakefile", "rules/setup.smk", "motifs/rules-v1.json", "placement/registry-v2.json", "profiles/cfr_family.yaml"):
+        for name in ("Snakefile", "SetupSnakefile", "rules/setup.smk", "rules/bootstrap.smk", "motifs/rules-v1.json", "placement/registry-v2.json", "profiles/cfr_family.yaml", "comparators/reviewed-v1/references.tsv"):
             self.assertTrue(root.joinpath(name).is_file(), name)
 
     def test_plan_is_read_only_and_defaults_prefix_to_explicit_workspace(self):

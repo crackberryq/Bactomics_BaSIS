@@ -93,13 +93,15 @@ def check_resources(plan, root, sid, module):
              "module": module, "started_at": now(), "resources": {},
              "scope": "configured_path_availability; content fingerprints are verified by the scientific worker"}
     requested = plan["options"]["deep"] if module == "deepsafe" else module_decision(plan, sample, module)["action"] == "run"
-    cfg = plan["config"]["deep"] if module == "deepsafe" else module_config(plan["config"], module, sample)
     try:
         if not requested:
             value.update(status="not_requested")
         else:
             if checked["status"] != "ready":
                 raise ValueError("Input validation failed: " + checked.get("error", "unknown input error"))
+            from .bootstrap import apply_resources
+            resolved = apply_resources(plan, root, module, sample_id=sid)
+            cfg = resolved["config"]["deep"] if module == "deepsafe" else module_config(resolved["config"], module, sample)
             for key in sorted(PATH_KEYS - {"placement_cache_dir"}):
                 if cfg.get(key):
                     path = Path(cfg[key])
@@ -124,11 +126,16 @@ def _attest(plan, root, sid, module, result):
 
 def _execution_plan(plan, sample, module, allocated_threads=None):
     from .workflow_environments import execution_config
-    selected = copy.deepcopy(plan)
+    from .bootstrap import apply_resources
+    import os
+    run_id = os.environ.get("BASIS_SCHEDULER_RUN_ID")
+    # Direct unit/programmatic callers without bootstrap tasks retain the old path.
+    root = Path(plan["outdir"]) / "provenance" / "scheduler" / run_id if run_id else None
+    selected = apply_resources(plan, root, module, sample_id=sample["sample_id"]) if plan.get("bootstrap_resources") else copy.deepcopy(plan)
     if module == "deepsafe":
-        selected["config"]["deep"] = execution_config(plan, sample["sample_id"], module, selected["config"]["deep"])
+        selected["config"]["deep"] = execution_config(selected, sample["sample_id"], module, selected["config"]["deep"])
     else:
-        selected["config"]["modules"][module] = execution_config(plan, sample["sample_id"], module, selected["config"]["modules"][module])
+        selected["config"]["modules"][module] = execution_config(selected, sample["sample_id"], module, selected["config"]["modules"][module])
     if allocated_threads is not None:
         cfg = selected["config"]["deep"] if module == "deepsafe" else selected["config"]["modules"][module]
         cfg["threads"] = min(int(cfg.get("threads", 1)), allocated_threads)
