@@ -1,0 +1,51 @@
+import os
+import sys
+from pathlib import Path
+
+from basis.config import ALL_MODULES
+from basis.sample_policy import module_decision
+
+PLAN = config
+ROOT = PLAN["outdir"]
+SAMPLES = [s["sample_id"] for s in PLAN["samples"]]
+MODULES = ALL_MODULES
+PLAN_PATH = str(Path(ROOT) / "provenance" / "plans" / (PLAN["plan_hash"] + ".json"))
+PYTHON = sys.executable
+
+rule all:
+    input:
+        expand(ROOT + "/results/{sample}/{module}/result.json", sample=SAMPLES, module=MODULES),
+        expand(ROOT + "/results/{sample}/deepsafe/result.json", sample=SAMPLES)
+
+rule module:
+    output:
+        ROOT + "/results/{sample}/{module}/result.json"
+    wildcard_constraints:
+        module="|".join(MODULES)
+    threads:
+        lambda wc: min(int(PLAN["config"]["modules"][wc.module].get("threads", 1)), int(PLAN["config"]["execution"]["cores"])) if module_decision(PLAN, wc.sample, wc.module)["action"] == "run" else 1
+    resources:
+        mem_mb=lambda wc: int(PLAN["config"]["modules"][wc.module].get("memory_mb", 4000)) if module_decision(PLAN, wc.sample, wc.module)["action"] == "run" else 1,
+        gpu=lambda wc: int(PLAN["config"]["modules"][wc.module].get("gpus", 0)) if module_decision(PLAN, wc.sample, wc.module)["action"] == "run" else 0
+    params:
+        plan=PLAN_PATH,
+        python=PYTHON,
+        force="--force" if os.environ.get("BASIS_FORCE") == "1" else ""
+    shell:
+        "{params.python:q} -m basis _worker --plan {params.plan:q} --sample {wildcards.sample:q} --module {wildcards.module:q} {params.force}"
+
+rule deep:
+    input:
+        lambda wc: expand(ROOT + "/results/{sample}/{module}/result.json", sample=[wc.sample], module=MODULES)
+    output:
+        ROOT + "/results/{sample}/deepsafe/result.json"
+    threads:
+        min(int(PLAN["config"]["deep"].get("threads", 1)), int(PLAN["config"]["execution"]["cores"])) if PLAN["options"]["deep"] else 1
+    resources:
+        mem_mb=int(PLAN["config"]["deep"].get("memory_mb", 8000)) if PLAN["options"]["deep"] else 1
+    params:
+        plan=PLAN_PATH,
+        python=PYTHON,
+        force="--force" if os.environ.get("BASIS_FORCE") == "1" else ""
+    shell:
+        "{params.python:q} -m basis _worker --plan {params.plan:q} --sample {wildcards.sample:q} --module deepsafe {params.force}"

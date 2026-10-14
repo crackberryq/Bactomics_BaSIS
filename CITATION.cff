@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: If you use BaSIS, cite this software and the underlying tools and databases used in your run.
+type: software
+title: 'BaSIS: Bacterial Adaptive Safety Investigation System'
+authors:
+  - family-names: Goldstein
+    given-names: Jimi
+    orcid: https://orcid.org/0000-0002-7829-0090
+version: 0.2.0rc15
+license: MIT

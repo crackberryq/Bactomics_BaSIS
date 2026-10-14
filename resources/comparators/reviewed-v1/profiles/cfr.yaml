@@ -1,0 +1,35 @@
+schema_version: 1
+profile_id: cfr_reviewed_seed_v1
+display_name: cfr source-reviewed comparator seed panel
+validation_status: reviewed
+interpretation_policy: exploratory_only
+candidate_aliases:
+- cfr
+- cfr-like
+- cfr(B)
+- cfr(C)
+- cfr(D)
+- cfr(E)
+required_comparison_groups:
+- Cfr
+- RlmN
+anchor_reference_ids:
+- UP_Q9FBG4
+- UP_A5HBL2
+- UP_P36979
+require_anchor_similarity: true
+analyses:
+- integrity
+- context
+- references
+- domains
+resources: {}
+review:
+  reviewer: BaSIS AI-assisted source audit; not independent expert validation
+  date: '2026-10-08'
+  evidence: reviews.json and cited UniProt/primary-source records in reviewed-v1 panel
+notes:
+- Source selection reviewed; classifier NOT validated.
+- No outgroup inferred. Trees disabled pending candidate-specific architecture and
+  alignment review.
+- Anchors require an eligible whole-protein hit; partial evidence cannot bypass coverage.

@@ -1,0 +1,46 @@
+BaSIS ISEScan update 36
+
+Purpose
+Recognize ISEScan 1.7.3's early no-significant-hit return when it deliberately
+omits result tables. The previous parser recognized only the later no-IS marker.
+
+Checks for the added format
+- One ordered native execution with successful translation of the requested input.
+- One no-significant-hit warning per input contig plus an exact aggregate warning.
+- Nonempty generated proteins covering the declared contigs.
+- Completed phmmer and hmmsearch tables bound to this attempt's proteome.
+- Correct query/program metadata, valid target IDs, and no significant best-domain
+  E-values contradicting the transcript. Thresholds are unchanged.
+- Ambiguous or incomplete evidence remains an error. A zero prediction does not
+  establish biological absence or organism safety.
+
+Installation
+  python BaSIS_ISEScan_update36.pyz --check .
+  python BaSIS_ISEScan_update36.pyz .
+
+Only the source file with the exact recorded pilot SHA256 is replaced. The
+updater also installs the retry helper and regression tests. Local changes stop
+installation. Backups are created before replacement; repeat application is safe.
+
+Targeted retry
+  python BaSIS_retry_pilot6_isescan.py
+
+The helper uses the recorded isolate6 pilot batch, validates original input and
+configuration checksums, and requests only native ISEScan. DeepSafe, other native
+modules, and GPU inference are disabled in this retry. New outputs and the audit
+are saved under isolate6/isescan-retries/<timestamp-id>. Existing results and the
+pilot manifest remain unchanged. The original combined report continues to
+represent the original run until a separately verified reconciliation.
+
+Verification
+Synthetic parser regression tests cover valid multi-contig and single-contig
+output, retained legacy behavior, and rejection of partial, stale, conflicting,
+and malformed outputs. The native software was not run on the user's data in
+the development workspace; the supplied retry performs that check on the PC.
+
+Upstream format reviewed
+https://github.com/xiezhq/ISEScan/blob/v1.7.3/pred.py
+Early no-significant-hit return: lines 2563-2575.
+Later no-IS marker: lines 2718-2721.
+https://github.com/xiezhq/ISEScan/blob/v1.7.3/isPredict.py
+https://github.com/xiezhq/ISEScan/blob/v1.7.3/is_analysis.py

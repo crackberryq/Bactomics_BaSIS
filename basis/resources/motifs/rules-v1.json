@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "registry_id": "basis_motifs_v1",
+  "rules": [{
+    "rule_id": "canonical_radical_sam_cysteine_triad_v1",
+    "name": "Canonical radical-SAM cysteine triad",
+    "pattern": "C-x(3)-C-x(2)-C",
+    "domain_accessions": ["PF04055"],
+    "profile_ids": ["cfr_family", "cfr_reviewed_seed_v1"],
+    "minimum_model_coverage_for_absence": 0.9,
+    "evidence_basis": "Published shared structural/catalytic motif; not a discriminatory classifier",
+    "sources": ["https://pubmed.ncbi.nlm.nih.gov/21916495/"],
+    "limitations": ["Shared by Cfr, RlmN and other radical-SAM proteins; cannot distinguish resistance function.", "Noncanonical radical-SAM motifs exist; absence does not establish inactivity.", "Domain and motif observations are correlated sequence evidence, not independent confirmations."],
+    "function_established": false
+  }]
+}

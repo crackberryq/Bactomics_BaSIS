@@ -1,0 +1,5 @@
+name: basis-minced
+channels: [conda-forge, bioconda, nodefaults]
+dependencies:
+  - minced=0.4.2
+  - openjdk=17

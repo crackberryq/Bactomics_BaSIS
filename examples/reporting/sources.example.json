@@ -1,0 +1,4 @@
+[
+  {"sample_id": "sampleA", "evidence": "/path/to/sampleA/results/evidence.json", "origin": "Explicit saved run; add evidence_sha256 to require a recorded checksum"},
+  {"sample_id": "sampleB", "evidence": "/path/to/sampleB/results/evidence.json", "origin": "Explicit saved run"}
+]

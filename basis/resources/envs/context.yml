@@ -1,0 +1,10 @@
+# MOB-suite, antiSMASH, ISEScan and ICEscreen use separate environments.
+name: basis-context
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.11
+  - genomad>=1,<2
+  - integron_finder>=2,<3

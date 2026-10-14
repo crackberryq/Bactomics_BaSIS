@@ -1,0 +1,25 @@
+schema_version: 1
+profile_id: cfr_family
+display_name: Cfr-related protein exploratory follow-up
+validation_status: unvalidated_template
+interpretation_policy: exploratory_only
+candidate_aliases:
+  - cfr
+  - cfr-like
+  - cfr(B)
+  - cfr(C)
+  - cfr(D)
+  - cfr(E)
+  - Cfr family
+required_comparison_groups:
+  - Cfr
+  - RlmN
+anchor_reference_ids: []
+analyses: [integrity, context, references, domains, phylogeny]
+resources: {}
+review: {}
+notes:
+  - This is a registry template, not a validated classifier or a supplied reference set.
+  - Populate reviewed, versioned comparator references before interpreting a tree.
+  - A shared radical-SAM motif does not establish resistance function.
+  - Required groups are comparison labels, not evidence that catalogue labels are correct.

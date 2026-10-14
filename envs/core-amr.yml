@@ -1,0 +1,9 @@
+# Starting recipe, not a solved platform lockfile. See docs/INSTALL.md.
+name: basis-core-amr
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.11
+  - ncbi-amrfinderplus>=4,<5

@@ -1,0 +1,31 @@
+schema_version: 1
+profile_id: aac6_reviewed_seed_v1
+display_name: aac6 source-reviewed comparator seed panel
+validation_status: reviewed
+interpretation_policy: exploratory_only
+candidate_aliases:
+- aac(6')
+required_comparison_groups:
+- AAC6
+- RimI
+anchor_reference_ids:
+- UP_Q9R381
+- UP_Q54441
+- UP_P19650
+- UP_P0A944
+require_anchor_similarity: true
+analyses:
+- integrity
+- context
+- references
+- domains
+resources: {}
+review:
+  reviewer: BaSIS AI-assisted source audit; not independent expert validation
+  date: '2026-10-08'
+  evidence: reviews.json and cited UniProt/primary-source records in reviewed-v1 panel
+notes:
+- Source selection reviewed; classifier NOT validated.
+- No outgroup inferred. Trees disabled pending candidate-specific architecture and
+  alignment review.
+- Anchors require an eligible whole-protein hit; partial evidence cannot bypass coverage.

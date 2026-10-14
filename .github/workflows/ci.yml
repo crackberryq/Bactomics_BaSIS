@@ -1,0 +1,39 @@
+name: Test and build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  software-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install application and test dependencies
+        run: python -m pip install setuptools wheel twine '.[ui,excel]'
+      - name: Run software tests
+        run: python -m unittest discover -s tests
+      - name: Seal runtime manifest and build distributions
+        run: python scripts/build_release.py
+      - name: Check package metadata
+        run: python -m twine check dist/*
+      - name: Install the built wheel
+        run: python -m pip install --force-reinstall --no-deps dist/*.whl
+      - name: Verify installed wheel outside checkout
+        working-directory: /tmp
+        run: python -I -m basis verify-install
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions-python-${{ matrix.python }}
+          path: dist/

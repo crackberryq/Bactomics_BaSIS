@@ -1,0 +1,2 @@
+sample_id	assembly	proteins	gff	genbank	taxon	amrfinder_organism	phenotypes
+AFB02	/path/to/AFB02.fna	/path/to/AFB02.faa	/path/to/AFB02.gff				

@@ -1,0 +1,32 @@
+schema_version: 1
+profile_id: fos_reviewed_seed_v1
+display_name: fos source-reviewed comparator seed panel
+validation_status: reviewed
+interpretation_policy: exploratory_only
+candidate_aliases:
+- fosM
+- FosBx1
+required_comparison_groups:
+- FosB
+- GloA
+- FosM_characterized
+anchor_reference_ids:
+- UP_O31817
+- UP_P0AC81
+require_anchor_similarity: true
+analyses:
+- integrity
+- context
+- references
+- domains
+resources: {}
+review:
+  reviewer: BaSIS AI-assisted source audit; not independent expert validation
+  date: '2026-10-08'
+  evidence: reviews.json and cited UniProt/primary-source records in reviewed-v1 panel
+notes:
+- Source selection reviewed; classifier NOT validated.
+- No outgroup inferred. Trees disabled pending candidate-specific architecture and
+  alignment review.
+- Anchors require an eligible whole-protein hit; partial evidence cannot bypass coverage.
+- 'Missing comparator group: FosM_characterized'

@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-10-10",
+  "panel_id": "cfr_rlmn_source_audited_v1",
+  "reference_records": 10,
+  "unique_sequences": 9,
+  "qualified_unique_sequences": {
+    "Cfr_characterized": 4,
+    "RlmN_like_rRNA_methylation": 3
+  },
+  "excluded_references": [
+    {
+      "accession": "YP_174574.1",
+      "paper_pubmed": "22547628",
+      "reason": "The study lists assay strain domuvar, while the linked accession is KSM-K16; exact construct-to-accession sequence correspondence was not independently resolved."
+    }
+  ],
+  "downloads": [
+    {
+      "artifact_name": "ncbi.faa",
+      "sha256": "3908183f9d867b15eb2cc4a90cad6e3c6cf8d5aedbc6b4008f0145e183e1a24e",
+      "bytes": 2706
+    },
+    {
+      "artifact_name": "ncbi-records.gp",
+      "sha256": "b747bb34030e6e5cdabd86e6f3dfbf187512a1df1d6613edc82fe5cde7f90f0e",
+      "bytes": 28723
+    },
+    {
+      "artifact_name": "Q9FBG4.json",
+      "sha256": "66f8050c7b01abc4a726d9a6b27500337a568c58259d903be1d9149bcd92057e",
+      "bytes": 16741
+    },
+    {
+      "artifact_name": "A5HBL2.json",
+      "sha256": "f9eecfa44d4b64ea73ba4ea2b80c92d7488434c59346ad14255336c286f5afda",
+      "bytes": 25658
+    },
+    {
+      "artifact_name": "P36979.json",
+      "sha256": "b62fa9817c47e6767fde78c9288d0e24708007768daac4c528676a35168ffec0",
+      "bytes": 38151
+    },
+    {
+      "artifact_name": "A6QGB8.json",
+      "sha256": "ba07179a3976d26c2f55669f76b23099fced7695a20e4ca7577e64d216b769f4",
+      "bytes": 16915
+    },
+    {
+      "artifact_name": "O34617.json",
+      "sha256": "924341ee0eb00fdb09bb38c93b106b0022dd5dfdda180cee7b9f5e2b7dc9c7cc",
+      "bytes": 19961
+    }
+  ],
+  "sequence_normalization": "Uppercase amino acids, whitespace removed; no residue substitutions or engineered variants.",
+  "validation": "NCBI FASTA residues were checked against the corresponding GenPept ORIGIN sequences; UniProt sequences against their JSON sequence field.",
+  "reviewed_references": [
+    {
+      "reference_id": "UP_Q9FBG4",
+      "accession": "Q9FBG4",
+      "sequence_sha256": "fba800392d6140b7063fa3d85ed4c4eb231d04baab250b9e435ceada4abf75f1",
+      "sequence_version": "1",
+      "entry_version": "113",
+      "organism": "Mammaliicoccus sciuri",
+      "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+      "source_url": "https://rest.uniprot.org/uniprotkb/Q9FBG4.fasta",
+      "accession_source_url": "https://rest.uniprot.org/uniprotkb/Q9FBG4.json",
+      "group": "Cfr_characterized",
+      "role": "amr",
+      "review_status": "source_reviewed",
+      "evidence_basis": "experimental",
+      "pubmed_ids": [
+        "10952608",
+        "19144912"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/10952608/",
+        "https://pubmed.ncbi.nlm.nih.gov/19144912/"
+      ],
+      "evidence_notes": "C8 rRNA methylation and resistance characterized. Group membership does not transfer expression or phenotype to a query.",
+      "identity_link": "UniProt accession has explicit ECO:0000269 functional evidence for these PubMed records.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "UP_A5HBL2",
+      "accession": "A5HBL2",
+      "sequence_sha256": "fba800392d6140b7063fa3d85ed4c4eb231d04baab250b9e435ceada4abf75f1",
+      "sequence_version": "1",
+      "entry_version": "86",
+      "organism": "Staphylococcus aureus",
+      "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+      "source_url": "https://rest.uniprot.org/uniprotkb/A5HBL2.fasta",
+      "accession_source_url": "https://rest.uniprot.org/uniprotkb/A5HBL2.json",
+      "group": "Cfr_characterized",
+      "role": "amr",
+      "review_status": "source_reviewed",
+      "evidence_basis": "experimental",
+      "pubmed_ids": [
+        "16091044",
+        "18391032",
+        "21415317"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/16091044/",
+        "https://pubmed.ncbi.nlm.nih.gov/18391032/",
+        "https://pubmed.ncbi.nlm.nih.gov/21415317/"
+      ],
+      "evidence_notes": "Characterized Cfr sequence identical to Q9FBG4; retain accession provenance but count once after sequence deduplication.",
+      "identity_link": "UniProt accession has explicit ECO:0000269 functional evidence; normalized sequence equals Q9FBG4.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "NCBI_YP_001420189.1",
+      "accession": "YP_001420189.1",
+      "sequence_sha256": "955fb65748ac248e3684e543ca730fb6da068bea5ec4905af32a413f9493315c",
+      "sequence_version": "1",
+      "organism": "Bacillus amyloliquefaciens subsp. plantarum str. FZB42",
+      "locus_tag": "RBAM_005660",
+      "legacy_gi_in_publication": null,
+      "source_review_status": "NCBI archived protein sequence; function audited from linked primary study",
+      "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=protein&id=YP_001420189.1&rettype=fasta&retmode=text",
+      "accession_source_url": "https://www.ncbi.nlm.nih.gov/protein/YP_001420189.1",
+      "group": "Cfr_characterized",
+      "role": "amr",
+      "review_status": "source_reviewed",
+      "evidence_basis": "sequence_linked_experimental",
+      "pubmed_ids": [
+        "22547628"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/22547628/"
+      ],
+      "evidence_notes": "ClbA: resistance phenotype and A2503 modification supported; exact C8 chemistry was inferred in this study.",
+      "identity_link": "Primary Table 1 lists YP_001420189 and Bacillus amyloliquefaciens FZB42; archived accession version 1 matches organism and strain.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "NCBI_YP_002773985.1",
+      "accession": "YP_002773985.1",
+      "sequence_sha256": "6b6ad03daa7fd1f80c1971a3d56c39119d99ed524081b8f6475d0d0e8ca1e1c6",
+      "sequence_version": "1",
+      "organism": "Brevibacillus brevis NBRC 100599",
+      "locus_tag": "BBR47_45040",
+      "legacy_gi_in_publication": "226314089",
+      "source_review_status": "NCBI archived protein sequence; function audited from linked primary study",
+      "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=protein&id=YP_002773985.1&rettype=fasta&retmode=text",
+      "accession_source_url": "https://www.ncbi.nlm.nih.gov/protein/YP_002773985.1",
+      "group": "Cfr_characterized",
+      "role": "amr",
+      "review_status": "source_reviewed",
+      "evidence_basis": "sequence_linked_experimental",
+      "pubmed_ids": [
+        "22547628"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/22547628/"
+      ],
+      "evidence_notes": "ClbB: resistance phenotype and A2503 modification supported; exact C8 chemistry was inferred in this study.",
+      "identity_link": "Primary Table 1 lists YP_002773985.1 and Brevibacillus brevis NBRC 100599.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "NCBI_YP_003243447.1",
+      "accession": "YP_003243447.1",
+      "sequence_sha256": "048cae80063dc2a0721185be245732bc37200d9234e8180ef7852f3a8c82ddf4",
+      "sequence_version": "1",
+      "organism": "Paenibacillus sp. Y412MC10",
+      "locus_tag": "GYMC10_3402",
+      "legacy_gi_in_publication": "261407206",
+      "source_review_status": "NCBI archived protein sequence; function audited from linked primary study",
+      "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=protein&id=YP_003243447.1&rettype=fasta&retmode=text",
+      "accession_source_url": "https://www.ncbi.nlm.nih.gov/protein/YP_003243447.1",
+      "group": "Cfr_characterized",
+      "role": "amr",
+      "review_status": "source_reviewed",
+      "evidence_basis": "sequence_linked_experimental",
+      "pubmed_ids": [
+        "23752511"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/23752511/"
+      ],
+      "evidence_notes": "ClPa: C8 methylation and a modest resistance effect in the tested heterologous host; native-host phenotype is not established.",
+      "identity_link": "Study names GI 261407206 for the encoded protein; NCBI retrieval by that GI resolves to YP_003243447.1.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "UP_P36979",
+      "accession": "P36979",
+      "sequence_sha256": "dad7cadf941731cf2b1917696d1b7c5491ea46cbe3c28c615d259cdf11aa5537",
+      "sequence_version": "1",
+      "entry_version": "186",
+      "organism": "Escherichia coli (strain K12)",
+      "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+      "source_url": "https://rest.uniprot.org/uniprotkb/P36979.fasta",
+      "accession_source_url": "https://rest.uniprot.org/uniprotkb/P36979.json",
+      "group": "RlmN_like_rRNA_methylation",
+      "role": "alternative",
+      "review_status": "source_reviewed",
+      "evidence_basis": "experimental",
+      "pubmed_ids": [
+        "18025251",
+        "21415317",
+        "22891362"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/18025251/",
+        "https://pubmed.ncbi.nlm.nih.gov/21415317/",
+        "https://pubmed.ncbi.nlm.nih.gov/22891362/"
+      ],
+      "evidence_notes": "RlmN RNA methylation comparator. Alternative biochemical function does not mean universally non-AMR, susceptible or safe.",
+      "identity_link": "UniProt accession P36979, gene rlmN/yfgB, locus b2517/JW2501, has direct functional evidence.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "NCBI_YP_002773208.1",
+      "accession": "YP_002773208.1",
+      "sequence_sha256": "f2cd3856e908af4c3643f4c5f6376b69263ae7b3b59ad0300bea8d3babb5d5df",
+      "sequence_version": "1",
+      "organism": "Brevibacillus brevis NBRC 100599",
+      "locus_tag": "BBR47_37270",
+      "legacy_gi_in_publication": "226313314",
+      "source_review_status": "NCBI archived protein sequence; function audited from linked primary study",
+      "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=protein&id=YP_002773208.1&rettype=fasta&retmode=text",
+      "accession_source_url": "https://www.ncbi.nlm.nih.gov/protein/YP_002773208.1",
+      "group": "RlmN_like_rRNA_methylation",
+      "role": "alternative",
+      "review_status": "source_reviewed",
+      "evidence_basis": "sequence_linked_experimental",
+      "pubmed_ids": [
+        "23752511"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/23752511/"
+      ],
+      "evidence_notes": "NlBb: gene-linked A2503 methylation without a tested resistance increase. Source Table 1 explicitly treats C2 position as inferred.",
+      "identity_link": "Study names GI 226313314 for nlbb; NCBI retrieval by that GI resolves to YP_002773208.1, locus BBR47_37270.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "UP_A6QGB8",
+      "accession": "A6QGB8",
+      "sequence_sha256": "ad408e4c7586450c22538e801f9d4d69a67ce8d82a45ff3fe09ea4ef34c00deb",
+      "sequence_version": "1",
+      "entry_version": "104",
+      "organism": "Staphylococcus aureus (strain Newman)",
+      "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+      "source_url": "https://rest.uniprot.org/uniprotkb/A6QGB8.fasta",
+      "accession_source_url": "https://rest.uniprot.org/uniprotkb/A6QGB8.json",
+      "group": "RlmN_like_rRNA_methylation",
+      "role": "alternative",
+      "review_status": "source_reviewed",
+      "evidence_basis": "sequence_linked_experimental",
+      "pubmed_ids": [
+        "18025251"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/18025251/"
+      ],
+      "evidence_notes": "Newman NWMN_1128 knockout links this protein to rRNA modification; exact C2 identity is inferred. Susceptibility effects remain possible.",
+      "identity_link": "Primary study names NWMN_1128 in strain Newman; UniProt A6QGB8 has that exact locus and strain, and cites this experiment.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "UP_O34617",
+      "accession": "O34617",
+      "sequence_sha256": "2a13e42c63d7ac4410dc1799b1eab2e10b94cf62a783512c5a4fef31e2bd311d",
+      "sequence_version": "1",
+      "entry_version": "148",
+      "organism": "Bacillus subtilis (strain 168)",
+      "source_review_status": "UniProtKB reviewed (Swiss-Prot)",
+      "source_url": "https://rest.uniprot.org/uniprotkb/O34617.fasta",
+      "accession_source_url": "https://rest.uniprot.org/uniprotkb/O34617.json",
+      "group": null,
+      "role": "context",
+      "review_status": "source_reviewed",
+      "evidence_basis": "homology",
+      "pubmed_ids": [
+        "9384377",
+        "9534248"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/9384377/",
+        "https://pubmed.ncbi.nlm.nih.gov/9534248/"
+      ],
+      "evidence_notes": "Bacillus subtilis RlmN annotation is homology-based in the accession record; it is not counted as an experimental anchor.",
+      "identity_link": "UniProt sequence and strain checked. Organism-level methylation evidence is not sufficient to upgrade this exact protein.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    },
+    {
+      "reference_id": "NCBI_ZP_02993180.1",
+      "accession": "ZP_02993180.1",
+      "sequence_sha256": "df66c07489d2346ced7d31c4f9a7a854a03cee5a4f8ba4faea00e2f33763af85",
+      "sequence_version": "1",
+      "organism": "Clostridium sporogenes ATCC 15579",
+      "locus_tag": "CLOSPO_00222",
+      "legacy_gi_in_publication": "187776707",
+      "source_review_status": "NCBI archived protein sequence; function audited from linked primary study",
+      "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=protein&id=ZP_02993180.1&rettype=fasta&retmode=text",
+      "accession_source_url": "https://www.ncbi.nlm.nih.gov/protein/ZP_02993180.1",
+      "group": null,
+      "role": "context",
+      "review_status": "source_reviewed",
+      "evidence_basis": "function_unresolved",
+      "pubmed_ids": [
+        "23752511"
+      ],
+      "evidence_urls": [
+        "https://pubmed.ncbi.nlm.nih.gov/23752511/"
+      ],
+      "evidence_notes": "ClCs was inactive in the tested heterologous assay. The source explicitly leaves native-host activity unresolved; not a negative anchor.",
+      "identity_link": "Study names GI 187776707; NCBI retrieval resolves to ZP_02993180.1 from Clostridium sporogenes ATCC 15579.",
+      "reviewer": "BaSIS AI-assisted source audit; not independent expert validation",
+      "review_date": "2026-10-10"
+    }
+  ]
+}

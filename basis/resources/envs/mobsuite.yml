@@ -1,0 +1,6 @@
+# Starting specification using pilot tool versions; not a solved environment lock.
+name: basis-mobsuite
+channels: [conda-forge, bioconda, nodefaults]
+dependencies:
+  - python=3.11
+  - mob_suite=3.1.9

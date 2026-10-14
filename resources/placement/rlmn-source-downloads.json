@@ -1,0 +1,71 @@
+{
+  "recorded_at_utc": "2026-10-10T23:36:37.600140+00:00",
+  "files": [
+    {
+      "file": "A0ACD6TD29.json",
+      "source_url": "https://rest.uniprot.org/uniprotkb/A0ACD6TD29.json",
+      "bytes": 16607,
+      "sha256": "8f826ae7fdb4784d60968e6a073beabbf2de43d03232a99f5dba017e7af6d878"
+    },
+    {
+      "file": "Q833B6.json",
+      "source_url": "https://rest.uniprot.org/uniprotkb/Q833B6.json",
+      "bytes": 16815,
+      "sha256": "eb9df9ac8294cb6c5384323193484aae97a375fa1ebf173e3a85cba02fff24ce"
+    },
+    {
+      "file": "O34617.json",
+      "source_url": "https://rest.uniprot.org/uniprotkb/O34617.json",
+      "bytes": 19961,
+      "sha256": "924341ee0eb00fdb09bb38c93b106b0022dd5dfdda180cee7b9f5e2b7dc9c7cc"
+    },
+    {
+      "file": "AEA94342.1.gb",
+      "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=protein&id=AEA94342.1&rettype=gb&retmode=text",
+      "bytes": 2885,
+      "sha256": "52a97a1cbe56b56ec6d5c8ce41c124af7f750b393fcc43810b3c6225ee951545"
+    },
+    {
+      "file": "OG1RF_11655.cds.fna",
+      "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=CP002621.1&seq_start=1721071&seq_stop=1722144&strand=2&rettype=fasta&retmode=text",
+      "bytes": 1165,
+      "sha256": "f2e3b2e0f3fe9bdac6b301c2339776d26ab0679dd47534b74d789a895988fc1a"
+    },
+    {
+      "file": "Lee2023_supplement.pdf",
+      "source_url": "https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs41467-023-39790-x/MediaObjects/41467_2023_39790_MOESM1_ESM.pdf",
+      "bytes": 2875873,
+      "sha256": "6301b71401cde8ec3fbe33ab9d51f32c5df286a20f01f36279d20d56d96ff5b2"
+    },
+    {
+      "file": "bsub_fulltext.xml",
+      "source_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5062987/fullTextXML",
+      "bytes": 121690,
+      "sha256": "43ecc9a94955cb99e9d73565f3767b8dca6ec342737980abd69e80064c0ebba5"
+    },
+    {
+      "file": "bsub_pmc.html",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5062987/?pdf=render",
+      "bytes": 215590,
+      "sha256": "0f0d2c83838543fc0b53f9ff34afdbe4bfcd1c23747d2340e8bb8d0f038ff8af"
+    },
+    {
+      "file": "bsub_supplementary.zip",
+      "source_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5062987/supplementaryFiles",
+      "bytes": 10299520,
+      "sha256": "19b47fd58f1bde27d5125f1e67660f26c1bc2c0dd4aa443e88723c9fb088e92b",
+      "retrieval_note": "Official EuropePMC archive of article supplementary material."
+    },
+    {
+      "file": "bsub_verified_supplement.pdf",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/instance/5062987/bin/supp_gkw699_20160803_Supplementary_Information_combined.pdf",
+      "bytes": 10051911,
+      "sha256": "b3ab1a05965cd4abcffc111bd7ceb3467896cc374d9a5f801cf38f32afda3d94",
+      "retrieval_note": "PDF extracted from EuropePMC official supplementaryFiles ZIP."
+    }
+  ],
+  "notes": [
+    "Downloaded source audit artifacts; fetched biomedical records are not independent experimental replications.",
+    "bsub_supp.pdf is an unsuccessful HTML download and must not be treated as PDF/source evidence."
+  ]
+}

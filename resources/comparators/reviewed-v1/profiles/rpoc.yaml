@@ -1,0 +1,30 @@
+schema_version: 1
+profile_id: rpoc_reviewed_seed_v1
+display_name: rpoc source-reviewed comparator seed panel
+validation_status: reviewed
+interpretation_policy: exploratory_only
+candidate_aliases:
+- Mycobacterium tuberculosis rpoC mutations confer resistance to rifampicin
+required_comparison_groups:
+- RpoC_Mtb
+- RpoC_Bacillus
+anchor_reference_ids:
+- UP_P9WGY7
+- UP_P37871
+- UP_P0A8T7
+require_anchor_similarity: true
+analyses:
+- integrity
+- context
+- references
+- domains
+resources: {}
+review:
+  reviewer: BaSIS AI-assisted source audit; not independent expert validation
+  date: '2026-10-08'
+  evidence: reviews.json and cited UniProt/primary-source records in reviewed-v1 panel
+notes:
+- Source selection reviewed; classifier NOT validated.
+- No outgroup inferred. Trees disabled pending candidate-specific architecture and
+  alignment review.
+- Anchors require an eligible whole-protein hit; partial evidence cannot bypass coverage.
