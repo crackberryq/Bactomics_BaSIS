@@ -9,7 +9,8 @@ dependencies:
   - perl-xml-simple
   - perl-digest-md5
   - macsyfinder=2.0
-  - hmmer=3.4
+  # MacSyFinder 2.0 requires HMMER >=3.1b2,<=3.3.2; do not pin 3.4 here.
+  - hmmer=3.3.2
   - emboss=6.6.0
   - blast>=2.16,<3
   - vmatch=2.3.1
