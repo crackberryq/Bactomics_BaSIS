@@ -76,7 +76,7 @@ class OptionalReportTests(unittest.TestCase):
             self.assertIn(module, NAMES)
         self.assertIn("Native adapter available", OPTIONAL_SCOPE["minced"][2])
         self.assertIn("without Cas-protein typing", OPTIONAL_SCOPE["minced"][2])
-        self.assertIn("Import-only", OPTIONAL_SCOPE["crisprcasfinder"][2])
+        self.assertIn("Native adapter available", OPTIONAL_SCOPE["crisprcasfinder"][2])
 
     def test_disabled_crispr_alternative_does_not_make_minced_partial(self):
         alternative = record("crisprcasfinder", status="not_assessed")
