@@ -78,22 +78,22 @@ class ProcessSelectionTests(unittest.TestCase):
 
     def test_changed_pid_identity_is_never_signalled(self):
         with patch("basis.run_control.read_process", return_value=replace(self.process, start_time="100")), \
-                patch("basis.run_control.signal.pidfd_send_signal") as send:
+                patch("basis.run_control.pidfd_send_signal") as send:
             self.assertFalse(_signal_verified(self.process, signal.SIGTERM))
             send.assert_not_called()
 
     def test_pid_reuse_between_open_and_second_check_is_never_signalled(self):
         with patch("basis.run_control.read_process", side_effect=[self.process, replace(self.process, start_time="100")]), \
-                patch("basis.run_control.os.pidfd_open", return_value=987), \
+                patch("basis.run_control.pidfd_open", return_value=987), \
                 patch("basis.run_control.os.close") as close, \
-                patch("basis.run_control.signal.pidfd_send_signal") as send:
+                patch("basis.run_control.pidfd_send_signal") as send:
             self.assertFalse(_signal_verified(self.process, signal.SIGTERM))
             send.assert_not_called()
             close.assert_called_once_with(987)
 
     def test_foreign_uid_is_never_signalled(self):
         with patch("basis.run_control.read_process") as read, \
-                patch("basis.run_control.signal.pidfd_send_signal") as send:
+                patch("basis.run_control.pidfd_send_signal") as send:
             self.assertFalse(_signal_verified(replace(self.process, uid=os.getuid() + 1), signal.SIGTERM))
             read.assert_not_called()
             send.assert_not_called()
@@ -106,6 +106,7 @@ class ProcessSelectionTests(unittest.TestCase):
         after_interrupt = {p.pid: p for p in (orphan, unrelated)}
         finished = {unrelated.pid: unrelated}
         with patch("basis.run_control.os.readlink", return_value=str(os.getpid())), \
+                patch("basis.run_control.probe_pidfd_support"), \
                 patch("basis.run_control.process_table", side_effect=[initial, after_interrupt, after_interrupt, finished]), \
                 patch("basis.run_control._signal_verified", return_value=True) as send:
             result = stop_invocation(self.process, interrupt_grace=0, terminate_grace=0)
@@ -115,9 +116,18 @@ class ProcessSelectionTests(unittest.TestCase):
                          [(self.process.pid, signal.SIGINT), (child.pid, signal.SIGTERM),
                           (child.pid, signal.SIGKILL)])
 
+    def test_unsupported_kernel_aborts_before_any_target_signal(self):
+        with patch("basis.run_control.os.readlink", return_value=str(os.getpid())), \
+                patch("basis.run_control.probe_pidfd_support", side_effect=RuntimeError("no pidfds")), \
+                patch("basis.run_control._signal_verified") as send, \
+                patch("basis.run_control.process_table") as table:
+            with self.assertRaisesRegex(RuntimeError, "no pidfds"):
+                stop_invocation(self.process)
+        send.assert_not_called()
+        table.assert_not_called()
 
-@unittest.skipUnless(sys.platform == "linux" and hasattr(os, "pidfd_open")
-                     and hasattr(signal, "pidfd_send_signal"), "Linux pidfds required")
+
+@unittest.skipUnless(sys.platform == "linux", "Linux required")
 class OwnedProcessIntegrationTests(unittest.TestCase):
     def test_stop_owned_detached_child_leaves_unrelated_process_alive(self):
         if os.readlink("/proc/self") != str(os.getpid()):

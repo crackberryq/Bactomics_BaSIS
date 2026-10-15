@@ -1,3 +1,12 @@
+# 0.3.0rc5 — portable Linux process cancellation
+
+- Support Linux Python builds without the optional Python pidfd bindings through libc or explicit supported Linux syscall ABIs.
+- Probe pidfd availability before stopping a run; retain process identity checks and fail closed if the kernel or security policy does not permit pidfds.
+- Keep PID-bound cancellation for launcher recovery and scheduler cleanup; do not fall back to signalling an unchecked numeric PID.
+- Add an explicit isolate2 support recovery helper to stop the verified interrupted ProtT5 process tree, verify the previously downloaded local model, and rerun through Snakemake.
+
+Scientific thresholds, database providers and environment recipes are unchanged. Fresh-machine native acceptance and independent biological validation remain pending.
+
 # 0.3.0rc4 — native Snakemake visibility and failure control
 
 - Keep the normal analysis invocation within one Snakemake DAG, including rule-level Conda environments, resource preparation, native analyses, DeepSafe stages, reports and provenance.

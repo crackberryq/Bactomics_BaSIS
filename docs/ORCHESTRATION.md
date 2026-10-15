@@ -1,4 +1,4 @@
-# Snakemake orchestration in BaSIS 0.3.0rc4
+# Snakemake orchestration in BaSIS 0.3.0rc5
 
 BaSIS uses one packaged `basis/resources/Snakefile` entry point. The CLI and local interface launch the same analysis workflow. Snakemake owns dependencies, environment deployment and CPU/memory/GPU scheduling. Python workers implement scientific analyses, parsing, evidence checks and report rendering within its rules.
 
@@ -120,6 +120,8 @@ On Linux/WSL, the read-only inspection helper identifies a same-user BaSIS launc
 ```bash
 python -I -m basis.run_control -c study/config.yaml
 ```
+
+The stop helper uses Linux pidfds even when a Conda/Python build omits their Python bindings. It first probes kernel support without stopping any process. Unsupported kernels or denied syscalls stop recovery before any target signal is sent.
 
 Use the explicit `--stop` option to stop that invocation and its verified descendants before upgrading or retrying. It does not use broad process-name kills. If the launcher has already disappeared, the helper cannot establish ownership of an orphan by ancestry and will not guess. The current implementation must not be used to stop unrelated HybAs jobs.
 

@@ -2,7 +2,7 @@
   "schema": "basis-package-manifest-v1",
   "scope": "Python source and bundled runtime assets; external dependencies and data excluded",
   "sha256": {
-    "__init__.py": "1a27acdffc10ec2ac8a4a3a2684f536e5ff4d4d81f31cb22081bf04e09a9d4b3",
+    "__init__.py": "7e80bfc17b85b8e9bb4084f870bf2e33a4540ea14212ab8cb1a15ac416eff2e0",
     "__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
     "adapters/__init__.py": "8297e8e6cc29d4f7555b784097fb041bbdc6d332344921c235c3bbb81b4e3e3e",
     "adapters/amr.py": "91853a6cbde28f6c524168a0ce0dd8951817ef5d92e8a23bdfdb000866625630",
@@ -40,6 +40,7 @@
     "input_context.py": "27e74e77d3b437bbbef4ee9991b45faf3298ab6eb3e0f0bd0e349b436fa4ed73",
     "inputs.py": "a95636059c72380ca5997e2172341cae2188bb7e5f9873ea0d14edd2be2b0451",
     "jobs.py": "86e58f2805e790b6174869d0ebba2d8a72a5c787828f8a118896b654ac049e5f",
+    "linux_pidfd.py": "9f13c39ae5a9804293154a1c557b970556d2e3c39cdf1c7a8d2fb575fb95d31e",
     "motifs.py": "44aecf620d1cdf60453e07b82815e57de66a98ad3143db03f118c3ef971521b5",
     "native_environment.py": "958800f8d53c1294a5909013b7d8e766c000a1feb0cc50680231aedd09661ddf",
     "normalize.py": "c5a2274f59b24f44ffa4f64144312854f3e0a9fba6ce2d19281a61bdb60200d9",
@@ -137,7 +138,7 @@
     "resources/rules/bootstrap.smk": "f13daee32ee907f983951eb014d37b1e6a1aede6115dae6a90f64bb6f1a905a4",
     "resources/rules/resources.smk": "5f3b7ac3746def2ab4b60ae4dacd2f58436e693ea0912488920a83605b25051a",
     "resources/rules/setup.smk": "a97af40b8d39aad51febf27d492ab639787bafd3b3a79b4117e25d9056c499af",
-    "run_control.py": "9aab6d7c95eae8f016652c0db4f56bffe796b0a561ec6d33fac3acff7f464882",
+    "run_control.py": "8ca44085ea673c2ac4063868ff1a734f4d65e54a58601b36d03e8139d1594d74",
     "run_summary.py": "894132450d5adf72f94b96e3ee73ce352902f162b02431698604731f2d47fca1",
     "sample_import.py": "6aba91b2366fee00849cc61693c10830bbdf01098d31edbf5229b02c00c7e2d6",
     "sample_policy.py": "62cea882313fe4a9638cef4de7ba56d7abae8a065fb58fc85b50278ae1c8933b",
@@ -148,5 +149,5 @@
     "workflow_environments.py": "b8642f57368495c5e95c08ad6cbbed62428cdbe176c3e0bba86d1255f1ed3435",
     "workflow_runtime.py": "efd3deab57fc36c9936ffe2be0b2bbe96f1f293e1ce892996c0d1c69df4ed5ed"
   },
-  "version": "0.3.0rc4"
+  "version": "0.3.0rc5"
 }

@@ -29,7 +29,7 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertIn("version", metadata["project"]["dynamic"])
         self.assertNotIn("version", metadata["project"])
         self.assertEqual(metadata["tool"]["setuptools"]["dynamic"]["version"]["attr"], "basis.__version__")
-        self.assertEqual(basis.__version__, "0.3.0rc4")
+        self.assertEqual(basis.__version__, "0.3.0rc5")
 
     def test_packaged_recipes_match_captured_recipes(self):
         project = Path(__file__).resolve().parent.parent

@@ -1,4 +1,4 @@
-# Batch inputs in BaSIS 0.3.0rc4
+# Batch inputs in BaSIS 0.3.0rc5
 
 The batch importer creates a new study with `samples.tsv`, `config.yaml`, an original-sheet snapshot and `import-audit.json`. It never runs annotation or analysis tools. One sample sheet can contain several isolates; the normal run produces a consolidated report.
 
@@ -62,7 +62,7 @@ Optional metadata columns are `taxon`, `taxon_rank`, `taxon_source`, `amrfinder_
 Excel requires `openpyxl==3.1.5`. The deployment installer offers `--with-excel` to install it and `et-xmlfile==2.0.0` into the new venv; this explicitly permits a dependency download. The current clean deployment installer downloads Python dependencies; source checkouts use pip. Older frozen release installers may differ. A conventional wheel installation can select the optional extra:
 
 ```bash
-python -m pip install '/path/to/bactromics_basis-0.3.0rc4-py3-none-any.whl[excel]'
+python -m pip install '/path/to/bactromics_basis-0.3.0rc5-py3-none-any.whl[excel]'
 ```
 
 CSV/TSV import works without the Excel dependency. BaSIS reads formulas as formulas so it can reject them; it does not trust Excel's cached computed values. The original sheet is copied, checksummed and made read-only. Import validates table structure and file identity; `basis validate` or `basis doctor` performs sequence consistency checks. Import and execution each record their own hashes.

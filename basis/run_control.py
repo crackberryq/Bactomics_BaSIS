@@ -16,6 +16,7 @@ import signal
 import time
 
 from .config import load_config
+from .linux_pidfd import pidfd_open, pidfd_send_signal, probe_pidfd_support
 
 
 @dataclass(frozen=True)
@@ -135,17 +136,15 @@ def _signal_verified(process, sig):
     current = read_process(process.pid)
     if current is None or current.identity != process.identity:
         return False
-    if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
-        raise RuntimeError("Safe stopping requires Linux pidfd support; no fallback PID-only signal is used")
     try:
-        fd = os.pidfd_open(process.pid)
+        fd = pidfd_open(process.pid)
     except ProcessLookupError:
         return False
     try:
         current = read_process(process.pid)
         if current is None or current.identity != process.identity:
             return False
-        signal.pidfd_send_signal(fd, sig)
+        pidfd_send_signal(fd, sig)
         return True
     except ProcessLookupError:
         return False
@@ -156,8 +155,7 @@ def _signal_verified(process, sig):
 def stop_invocation(launcher, *, interrupt_grace=3.0, terminate_grace=3.0):
     if os.readlink("/proc/self") != str(os.getpid()):
         raise RuntimeError("Procfs PID namespace differs from this process; no signals sent")
-    if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
-        raise RuntimeError("Safe stopping requires Linux pidfd support; no signals sent")
+    probe_pidfd_support()
     table = process_table()
     current = table.get(launcher.pid)
     if (current is None or current.identity != launcher.identity

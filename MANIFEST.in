@@ -22,3 +22,5 @@ recursive-include helper_tests *.py
 include LICENSE
 include THIRD_PARTY_NOTICES.md
 include .gitignore
+
+recursive-include support *.py
