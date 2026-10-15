@@ -1,3 +1,15 @@
+# 0.3.0rc4 — native Snakemake visibility and failure control
+
+- Keep the normal analysis invocation within one Snakemake DAG, including rule-level Conda environments, resource preparation, native analyses, DeepSafe stages, reports and provenance.
+- Show native Snakemake output on stderr; verbose mode adds native diagnostic flags and live tool diagnostics while preserving machine-readable stdout and command logs.
+- Remove duplicate launcher/scheduler heartbeat messages.
+- Record failed jobs separately from blocked or not-started analyses, preserve their diagnostics, and return workflow failures to Snakemake.
+- Stop owned native subprocesses on interruption and provide a narrowly scoped Linux run-inspection/stop helper for older running versions.
+- Expose PathogenFinder2 input, model, device and inference stages. This does not diagnose an unseen stalled run or change the classifier.
+- Preserve resource provider identities for reuse. Scientific result cache identities remain strict; an updated source release may rerun analyses.
+
+Fresh-machine native acceptance and independent biological validation remain pending.
+
 # 0.3.0rc3 — native setup recovery
 
 Fixes failures found during the first automatic isolate2 run:

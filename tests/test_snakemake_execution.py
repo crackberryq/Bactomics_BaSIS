@@ -6,6 +6,11 @@ import copy
 import importlib.util
 import io
 import json
+import os
+import signal
+import sys
+import time
+import threading
 from pathlib import Path
 import subprocess
 import tempfile
@@ -20,28 +25,122 @@ from basis.util import atomic_json, hash_object
 
 
 class SchedulerLauncherTests(unittest.TestCase):
-    def test_verbose_scheduler_output_is_logged_and_stderr_only(self):
+    def test_scheduler_output_is_live_logged_and_stderr_only_without_verbose(self):
+        for verbose in ("0", "1"):
+            with self.subTest(verbose=verbose), tempfile.TemporaryDirectory() as directory:
+                log = Path(directory) / "snakemake.log"
+                acknowledged = Path(directory) / "progress-seen"
+
+                class LiveStderr(io.StringIO):
+                    def write(self, value):
+                        count = super().write(value)
+                        if "native progress" in value:
+                            acknowledged.touch()
+                        return count
+
+                stdout, stderr = io.StringIO(), LiveStderr()
+                child = ("import sys,time; from pathlib import Path; "
+                         "print('native stdout'); print('native stderr',file=sys.stderr); "
+                         "print('native progress',end='\\r',flush=True); "
+                         "deadline=time.monotonic()+3\n"
+                         "while not Path(%r).exists() and time.monotonic()<deadline: time.sleep(.01)\n"
+                         "sys.exit(0 if Path(%r).exists() else 7)") % (str(acknowledged), str(acknowledged))
+                command = [sys.executable, "-u", "-c", child]
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), \
+                        patch.dict(os.environ, {"BASIS_VERBOSE": verbose}):
+                    completed = _run_scheduler(command, log, os.environ.copy())
+                self.assertEqual(completed.returncode, 0)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertEqual(stderr.getvalue(), log.read_text())
+                self.assertIn("native stdout", stderr.getvalue())
+                self.assertIn("native stderr", stderr.getvalue())
+
+    def test_stalled_terminal_does_not_block_scheduler_completion(self):
+        release = threading.Event()
+        entered = threading.Event()
+
+        class StalledStderr(io.StringIO):
+            def write(self, value):
+                entered.set()
+                release.wait(5)
+                return super().write(value)
+
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "snakemake.log"
-            stdout, stderr = io.StringIO(), io.StringIO()
+            started = time.monotonic()
+            try:
+                with contextlib.redirect_stderr(StalledStderr()):
+                    result = _run_scheduler([sys.executable, "-u", "-c", "print('saved progress')"],
+                                            log, os.environ.copy())
+                self.assertEqual(result.returncode, 0)
+                self.assertTrue(entered.is_set())
+                self.assertLess(time.monotonic() - started, 3)
+                self.assertIn("saved progress", log.read_text())
+            finally:
+                release.set()
 
-            def child(command, **kwargs):
-                kwargs["stdout"].write("[sample] native worker progress\nfinal scheduler line\n")
-                kwargs["stdout"].flush()
-                return subprocess.CompletedProcess(command, 0)
+    def test_scheduler_flags_follow_verbose_setting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            plan = make_plan(load_config(create_demo(directory)), False, False)
+            for verbose in ("0", "1"):
+                with self.subTest(verbose=verbose), patch.dict(os.environ, {"BASIS_VERBOSE": verbose}), \
+                        patch("basis.pipeline._run_scheduler", return_value=subprocess.CompletedProcess([], 1)) as scheduler, \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    run_pipeline(plan, engine="snakemake")
+                command, log, env = scheduler.call_args.args
+                self.assertEqual(log.parent.name, env["BASIS_SCHEDULER_RUN_ID"])
+                self.assertEqual(log.name, "snakemake.log")
+                self.assertIn("--printshellcmds", command)
+                self.assertIn("--show-failed-logs", command)
+                self.assertIn("--keep-going", command)
+                self.assertEqual("--verbose" in command, verbose == "1")
+                self.assertEqual(env["PYTHONUNBUFFERED"], "1")
+                self.assertEqual(env["BASIS_VERBOSE"], verbose)
 
-            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), \
-                    patch("basis.pipeline.subprocess.run", side_effect=child), verbosity(True):
-                completed = _run_scheduler(["fixture"], log, {})
-            self.assertEqual(completed.returncode, 0)
-            self.assertEqual(stdout.getvalue(), "")
-            self.assertEqual(stderr.getvalue(), log.read_text())
-            self.assertIn("native worker progress", stderr.getvalue())
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process-tree cancellation")
+    def test_cancel_terminates_scheduler_and_separate_session_native_child(self):
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signum=signum), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                native = "import os,time; from pathlib import Path; Path(%r).write_text(str(os.getpid())); time.sleep(60)" % str(root / "native.pid")
+                scheduler = ("import os,subprocess,sys,time; from pathlib import Path; "
+                             "Path(%r).write_text(str(os.getpid())); "
+                             "subprocess.Popen([sys.executable,'-c',%r], start_new_session=True); "
+                             "print('scheduler started',flush=True); time.sleep(60)") % (str(root / "scheduler.pid"), native)
+                launcher = ("import os,sys; from pathlib import Path; from basis.pipeline import _run_scheduler; "
+                            "_run_scheduler([sys.executable,'-c',%r],Path(%r),os.environ.copy())") % (scheduler, str(root / "snakemake.log"))
+                proc = subprocess.Popen([sys.executable, "-c", launcher], stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, text=True)
+                pids = []
+                try:
+                    deadline = time.monotonic() + 5
+                    while not (root / "native.pid").is_file() and time.monotonic() < deadline:
+                        time.sleep(.02)
+                    self.assertTrue((root / "native.pid").is_file())
+                    pids = [int((root / name).read_text()) for name in ("scheduler.pid", "native.pid")]
+                    proc.send_signal(signum)
+                    stdout, stderr = proc.communicate(timeout=10)
+                    self.assertNotEqual(proc.returncode, 0)
+                    self.assertEqual(stdout, "")
+                    self.assertIn("scheduler started", stderr)
+                    for pid in pids:
+                        path = Path(f"/proc/{pid}/stat")
+                        self.assertTrue(not path.exists() or path.read_text().rsplit(")", 1)[1].split()[0] == "Z",
+                                        f"Owned process {pid} survived cancellation")
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                    proc.communicate(timeout=10)
+                    for pid in pids:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
 
     def test_scheduler_start_failure_still_writes_explicit_failed_report(self):
         with tempfile.TemporaryDirectory() as directory:
             plan = make_plan(load_config(create_demo(directory)), False, False)
-            with patch("basis.pipeline.subprocess.run", side_effect=OSError("synthetic launch failure")):
+            with patch("basis.pipeline._run_scheduler", side_effect=OSError("synthetic launch failure")):
                 result, code = run_pipeline(plan, engine="snakemake")
             self.assertEqual(code, 2)
             self.assertIn("could not start", result["run"]["engine_error"])
@@ -49,7 +148,7 @@ class SchedulerLauncherTests(unittest.TestCase):
             evidence = json.loads(Path(result["artifacts"]["evidence_json"]).read_text())
             requested = [r for r in evidence["records"] if r["module_decision"]["requested"]]
             self.assertTrue(requested)
-            self.assertEqual({r["execution_status"] for r in requested}, {"failed"})
+            self.assertEqual({r["execution_status"] for r in requested}, {"not_started"})
             self.assertEqual({r["execution_status"] for r in evidence["deep_records"]}, {"not_assessed"})
             self.assertEqual({r["reason"] for r in evidence["deep_records"]}, {"deepsafe_not_requested"})
             self.assertTrue(Path(result["artifacts"]["html"]).is_file())
@@ -64,20 +163,20 @@ class SchedulerLauncherTests(unittest.TestCase):
             _, code = run_pipeline(plan)
             self.assertEqual(code, 0)
 
-            def scheduler(command, **kwargs):
-                run_id = kwargs["env"]["BASIS_SCHEDULER_RUN_ID"]
+            def scheduler(command, logfile, env):
+                run_id = env["BASIS_SCHEDULER_RUN_ID"]
                 receipt = Path(plan["outdir"]) / "provenance/scheduler" / run_id / "DEMO_A/amrfinder.json"
                 run_worker(plan["plan_path"], "DEMO_A", "amrfinder", receipt=str(receipt))
                 return subprocess.CompletedProcess(command, 1)
 
-            with patch("basis.pipeline.subprocess.run", side_effect=scheduler):
+            with patch("basis.pipeline._run_scheduler", side_effect=scheduler):
                 result, code = run_pipeline(plan, engine="snakemake")
             self.assertEqual(code, 2)
             evidence = json.loads(Path(result["artifacts"]["evidence_json"]).read_text())
             requested = [r for r in evidence["records"] if r["module_decision"]["requested"]]
             completed = [(r["sample_id"], r["module"]) for r in requested if r["execution_status"] == "completed"]
             self.assertEqual(completed, [("DEMO_A", "amrfinder")])
-            self.assertEqual(sum(r["execution_status"] == "failed" for r in requested), len(requested) - 1)
+            self.assertEqual(sum(r["execution_status"] == "not_started" for r in requested), len(requested) - 1)
 
     def test_bootstrap_failure_fallback_reports_roots_and_blocked_resources(self):
         from basis.bootstrap import receipt_path
@@ -89,8 +188,8 @@ class SchedulerLauncherTests(unittest.TestCase):
                 {"id": "deep_catalogue", "targets": ["deepsafe"], "dependencies": ["card"], "cache_key": "catalogue-test"},
             ]
 
-            def scheduler(command, **kwargs):
-                run_id = kwargs["env"]["BASIS_SCHEDULER_RUN_ID"]
+            def scheduler(command, logfile, env):
+                run_id = env["BASIS_SCHEDULER_RUN_ID"]
                 root = Path(plan["outdir"]) / "provenance/scheduler" / run_id
                 _write(receipt_path(root, "card"), {"schema": "basis-bootstrap-receipt-v1",
                     "run_id": run_id, "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
@@ -99,7 +198,7 @@ class SchedulerLauncherTests(unittest.TestCase):
                 run_worker(plan["plan_path"], "DEMO_A", "amrfinder", receipt=str(root / "DEMO_A/amrfinder.json"))
                 return subprocess.CompletedProcess(command, 1)
 
-            with patch("basis.pipeline.subprocess.run", side_effect=scheduler), \
+            with patch("basis.pipeline._run_scheduler", side_effect=scheduler), \
                     patch("basis.bootstrap.bootstrap_uses_conda", return_value=False):
                 result, code = run_pipeline(plan, engine="snakemake")
             self.assertEqual(code, 2)
@@ -169,8 +268,9 @@ class NativeSchedulerSyntheticTests(unittest.TestCase):
             self.assertTrue((receipts / name).is_file())
         from basis.deep_stages import STAGES
         for sid in ("DEMO_A", "DEMO_B"):
-            self.assertEqual({p.stem for p in (receipts / sid / "deep-stages").glob("*.json")}, set(STAGES))
-        scheduler_log = (Path(plan["outdir"]) / "snakemake.log").read_text()
+            self.assertEqual({p.stem for p in (receipts / sid / "deep-stages").glob("*.json")
+                              if not p.name.endswith(".ready.json")}, set(STAGES))
+        scheduler_log = Path(first["run"]["scheduler_log"]).read_text()
         for name in ("validate_inputs", "amrfinder", "pathogenfinder2", "deep_domains", "deep_phylogeny", "deep_patterns", "capture_provenance"):
             self.assertIn(name, scheduler_log)
         for deep in evidence["deep_records"]:
@@ -214,17 +314,26 @@ class NativeSchedulerSyntheticTests(unittest.TestCase):
         atomic_json(bad, value)
         result, code, evidence = self.run_plan(make_plan(self.cfg, True, True))
         self.assertEqual(code, 2)
-        self.assertNotIn("engine_error", result["run"])
+        self.assertIn("engine_error", result["run"])
+        self.assertEqual(result["run"]["reporting_mode"], "launcher_infrastructure_fallback")
         failed = next(r for r in evidence["records"] if r["sample_id"] == "DEMO_A"
                       and r["module"] == "pathogenfinder2")
         self.assertEqual(failed["execution_status"], "failed")
         self.assertEqual(failed["interpretation"], "inconclusive")
         deep = {r["sample_id"]: r for r in evidence["deep_records"]}
         self.assertEqual(deep["DEMO_A"]["upstream_incomplete"], ["pathogenfinder2"])
+        self.assertEqual(deep["DEMO_A"]["execution_status"], "blocked")
         self.assertEqual(deep["DEMO_B"]["execution_status"], "completed")
         self.assertEqual(deep["DEMO_B"]["upstream_incomplete"], [])
         self.assertTrue(Path(result["artifacts"]["html"]).is_file())
         self.assertTrue(Path(result["run"]["evidence_snapshot"]).is_file())
+        receipts = Path(result["run"]["scheduler_receipt_dir"])
+        self.assertTrue((receipts / "DEMO_A/pathogenfinder2.json").is_file(), "Failure diagnostics must survive Snakemake cleanup")
+        self.assertFalse((receipts / "DEMO_A/pathogenfinder2.ready.json").exists())
+        self.assertTrue((receipts / "DEMO_A/amrfinder.ready.json").is_file(), "Independent jobs must complete")
+        self.assertFalse((receipts / "DEMO_A/deep-stages/prepare.json").exists(), "Dependent DeepSafe must not start")
+        self.assertFalse((receipts / "outcome.json").exists(), "Normal DAG reporting target must remain blocked")
+        self.assertIn(failed["error"], (receipts / "DEMO_A/logs/pathogenfinder2.log").read_text())
 
 
 if __name__ == "__main__":

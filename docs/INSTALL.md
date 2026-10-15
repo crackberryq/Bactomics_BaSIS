@@ -1,13 +1,13 @@
-# Install and run BaSIS 0.3.0rc3
+# Install and run BaSIS 0.3.0rc4
 
 Use Linux x86-64 or Ubuntu inside WSL2, Python 3.11+, Git and Conda on PATH. The GitHub source release is pip-installable; no public PyPI release is claimed. NVIDIA hardware and drivers are optional for Extend acceleration.
 
 ## 1. Install the application
 
 ```bash
-python3 -m venv basis-0.3.0rc3
-source basis-0.3.0rc3/bin/activate
-python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc3'
+python3 -m venv basis-0.3.0rc4
+source basis-0.3.0rc4/bin/activate
+python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc4'
 python -m pip check
 basis verify-install
 ```

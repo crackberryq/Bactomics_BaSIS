@@ -65,7 +65,7 @@ def num(x):
 
 
 def badge(value, tone=None):
-    tone = tone or {'completed': 'ok', 'failed': 'bad', 'unknown': 'warn',
+    tone = tone or {'completed': 'ok', 'failed': 'bad', 'unknown': 'warn', 'blocked': 'warn', 'not_started': 'warn',
                     'not_assessed': 'neutral', 'not_detected': 'neutral'}.get(str(value), 'info')
     return '<span class="badge ' + tone + '">' + esc(human(value)) + '</span>'
 
@@ -317,23 +317,26 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     completed = sum(r._execution(v) == 'completed' for v in requested)
     failed = sum(r._execution(v) in {'failed','unknown'} for v in requested)
     done = sum(c.get('execution') == 'completed' for _, c in selected)
+    selection_unavailable = not selected and any(r._execution(rec) in {'failed', 'blocked', 'not_started'} for rec in deep_records)
     sids = sorted({r._sample_id(v) for v in combined} | {str(s.get('sample_id','unknown')) for s in samples})
     q = Counter(c.get('selection_queue','exploratory') for _, c in selected)
     branding = '<svg width="34" height="34" viewBox="0 0 36 36" aria-hidden="true"><rect width="36" height="36" rx="10" fill="#1ba9a0"/><path d="M10 10h9a5 5 0 0 1 0 10h-9m0-5h11a5 5 0 0 1 0 10H10V10" fill="none" stroke="white" stroke-width="2.4"/></svg>'
     nav = ''.join('<a class="nav-link" href="#' + ident + '"><span>' + number + '</span>' + title + '</a>' for ident,number,title in [('overview','01','Overview'),('inputs','02','Inputs & scope'),('genome','03','Genome explorer'),('evidence-matrix','04','Evidence matrix'),('screens','05','Core screens'),('extend','06','Extend · ML'),('deep','07','DeepSafe'),('recommendations','08','Review priorities'),('provenance','09','Provenance')])
     start = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>BaSIS · Genomic evidence report</title><style>' + CSS + '</style></head><body><a class="skip-link" href="#overview">Skip to report</a><div class="app"><aside class="sidebar"><a class="brand" href="#overview">' + branding + '<span>BaSIS<small>BACTOMICS ENVIRONMENT</small></span></a><div class="sidebar-caption">GENOMIC EVIDENCE REPORT</div><nav aria-label="Report sections">' + nav + '</nav><div class="sidebar-bottom"><span class="status-dot"></span> Offline report<small>Version ' + esc(run.get('version')) + '<br>Research screening evidence</small></div></aside><main class="main"><div class="topbar"><span>Bactomics <span class="muted">/</span> BaSIS <span class="muted">/ Genomic assessment</span></span><div class="topbar-actions"><a class="button" href="#deep-navigator">Evidence navigator</a><a class="button" href="#citation">Cite BaSIS</a><button class="button" data-action="print">Print / Save PDF</button></div></div>'
     all_done = requested_count > 0 and completed == requested_count
-    headline = ('Requested modules completed' if not selected else 'Selected analyses completed') if all_done and done == len(selected) else 'Execution review required'
+    headline = ('Requested modules completed' if not selected else 'Selected analyses completed') if all_done and done == len(selected) and not run.get('engine_error') else 'Execution review required'
     hero = '<header class="hero"><div><p class="eyebrow">CORE SCREENING · DEEP EVIDENCE · MODEL INSIGHT</p><h1>Genomic evidence,<br>ready for review.</h1><p>Trace the screening calls, inspect focused analyses,<br class="desktop-only"> and see exactly what remains unresolved.</p><div class="hero-meta">' + badge(headline, 'ok' if all_done and done == len(selected) else 'warn') + '<span>' + esc(_date(run.get('finished_at'))) + '</span></div></div><div class="hero-art" aria-hidden="true"><svg viewBox="0 0 250 210"><g fill="none" stroke="#60d4c4" stroke-width="1.5" opacity=".65"><circle cx="125" cy="105" r="82"/><circle cx="125" cy="105" r="65" stroke-dasharray="5 9"/><ellipse cx="125" cy="105" rx="37" ry="82" transform="rotate(35 125 105)"/><path d="M49 75L172 40 192 130 91 174 49 75 192 130M91 174L172 40"/></g><g fill="#abf0df"><circle cx="49" cy="75" r="6"/><circle cx="172" cy="40" r="8"/><circle cx="192" cy="130" r="5"/><circle cx="91" cy="174" r="7"/></g><text x="125" y="112" text-anchor="middle" fill="white" font-size="29" font-family="sans-serif">BaSIS</text></svg></div></header>'
-    overview = hero + '<div class="stats">' + stat('Requested modules', f'{completed} / {requested_count}', 'completed execution · explicit exclusions omitted; holds retained') + stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'None selected', 'completed DeepSafe analyses' if selected else 'no selected-candidate analyses requested') + stat('Deferred candidates', num(len(deferred)), 'retained for later exploratory review') + stat('Execution failures', num(failed), 'failed or unknown requested module records') + '</div>'
+    overview = hero + '<div class="stats">' + stat('Requested modules', f'{completed} / {requested_count}', 'completed execution · explicit exclusions omitted; holds retained') + stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'Unavailable' if selection_unavailable else 'None selected', 'completed DeepSafe analyses' if selected else 'candidate selection unavailable — inspect execution issues' if selection_unavailable else 'no selected-candidate analyses requested') + stat('Deferred candidates', num(len(deferred)), 'retained for later exploratory review') + stat('Execution failures', num(failed), 'failed or unknown requested module records') + '</div>'
     overview += '<div class="callout"><strong>Execution and interpretation are separate.</strong><p>Recorded overall scope: ' + esc(human(run.get('completeness'))) + '. ' + num(len(deferred)) + ' candidates remain deferred. Completed analyses do not establish protein function or organism safety.</p></div>'
     failed_resources = [item for item in run.get('resource_preparation', [])
                         if item.get('status') in {'failed', 'blocked', 'not_started'}]
-    failed_records = [rec for rec in requested if r._execution(rec) in {'failed', 'unknown'}]
+    failed_records = [rec for rec in requested if r._execution(rec) in {'failed', 'blocked', 'not_started', 'unknown'}]
     if failed_resources or failed_records or run.get('engine_error'):
-        issues = '<article class="panel" id="execution-issues"><h3>Execution issues</h3><p>Resolve these preparation or execution failures before interpreting the affected screens. Independent completed results retain their recorded status.</p>'
+        issues = '<article class="panel" id="execution-issues"><h3>Execution issues</h3><p>Failed workers, blocked dependencies and jobs not started are listed separately below. Independent completed results retain their recorded status.</p>'
         if run.get('engine_error'):
             issues += '<p class="small">' + esc(run['engine_error']) + '</p>'
+        if run.get('scheduler_log'):
+            issues += r._artifact_list([{'path': run['scheduler_log'], 'label': 'Snakemake scheduler log'}], outdir)
         if failed_resources:
             issues += '<h4>Resource preparation</h4>' + table(
                 ['Resource', 'Status', 'Recorded cause', 'Blocked by', 'Diagnostics'],
@@ -345,8 +348,9 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
                                     if item.get(key)], outdir)) for item in failed_resources])
         if failed_records:
             issues += '<details class="evidence-list"><summary>Affected module records (' + str(len(failed_records)) + ')</summary>' + table(
-                ['Sample', 'Module', 'Recorded cause', 'Evidence'],
+                ['Sample', 'Module', 'Execution status', 'Recorded cause', 'Evidence'],
                 [(esc(r._sample_id(rec)), esc(NAMES.get(r._module(rec), r._module(rec))),
+                  badge(r._execution(rec)),
                   esc(rec.get('error') or rec.get('reason') or 'No completed result recorded.'),
                   link(raw_paths[id(rec)], 'Evidence', 'text-link')) for rec in failed_records]) + '</details>'
         overview += issues + '</article>'
@@ -436,8 +440,10 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     extend += render_attention_explorer(records, selected)
     content += section('extend','06','Extend · model insight','The native prediction, ensemble variation and attention coverage in one place.',extend)
     selected_execution = str(done) + ' / ' + str(len(selected)) + ' completed' if selected else 'no candidates selected'
-    if not selected and any(r._execution(rec) == 'failed' for rec in deep_records):
-        selected_execution = 'unavailable — DeepSafe execution failed or was blocked'
+    if not selected and any(r._execution(rec) in {'failed', 'blocked', 'not_started'} for rec in deep_records):
+        states = ', '.join(sorted({human(r._execution(rec)) for rec in deep_records
+                                  if r._execution(rec) in {'failed', 'blocked', 'not_started'}}))
+        selected_execution = 'unavailable — DeepSafe ' + states
     elif not selected and not (run.get('options') or {}).get('deep'):
         selected_execution = 'not requested — no candidates selected'
     deep = '<div class="panel"><div class="panel-head"><div><h3>Deep family assessment</h3><p class="muted">' + str(len(selected)) + ' selected candidates · ' + str(q['native_screen']) + ' from core screens · ' + str(q['ml_attention']) + ' from ML attention</p></div>' + link('deferred-candidates.tsv','Deferred queue · TSV') + '</div><p>Selected execution: <strong>' + selected_execution + '</strong>. Biological interpretations and review holds remain attached to each candidate.</p>'

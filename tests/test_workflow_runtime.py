@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import copy
+import contextlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -15,7 +17,7 @@ from basis.pipeline import (_base_record, _read_scheduler_result, execute_deep,
                             make_plan, record_path, run_worker)
 from basis.util import atomic_json, hash_object, now
 from basis.workflow_runtime import (check_resources, read_document, run_deep_stage,
-                                    run_module, validate_inputs)
+                                    run_module, validate_inputs, ready_path, main)
 
 
 class StagedWorkflowTests(unittest.TestCase):
@@ -66,7 +68,11 @@ class StagedWorkflowTests(unittest.TestCase):
         result = _read_scheduler_result(self.plan, self.sid, "deepsafe", self.root)
         self.assertEqual(result["execution_status"], "failed")
         self.assertIn("synthetic native domain failure", result["error"])
-        self.assertEqual(result["candidates"], [])
+        self.assertTrue(result["candidates"], "Partial extraction evidence must survive the failed stage")
+        self.assertTrue(any(c.get("query") for c in result["candidates"]))
+        self.assertEqual(result["failed_stage"], "domains")
+        self.assertFalse(ready_path(self.root / self.sid / "deep-stages/domains.json").exists())
+        self.assertFalse(ready_path(self.root / self.sid / "deepsafe.json").exists())
         self.assertEqual(read_document(self.root / self.sid / "deep-stages/references.json")["status"], "blocked")
 
     def test_valid_whole_result_cache_makes_all_stage_workers_explicit_noops(self):
@@ -128,7 +134,7 @@ class StagedWorkflowTests(unittest.TestCase):
         self.assertEqual(retry["reason"], "output_exists_without_committed_stage_receipt")
         self.assertEqual(value["status"], "completed")
 
-    def test_resource_failure_records_failed_module_without_invoking_adapter(self):
+    def test_resource_failure_records_blocked_module_without_invoking_adapter(self):
         source = Path(self.plan["config"]["modules"]["amrfinder"]["result"].replace("{sample_id}", self.sid))
         source.unlink()
         check = check_resources(self.plan, self.root, self.sid, "amrfinder")
@@ -136,9 +142,10 @@ class StagedWorkflowTests(unittest.TestCase):
         with patch("basis.workflow_runtime.execute_module") as execute:
             result = run_module(self.plan, self.root, self.sid, "amrfinder")
             execute.assert_not_called()
-        self.assertEqual(result["execution_status"], "failed")
+        self.assertEqual(result["execution_status"], "blocked")
         self.assertIn("Configured resource does not exist", result["error"])
-        self.assertEqual(_read_scheduler_result(self.plan, self.sid, "amrfinder", self.root)["execution_status"], "failed")
+        self.assertEqual(_read_scheduler_result(self.plan, self.sid, "amrfinder", self.root)["execution_status"], "blocked")
+        self.assertFalse(ready_path(self.root / self.sid / "amrfinder.json").exists())
 
     def test_changed_input_gate_blocks_native_execution(self):
         protein = Path(self.sample["proteins"])
@@ -149,7 +156,7 @@ class StagedWorkflowTests(unittest.TestCase):
         with patch("basis.workflow_runtime.execute_module") as execute:
             result = run_module(self.plan, self.root, self.sid, "amrfinder")
             execute.assert_not_called()
-        self.assertEqual(result["execution_status"], "failed")
+        self.assertEqual(result["execution_status"], "blocked")
         self.assertIn("changed after planning", result["error"])
 
     def test_scheduled_thread_allocation_is_the_native_worker_limit(self):
@@ -165,6 +172,61 @@ class StagedWorkflowTests(unittest.TestCase):
         with patch("basis.workflow_runtime.execute_module", side_effect=execute):
             run_module(self.plan, self.root, self.sid, "amrfinder", allocated_threads=2)
         self.assertEqual(observed, [2])
+
+    def test_failed_worker_returns_nonzero_and_preserves_receipt_for_scheduler(self):
+        check_resources(self.plan, self.root, self.sid, "amrfinder")
+        def fail(plan, sample, module, force):
+            value = _base_record(plan, sample, module)
+            value.update(execution_status="failed", error="synthetic adapter exit 17")
+            atomic_json(record_path(plan, self.sid, module), value)
+            return value
+        errors = io.StringIO()
+        with patch("basis.workflow_runtime._load", return_value=(self.plan, self.root, {})), \
+                patch("basis.workflow_runtime.execute_module", side_effect=fail), contextlib.redirect_stderr(errors):
+            code = main(["module", "--plan", self.plan["plan_path"], "--run-dir", str(self.root),
+                         "--sample", self.sid, "--module", "amrfinder"])
+        self.assertEqual(code, 1)
+        self.assertIn("synthetic adapter exit 17", errors.getvalue())
+        self.assertEqual(_read_scheduler_result(self.plan, self.sid, "amrfinder", self.root)["execution_status"], "failed")
+        self.assertFalse(ready_path(self.root / self.sid / "amrfinder.json").exists())
+
+    def test_changed_input_revokes_existing_ready_marker_and_returns_failure(self):
+        receipt = self.root / self.sid / "input-validation.json"
+        self.assertTrue(ready_path(receipt).is_file())
+        proteins = Path(self.sample["proteins"])
+        proteins.write_text(proteins.read_text() + "\n")
+        with patch("basis.workflow_runtime._load", return_value=(self.plan, self.root, {})), \
+                contextlib.redirect_stderr(io.StringIO()):
+            code = main(["validate", "--plan", self.plan["plan_path"], "--run-dir", str(self.root), "--sample", self.sid])
+        self.assertEqual(code, 1)
+        self.assertEqual(read_document(receipt)["status"], "failed")
+        self.assertFalse(ready_path(receipt).exists())
+
+    def test_caught_candidate_tool_failure_stops_stage_and_retains_partial_evidence(self):
+        self.stage("prepare")
+        with patch("basis.deep._scan_domains", side_effect=RuntimeError("synthetic hmmscan failure")):
+            value = self.stage("domains")
+        self.assertEqual(value["status"], "failed")
+        result = _read_scheduler_result(self.plan, self.sid, "deepsafe", self.root)
+        self.assertEqual(result["execution_status"], "failed")
+        self.assertGreater(result["metrics"]["failed_candidates"], 0)
+        self.assertTrue(any(c.get("query") and c.get("analyses", {}).get("context") for c in result["candidates"]))
+        self.assertIn("synthetic hmmscan failure", result["error"])
+        self.assertFalse(ready_path(self.root / self.sid / "deep-stages/domains.json").exists())
+
+    def test_failed_deep_resource_gate_blocks_scientific_preparation(self):
+        from basis.workflow_runtime import _write
+        path = self.root / self.sid / "checks/deepsafe.json"
+        gate = read_document(path)
+        gate.update(status="failed", error="synthetic missing domain database")
+        _write(path, gate)
+        with patch("basis.workflow_runtime.prepare_deep_execution") as prepare:
+            value = self.stage("prepare")
+        prepare.assert_not_called()
+        self.assertEqual(value["status"], "blocked")
+        result = _read_scheduler_result(self.plan, self.sid, "deepsafe", self.root)
+        self.assertEqual(result["execution_status"], "blocked")
+        self.assertIn("check_configured_resources", result["blocked_by"])
 
 
 if __name__ == "__main__":

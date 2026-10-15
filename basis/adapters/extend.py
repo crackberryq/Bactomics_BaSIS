@@ -13,6 +13,8 @@ from pathlib import Path
 import re
 import statistics
 
+from ..progress import emit
+
 
 PF2_SOURCE_COMMIT = "3837caf6710da5da3038f5d1246dd82ab26e003a"
 PF2_VERSION = "0.7.1"
@@ -276,9 +278,24 @@ def run(module: str, sample: dict, config: dict, outdir: Path, runner) -> dict:
     for key, flag in [("prot_t5_path", "--protT5Path"), ("weights_model", "--weightsModel")]:
         if config.get(key):
             argv += [flag, str(config[key])]
+    emit("PathogenFinder2 input: " + str(len(headers)) + " proteins | " + str(proteins))
+    emit("PathogenFinder2 stage: checking inference device")
     from ..devices import verify_inference_device
     device = verify_inference_device(config, runner)
-    runner.run(argv, cwd=outdir)
+    if device is None:
+        budget = config.get("gpus", getattr(runner, "gpus", None))
+        emit("PathogenFinder2 device: " + ("CPU (CUDA disabled by configured GPU budget)"
+             if budget == 0 else "native auto-selection; actual CUDA availability not yet verified"))
+    emit("PathogenFinder2 ProtT5: " + str(config.get("prot_t5_path") or
+         "upstream default remote model; no local model path configured"))
+    emit("PathogenFinder2 classifier weights: " + str(config.get("weights_model") or "bundled with tool"))
+    if reused:
+        emit("PathogenFinder2 stage: classifier inference from checksum-verified embeddings")
+    else:
+        emit("PathogenFinder2 stage: load ProtT5, embed full proteome, then run " +
+             str(expected_models) + " classifiers; native progress follows")
+    runner.run(argv, cwd=outdir, stream_stdout=True)
+    emit("PathogenFinder2 stage: validating predictions and extracting attention")
     result = collect_outputs(sample, config, outdir, runner, native=native)
     if device is not None:
         result.setdefault("metrics", {})["inference_device"] = device
@@ -305,6 +322,7 @@ def collect_outputs(sample, config, outdir, runner, *, native=None):
                                 validate_scores=validate_scores)
     embeddings = embeddings or native / "predictionPF2" / "preprocess_PF2" / "ProteinEmbeddings.h5"
     _nonempty(embeddings)
+    emit("PathogenFinder2 stage: recording proteome and embedding checksums")
     manifest = {
         "schema": "basis-pf2-embeddings-v1", "proteome_sha256": _sha256(proteins),
         "embeddings_sha256": _sha256(embeddings), "pf2_source_commit": PF2_SOURCE_COMMIT,
@@ -321,6 +339,7 @@ def collect_outputs(sample, config, outdir, runner, *, native=None):
         attention_json = outdir / "attention_native.json"
         runner.run([str(config.get("python_executable", "python")), "-c", _ATTENTION_EXPORT,
                     str(attention_npz), str(embeddings)], stdout_path=attention_json, cwd=outdir)
+        emit("PathogenFinder2 stage: validating attention coverage for " + str(len(headers)) + " proteins")
         scores = parse_attention_json(attention_json, proteins, expected_models=expected_models,
                                       validate_scores=validate_scores)
         scores_path = outdir / "attention_scores.tsv"

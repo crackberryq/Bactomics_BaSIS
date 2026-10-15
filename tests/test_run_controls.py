@@ -203,7 +203,8 @@ class SyntheticRunControlTests(unittest.TestCase):
                     code, output, error = self.invoke(["demo", "--outdir", str(Path(directory) / output_mode),
                                                        "-vde", "--output", output_mode])
                     self.assertEqual(code, 0, error)
-                    self.assertIn("Pipeline execution", error)
+                    self.assertIn("Sample 1/2 [DEMO_A]", error)
+                    self.assertNotIn("Pipeline execution and final reporting — still running", error)
                     if output_mode == "json":
                         result = json.loads(output)
                         self.assertEqual(result["summary"]["kind"], "run")

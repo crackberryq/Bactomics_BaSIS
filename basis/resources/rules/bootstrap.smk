@@ -23,5 +23,7 @@ rule bootstrap_resource:
         source=CONTROLLER_SOURCE,
         plan=PLAN_PATH,
         root=RECEIPTS
+    log:
+        RECEIPTS + "/bootstrap/{resource}.worker.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.bootstrap --plan {params.plan:q} --run-dir {params.root:q} --resource {wildcards.resource:q} --threads {threads}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.bootstrap --plan {params.plan:q} --run-dir {params.root:q} --resource {wildcards.resource:q} --threads {threads} 2>&1 | tee {log:q}"

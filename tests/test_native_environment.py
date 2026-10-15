@@ -110,7 +110,11 @@ class CommandRunnerEnvironmentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             runner = CommandRunner({"command_prefix": prefix, "threads": 3, "gpus": gpus}, Path(tmp) / "commands.log")
             with patch("basis.execution.subprocess.Popen") as popen:
-                popen.return_value.communicate.return_value = ("ok", None)
+                import io
+                popen.return_value.stdout = io.BytesIO(b"ok")
+                popen.return_value.stderr = io.BytesIO(b"")
+                popen.return_value.wait.return_value = 0
+                popen.return_value.pid = 12345
                 popen.return_value.returncode = 0
                 runner.run(["python", "-c", "pass"])
             return popen.call_args.kwargs["env"], runner.commands[0], runner.logfile.read_text()

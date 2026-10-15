@@ -17,7 +17,7 @@ SCHEMA = "basis-run-summary-v1"
 TSV_COLUMNS = (
     "kind", "run_id", "engine", "validation_mode", "deep_requested", "extend_requested",
     "sample_id", "completeness", "requested_modules", "completed_modules", "failed_modules",
-    "not_assessed_modules", "planned_runnable_modules", "held", "excluded", "disabled",
+    "not_assessed_modules", "blocked_modules", "not_started_modules", "planned_runnable_modules", "held", "excluded", "disabled",
     "not_requested", "imported_modules", "cache_reused", "deep_execution",
     "deep_selected_execution", "deep_selected", "deep_completed_selected", "deep_failed_selected",
     "deep_not_assessed_selected", "deep_deferred", "deep_upstream_incomplete", "incomplete_requested",
@@ -114,7 +114,7 @@ def build_run_summary(run, samples, records, deep_records):
             matching = by_key.get((sid, row["module"]), [])
             if row["requested"] is None and matching:
                 row["requested"] = any(record_requested(record, run) for record in matching)
-        counts = {"total": 0, "completed": 0, "failed": 0, "not_assessed": 0}
+        counts = {"total": 0, "completed": 0, "failed": 0, "blocked": 0, "not_started": 0, "not_assessed": 0}
         incomplete, cache_reused, imported = [], 0, 0
         for row in own:
             if row["requested"] is not True:
@@ -122,7 +122,8 @@ def build_run_summary(run, samples, records, deep_records):
             counts["total"] += 1
             statuses = set(row["execution_status"].split("; "))
             status = ("not_assessed" if row["planned_action"] == "withheld" else
-                      "completed" if statuses == {"completed"} else "failed" if "failed" in statuses else "not_assessed")
+                      "completed" if statuses == {"completed"} else "failed" if "failed" in statuses else
+                      "blocked" if "blocked" in statuses else "not_started" if "not_started" in statuses else "not_assessed")
             counts[status] += 1
             matching = by_key.get((sid, row["module"]), [])
             if status == "completed":
@@ -177,7 +178,8 @@ def _summary_rows(summary):
             "sample_id": sample.get("sample_id"), "completeness": sample.get("completeness"),
             "requested_modules": counts.get("total", planned.get("requested")),
             "completed_modules": counts.get("completed"), "failed_modules": counts.get("failed"),
-            "not_assessed_modules": counts.get("not_assessed"), "planned_runnable_modules": planned.get("runnable"),
+            "not_assessed_modules": counts.get("not_assessed"), "blocked_modules": counts.get("blocked"),
+            "not_started_modules": counts.get("not_started"), "planned_runnable_modules": planned.get("runnable"),
             **{key: sample.get(key, planned.get(key)) for key in ("held", "excluded", "disabled", "not_requested")},
             "imported_modules": sample.get("imported_modules"), "cache_reused": sample.get("cache_reused"),
             "deep_execution": deep.get("execution"), "deep_selected_execution": deep.get("selected_execution"),
@@ -241,7 +243,7 @@ def format_run_summary(summary, artifacts=None):
             lines.append("Engine error: " + str(summary["engine_error"]))
         for sample in summary.get("samples", []):
             counts = sample.get("requested_modules", {})
-            lines.append(f"{sample['sample_id']}: {sample.get('completeness', 'not recorded')} | modules {counts.get('completed', 0)}/{counts.get('total', 0)} completed, {counts.get('failed', 0)} failed, {counts.get('not_assessed', 0)} not assessed")
+            lines.append(f"{sample['sample_id']}: {sample.get('completeness', 'not recorded')} | modules {counts.get('completed', 0)}/{counts.get('total', 0)} completed, {counts.get('failed', 0)} failed, {counts.get('blocked', 0)} blocked, {counts.get('not_started', 0)} not started, {counts.get('not_assessed', 0)} not assessed")
             lines.append(f"  Scope: {sample.get('held', 0)} held; {sample.get('excluded', 0)} excluded; {sample.get('disabled', 0)} disabled. Imported evidence: {sample.get('imported_modules', 0)} modules; cached stages: {sample.get('cache_reused', 0)}.")
             deep = sample.get("deepsafe", {})
             if deep.get("requested"):

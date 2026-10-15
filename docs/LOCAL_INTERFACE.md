@@ -1,4 +1,4 @@
-# Local BaSIS interface (0.3.0rc3)
+# Local BaSIS interface (0.3.0rc4)
 
 The optional interface runs on Linux or WSL2. Analyses use the same installed
 BaSIS CLI, Snakemake workflow and adapters. The browser controls this computer;

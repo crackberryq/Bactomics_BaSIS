@@ -357,6 +357,9 @@ def _read_receipt(plan, root, spec):
                 "resource_id": spec["id"], "cache_key": spec["cache_key"]}
     if any(receipt.get(k) != v for k, v in expected.items()):
         raise ValueError("Resource receipt identity mismatch: " + spec["id"])
+    started = receipt_path(root, spec["id"]).with_suffix(".started.json")
+    if started.exists() and receipt.get("started_sha256") != sha256_file(started):
+        raise ValueError("Resource receipt belongs to an earlier worker attempt: " + spec["id"])
     return receipt
 
 
@@ -426,6 +429,22 @@ def bootstrap_audit(plan, root):
                     "status", "reused", "manifest", "manifest_sha256", "error", "command_log")})
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 item.update(status="failed", error="Invalid resource receipt: " + str(exc))
+        elif path.with_suffix(".started.json").exists():
+            from .workflow_runtime import read_document
+            try:
+                started = read_document(path.with_suffix(".started.json"))
+                expected = {"schema": "basis-bootstrap-start-v1", "run_id": Path(root).name,
+                            "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
+                            "resource_id": name, "cache_key": spec["cache_key"], "status": "started"}
+                if any(started.get(key) != value for key, value in expected.items()):
+                    raise ValueError("Resource start receipt identity mismatch")
+                item.update(status="failed", error="Resource worker started but did not commit a completion receipt",
+                            started_at=started.get("started_at"), started_receipt=str(path.with_suffix(".started.json")))
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                item.update(status="failed", error="Invalid resource start receipt: " + str(exc))
+            logfile = path.with_suffix(".commands.log")
+            if logfile.is_file():
+                item["command_log"] = str(logfile)
         blocked = [dep for dep in dependencies if dep["status"] in {"failed", "blocked"}]
         if blocked and item["status"] != "ready":
             item["blocked_by"] = [dep["resource_id"] for dep in blocked]
@@ -491,6 +510,9 @@ def run_resource(plan, root, resource_id, allocated_threads=None):
              "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
              "resource_id": spec["id"], "provider": spec["provider"], "cache_key": spec["cache_key"],
              "started_at": now(), "status": "failed", "reused": False}
+    _write(receipt_path(root, resource_id).with_suffix(".started.json"),
+           {**value, "schema": "basis-bootstrap-start-v1", "status": "started"})
+    value["started_sha256"] = sha256_file(receipt_path(root, resource_id).with_suffix(".started.json"))
     logfile = root / "bootstrap" / (resource_id + ".commands.log")
     cache = Path(spec["cache_directory"])
     snapshot = Path(spec["snapshot"])

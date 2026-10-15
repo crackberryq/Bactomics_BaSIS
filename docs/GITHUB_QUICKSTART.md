@@ -1,16 +1,16 @@
 # GitHub installation and collaborator quickstart
 
 Repository: https://github.com/crackberryq/Bactomics_BaSIS  
-Package: `bactromics-basis` · Command: `basis` · Candidate: `0.3.0rc3`
+Package: `bactromics-basis` · Command: `basis` · Candidate: `0.3.0rc4`
 
 Use Linux x86-64 or WSL2, Python 3.11+, Git and Conda on PATH. The application is installed from GitHub; this guide does not claim a PyPI release exists.
 
 ## Install and start a fresh study
 
 ```bash
-python3 -m venv basis-0.3.0rc3
-source basis-0.3.0rc3/bin/activate
-python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc3'
+python3 -m venv basis-0.3.0rc4
+source basis-0.3.0rc4/bin/activate
+python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc4'
 python -m pip check
 basis --version
 basis verify-install
@@ -33,7 +33,7 @@ python -c 'from importlib.metadata import distribution; print(distribution("bact
 python -m pip freeze --all > installed-python-packages.txt
 ```
 
-Keep these with the run record. For a collaborator repeating the same source revision, replace `v0.3.0rc3` in the installation URL with the full `commit_id` from `installed-source.json`. A dependency inventory is useful provenance; it is not a complete artifact-hashed dependency lock.
+Keep these with the run record. For a collaborator repeating the same source revision, replace `v0.3.0rc4` in the installation URL with the full `commit_id` from `installed-source.json`. A dependency inventory is useful provenance; it is not a complete artifact-hashed dependency lock.
 
 First-use downloads can resolve upstream current releases. Reproducibility requires the actual recorded snapshots and native environment identities, not just reinstalling the same application tag and downloading again later.
 

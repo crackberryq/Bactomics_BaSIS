@@ -5,7 +5,8 @@ def completion_summary(record):
     selected = [c for c in candidates if c.get('selected')]
     completed = sum(c.get('execution') == 'completed' for c in selected)
     return {'selected_candidates': len(selected), 'completed_selected_candidates': completed,
-            'selected_execution': ('not_requested' if not selected else
+            'selected_execution': (record.get('execution_status') if not selected and record.get('execution_status') in {'failed', 'blocked', 'not_started'} else
+                                   'not_requested' if not selected else
                                    'completed' if completed == len(selected) else 'incomplete'),
             'deferred_candidates': sum(c.get('execution') == 'deferred' for c in candidates),
             'upstream_incomplete': record.get('upstream_incomplete', []),

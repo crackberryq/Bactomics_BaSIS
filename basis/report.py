@@ -200,6 +200,11 @@ def build_recommendations(samples, records, deep_records):
         })
 
     for record in combined:
+        if _execution(record) in {"blocked", "not_started"}:
+            add(_sample_id(record), "execution", "resolve_first", "computational_review",
+                _module(record) + ": " + _execution(record), [],
+                "Resolve the recorded preparation or upstream blocker, then start the affected screen. "
+                "The analysis did not run; absence of findings is not a negative result.")
         if _execution(record) in {"failed", "unknown"}:
             add(_sample_id(record), "execution", "resolve_first", "computational_review",
                 _module(record) + ": " + _execution(record), [],
@@ -343,7 +348,7 @@ def _artifact_list(values, outdir):
 
 
 def _pill(value):
-    color = {"completed": "ok", "failed": "bad", "not_assessed": "neutral", "unknown": "warn",
+    color = {"completed": "ok", "failed": "bad", "blocked": "warn", "not_started": "warn", "not_assessed": "neutral", "unknown": "warn",
              "detected": "warn", "inconclusive": "warn", "not_detected": "neutral", "unavailable": "neutral"}.get(str(value), "neutral")
     return '<span class="pill ' + color + '">' + _esc(value).replace("_", " ") + '</span>'
 

@@ -38,7 +38,7 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(self.run, before)
         self.assertEqual(result["completeness"], "incomplete")
         bad, good = result["samples"]
-        self.assertEqual(bad["requested_modules"], {"total": 1, "completed": 0, "failed": 1, "not_assessed": 0})
+        self.assertEqual(bad["requested_modules"], {"total": 1, "completed": 0, "failed": 1, "blocked": 0, "not_started": 0, "not_assessed": 0})
         self.assertEqual(bad["incomplete_requested"][0]["reason"], "fixture failure")
         self.assertEqual(good["completeness"], "completed_requested_scope")
 
@@ -54,7 +54,7 @@ class SummaryTests(unittest.TestCase):
                    record("icescreen", "not_assessed", reason="matching_genbank_required"),
                    record("pathogenfinder2", cache_hit=True), record("vfdb", cache_hit=True), record("amrfinder", sid="S2")]
         own = build_run_summary(self.run, self.samples, records, [record("deepsafe", cache_hit=True)])["samples"][0]
-        self.assertEqual(own["requested_modules"], {"total": 3, "completed": 1, "failed": 0, "not_assessed": 2})
+        self.assertEqual(own["requested_modules"], {"total": 3, "completed": 1, "failed": 0, "blocked": 0, "not_started": 0, "not_assessed": 2})
         self.assertEqual((own["held"], own["excluded"], own["disabled"]), (1, 1, 1))
         self.assertEqual((own["cache_reused"], own["imported_modules"]), (1, 1))
         self.assertEqual(own["deepsafe"]["execution"], "not_requested")
@@ -176,11 +176,11 @@ class SummaryIntegrationTests(unittest.TestCase):
             plan = make_plan(config, False, False)
             result, code = run_pipeline(plan)
             self.assertEqual(code, 0)
-            with patch('basis.pipeline.subprocess.run', return_value=SimpleNamespace(returncode=1)):
+            with patch('basis.pipeline._run_scheduler', return_value=SimpleNamespace(returncode=1)):
                 result, code = run_pipeline(plan, engine='snakemake')
             self.assertEqual(code, 2)
             self.assertIn('Snakemake exited 1', result['summary']['engine_error'])
-            self.assertTrue(all(s['requested_modules']['failed'] == 3 for s in result['summary']['samples']))
+            self.assertTrue(all(s['requested_modules']['not_started'] == 3 for s in result['summary']['samples']))
             self.assertTrue(all(s['cache_reused'] == 0 for s in result['summary']['samples']))
 
 

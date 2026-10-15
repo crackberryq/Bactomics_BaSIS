@@ -55,36 +55,40 @@ rule validate_inputs:
         plan=PLAN_PATH,
         context=RECEIPTS + "/run-context.json"
     output:
-        RECEIPTS + "/{sample}/input-validation.json"
+        RECEIPTS + "/{sample}/input-validation.ready.json"
     threads: 1
     resources: mem_mb=1
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS
+    log:
+        RECEIPTS + "/{sample}/logs/validate_inputs.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime validate --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime validate --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} 2>&1 | tee {log:q}"
 
 
 rule check_configured_resources:
     input:
-        validation=RECEIPTS + "/{sample}/input-validation.json",
+        validation=RECEIPTS + "/{sample}/input-validation.ready.json",
         plan=PLAN_PATH,
         prepared=lambda wc: bootstrap_dependencies(PLAN, wc.sample, wc.module)
     output:
-        RECEIPTS + "/{sample}/checks/{module}.json"
+        RECEIPTS + "/{sample}/checks/{module}.ready.json"
     wildcard_constraints:
         module="|".join(MODULES + ["deepsafe"])
     threads: 1
     resources: mem_mb=1
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS
+    log:
+        RECEIPTS + "/{sample}/logs/check_{module}.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime resources --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module {wildcards.module:q}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime resources --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module {wildcards.module:q} 2>&1 | tee {log:q}"
 
 
 rule amrfinder:
     input:
-        check=RECEIPTS + "/{sample}/checks/amrfinder.json",
+        check=RECEIPTS + "/{sample}/checks/amrfinder.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/amrfinder.json"
+        RECEIPTS + "/{sample}/amrfinder.ready.json"
     threads:
         lambda wc: configured_threads("amrfinder", wc.sample)
     resources:
@@ -93,16 +97,18 @@ rule amrfinder:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "amrfinder")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/amrfinder.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module amrfinder --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module amrfinder --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule rgi:
     input:
-        check=RECEIPTS + "/{sample}/checks/rgi.json",
+        check=RECEIPTS + "/{sample}/checks/rgi.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/rgi.json"
+        RECEIPTS + "/{sample}/rgi.ready.json"
     threads:
         lambda wc: configured_threads("rgi", wc.sample)
     resources:
@@ -111,16 +117,18 @@ rule rgi:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "rgi")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/rgi.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module rgi --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module rgi --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule vfdb:
     input:
-        check=RECEIPTS + "/{sample}/checks/vfdb.json",
+        check=RECEIPTS + "/{sample}/checks/vfdb.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/vfdb.json"
+        RECEIPTS + "/{sample}/vfdb.ready.json"
     threads:
         lambda wc: configured_threads("vfdb", wc.sample)
     resources:
@@ -129,16 +137,18 @@ rule vfdb:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "vfdb")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/vfdb.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module vfdb --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module vfdb --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule antismash:
     input:
-        check=RECEIPTS + "/{sample}/checks/antismash.json",
+        check=RECEIPTS + "/{sample}/checks/antismash.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/antismash.json"
+        RECEIPTS + "/{sample}/antismash.ready.json"
     threads:
         lambda wc: configured_threads("antismash", wc.sample)
     resources:
@@ -147,16 +157,18 @@ rule antismash:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "antismash")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/antismash.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module antismash --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module antismash --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule genomad:
     input:
-        check=RECEIPTS + "/{sample}/checks/genomad.json",
+        check=RECEIPTS + "/{sample}/checks/genomad.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/genomad.json"
+        RECEIPTS + "/{sample}/genomad.ready.json"
     threads:
         lambda wc: configured_threads("genomad", wc.sample)
     resources:
@@ -165,16 +177,18 @@ rule genomad:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "genomad")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/genomad.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module genomad --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module genomad --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule mobsuite:
     input:
-        check=RECEIPTS + "/{sample}/checks/mobsuite.json",
+        check=RECEIPTS + "/{sample}/checks/mobsuite.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/mobsuite.json"
+        RECEIPTS + "/{sample}/mobsuite.ready.json"
     threads:
         lambda wc: configured_threads("mobsuite", wc.sample)
     resources:
@@ -183,16 +197,18 @@ rule mobsuite:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "mobsuite")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/mobsuite.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module mobsuite --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module mobsuite --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule integronfinder:
     input:
-        check=RECEIPTS + "/{sample}/checks/integronfinder.json",
+        check=RECEIPTS + "/{sample}/checks/integronfinder.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/integronfinder.json"
+        RECEIPTS + "/{sample}/integronfinder.ready.json"
     threads:
         lambda wc: configured_threads("integronfinder", wc.sample)
     resources:
@@ -201,16 +217,18 @@ rule integronfinder:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "integronfinder")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/integronfinder.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module integronfinder --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module integronfinder --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule bacmet:
     input:
-        check=RECEIPTS + "/{sample}/checks/bacmet.json",
+        check=RECEIPTS + "/{sample}/checks/bacmet.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/bacmet.json"
+        RECEIPTS + "/{sample}/bacmet.ready.json"
     threads:
         lambda wc: configured_threads("bacmet", wc.sample)
     resources:
@@ -219,16 +237,18 @@ rule bacmet:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "bacmet")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/bacmet.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module bacmet --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module bacmet --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule isescan:
     input:
-        check=RECEIPTS + "/{sample}/checks/isescan.json",
+        check=RECEIPTS + "/{sample}/checks/isescan.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/isescan.json"
+        RECEIPTS + "/{sample}/isescan.ready.json"
     threads:
         lambda wc: configured_threads("isescan", wc.sample)
     resources:
@@ -237,16 +257,18 @@ rule isescan:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "isescan")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/isescan.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module isescan --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module isescan --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule icescreen:
     input:
-        check=RECEIPTS + "/{sample}/checks/icescreen.json",
+        check=RECEIPTS + "/{sample}/checks/icescreen.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/icescreen.json"
+        RECEIPTS + "/{sample}/icescreen.ready.json"
     threads:
         lambda wc: configured_threads("icescreen", wc.sample)
     resources:
@@ -255,16 +277,18 @@ rule icescreen:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "icescreen")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/icescreen.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module icescreen --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module icescreen --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule crisprcasfinder:
     input:
-        check=RECEIPTS + "/{sample}/checks/crisprcasfinder.json",
+        check=RECEIPTS + "/{sample}/checks/crisprcasfinder.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/crisprcasfinder.json"
+        RECEIPTS + "/{sample}/crisprcasfinder.ready.json"
     threads:
         lambda wc: configured_threads("crisprcasfinder", wc.sample)
     resources:
@@ -273,16 +297,18 @@ rule crisprcasfinder:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "crisprcasfinder")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/crisprcasfinder.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module crisprcasfinder --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module crisprcasfinder --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule minced:
     input:
-        check=RECEIPTS + "/{sample}/checks/minced.json",
+        check=RECEIPTS + "/{sample}/checks/minced.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/minced.json"
+        RECEIPTS + "/{sample}/minced.ready.json"
     threads:
         lambda wc: configured_threads("minced", wc.sample)
     resources:
@@ -291,16 +317,18 @@ rule minced:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "minced")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/minced.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module minced --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module minced --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule mlst:
     input:
-        check=RECEIPTS + "/{sample}/checks/mlst.json",
+        check=RECEIPTS + "/{sample}/checks/mlst.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/mlst.json"
+        RECEIPTS + "/{sample}/mlst.ready.json"
     threads:
         lambda wc: configured_threads("mlst", wc.sample)
     resources:
@@ -309,16 +337,18 @@ rule mlst:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "mlst")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/mlst.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module mlst --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module mlst --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule pathogenfinder2:
     input:
-        check=RECEIPTS + "/{sample}/checks/pathogenfinder2.json",
+        check=RECEIPTS + "/{sample}/checks/pathogenfinder2.ready.json",
         plan=PLAN_PATH
     output:
-        RECEIPTS + "/{sample}/pathogenfinder2.json"
+        RECEIPTS + "/{sample}/pathogenfinder2.ready.json"
     threads:
         lambda wc: configured_threads("pathogenfinder2", wc.sample)
     resources:
@@ -327,17 +357,19 @@ rule pathogenfinder2:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "pathogenfinder2")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/pathogenfinder2.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module pathogenfinder2 --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime module --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --module pathogenfinder2 --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_prepare:
     input:
-        upstream=lambda wc: expand(RECEIPTS + "/{sample}/{module}.json", sample=[wc.sample], module=MODULES),
-        check=RECEIPTS + "/{sample}/checks/deepsafe.json",
+        upstream=lambda wc: expand(RECEIPTS + "/{sample}/{module}.ready.json", sample=[wc.sample], module=MODULES),
+        check=RECEIPTS + "/{sample}/checks/deepsafe.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/prepare.json"
+        state=RECEIPTS + "/{sample}/deep-stages/prepare.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -345,16 +377,18 @@ rule deep_prepare:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_prepare.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage prepare --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage prepare --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_domains:
     input:
-        previous=RECEIPTS + "/{sample}/deep-stages/prepare.json",
+        previous=RECEIPTS + "/{sample}/deep-stages/prepare.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/domains.json"
+        state=RECEIPTS + "/{sample}/deep-stages/domains.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -362,16 +396,18 @@ rule deep_domains:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_domains.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage domains --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage domains --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_references:
     input:
-        previous=RECEIPTS + "/{sample}/deep-stages/domains.json",
+        previous=RECEIPTS + "/{sample}/deep-stages/domains.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/references.json"
+        state=RECEIPTS + "/{sample}/deep-stages/references.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -379,16 +415,18 @@ rule deep_references:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_references.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage references --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage references --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_phylogeny:
     input:
-        previous=RECEIPTS + "/{sample}/deep-stages/references.json",
+        previous=RECEIPTS + "/{sample}/deep-stages/references.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/phylogeny.json"
+        state=RECEIPTS + "/{sample}/deep-stages/phylogeny.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -396,16 +434,18 @@ rule deep_phylogeny:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_phylogeny.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage phylogeny --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage phylogeny --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_patterns:
     input:
-        previous=RECEIPTS + "/{sample}/deep-stages/phylogeny.json",
+        previous=RECEIPTS + "/{sample}/deep-stages/phylogeny.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/patterns.json"
+        state=RECEIPTS + "/{sample}/deep-stages/patterns.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -413,16 +453,18 @@ rule deep_patterns:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_patterns.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage patterns --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage patterns --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_profiles:
     input:
-        previous=RECEIPTS + "/{sample}/deep-stages/patterns.json",
+        previous=RECEIPTS + "/{sample}/deep-stages/patterns.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/profiles.json"
+        state=RECEIPTS + "/{sample}/deep-stages/profiles.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -430,16 +472,18 @@ rule deep_profiles:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_profiles.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage profiles --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage profiles --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_motifs:
     input:
-        previous=RECEIPTS + "/{sample}/deep-stages/profiles.json",
+        previous=RECEIPTS + "/{sample}/deep-stages/profiles.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/motifs.json"
+        state=RECEIPTS + "/{sample}/deep-stages/motifs.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -447,16 +491,18 @@ rule deep_motifs:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_motifs.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage motifs --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage motifs --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_placement:
     input:
-        previous=RECEIPTS + "/{sample}/deep-stages/motifs.json",
+        previous=RECEIPTS + "/{sample}/deep-stages/motifs.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/placement.json"
+        state=RECEIPTS + "/{sample}/deep-stages/placement.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -464,17 +510,19 @@ rule deep_placement:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_placement.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage placement --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage placement --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule deep_finalize:
     input:
-        previous=RECEIPTS + "/{sample}/deep-stages/placement.json",
+        previous=RECEIPTS + "/{sample}/deep-stages/placement.ready.json",
         plan=PLAN_PATH
     output:
-        state=RECEIPTS + "/{sample}/deep-stages/finalize.json",
-        result=RECEIPTS + "/{sample}/deepsafe.json"
+        state=RECEIPTS + "/{sample}/deep-stages/finalize.ready.json",
+        result=RECEIPTS + "/{sample}/deepsafe.ready.json"
     threads:
         lambda wc: configured_threads("deepsafe", wc.sample)
     resources:
@@ -482,22 +530,26 @@ rule deep_finalize:
     conda:
         lambda wc: environment_for_job(PLAN, wc.sample, "deepsafe")
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS, force=FORCE
+    log:
+        RECEIPTS + "/{sample}/logs/deep_finalize.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage finalize --threads {threads} {params.force}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime deep-stage --plan {params.plan:q} --run-dir {params.root:q} --sample {wildcards.sample:q} --stage finalize --threads {threads} {params.force} 2>&1 | tee {log:q}"
 
 
 rule consolidate_evidence:
     input:
-        upstream=expand(RECEIPTS + "/{sample}/{module}.json", sample=SAMPLES, module=MODULES),
-        deep=expand(RECEIPTS + "/{sample}/deepsafe.json", sample=SAMPLES),
+        upstream=expand(RECEIPTS + "/{sample}/{module}.ready.json", sample=SAMPLES, module=MODULES),
+        deep=expand(RECEIPTS + "/{sample}/deepsafe.ready.json", sample=SAMPLES),
         plan=PLAN_PATH
     output:
         RECEIPTS + "/consolidated.json"
     threads: 1
     resources: mem_mb=1
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS
+    log:
+        RECEIPTS + "/logs/consolidate_evidence.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime consolidate --plan {params.plan:q} --run-dir {params.root:q}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime consolidate --plan {params.plan:q} --run-dir {params.root:q} 2>&1 | tee {log:q}"
 
 
 rule render_report:
@@ -509,8 +561,10 @@ rule render_report:
     threads: 1
     resources: mem_mb=1
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS
+    log:
+        RECEIPTS + "/logs/render_report.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime report --plan {params.plan:q} --run-dir {params.root:q}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime report --plan {params.plan:q} --run-dir {params.root:q} 2>&1 | tee {log:q}"
 
 
 rule capture_provenance:
@@ -523,5 +577,7 @@ rule capture_provenance:
     threads: 1
     resources: mem_mb=1
     params: source=CONTROLLER_SOURCE, python=PYTHON, plan=PLAN_PATH, root=RECEIPTS
+    log:
+        RECEIPTS + "/logs/capture_provenance.log"
     shell:
-        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime provenance --plan {params.plan:q} --run-dir {params.root:q}"
+        "PYTHONPATH={params.source:q} {params.python:q} -m basis.workflow_runtime provenance --plan {params.plan:q} --run-dir {params.root:q} 2>&1 | tee {log:q}"

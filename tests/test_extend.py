@@ -168,9 +168,11 @@ class AdapterTests(unittest.TestCase):
 
     def test_native_nested_path_and_argv_without_shell_interpolation(self):
         calls = []
+        options = []
         class Runner:
             def run(inner, argv, **kwargs):
                 calls.append(argv)
+                options.append(kwargs)
                 native = Path(argv[argv.index("-o") + 1])
                 results = native / "predictionPF2" / "results_PF2"
                 results.mkdir(parents=True)
@@ -181,6 +183,7 @@ class AdapterTests(unittest.TestCase):
                 return subprocess.CompletedProcess(argv, 0, "", "")
         output = run("pathogenfinder2", {"proteins": str(self.faa)}, {"attention": False}, self.root / "out", Runner())
         self.assertEqual(calls[0][calls[0].index("-i") + 1], str(self.faa))
+        self.assertTrue(options[0]["stream_stdout"])
         self.assertEqual(output["metrics"]["input_protein_count"], 2)
         self.assertEqual(output["interpretation"], "inconclusive")
         self.assertTrue(Path(output["metrics"]["embedding_manifest"]).is_file())

@@ -25,7 +25,7 @@ def _run_args(parser):
     parser.add_argument("--cores", type=int, help="Total CPU core budget")
     parser.add_argument("--engine", choices=("local", "snakemake"), default="snakemake", help="snakemake (default) schedules dependencies and independent jobs; local is serial")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs and show the selected plan without running biological tools")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show stages, candidates, native commands and 30-second heartbeats")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show native Snakemake diagnostics, commands, failed-job logs and live tool progress")
     parser.add_argument("--force", action="store_true", help="Recompute selected analyses instead of using matching caches")
     parser.add_argument("--output", choices=("json", "summary"), default="json", help="stdout format; JSON remains the default; concise summary also appears on stderr")
 

@@ -8,6 +8,7 @@ import importlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -418,6 +419,10 @@ def _read_scheduler_result(plan: dict, sample_id: str, module: str, root: str | 
                 "sample_id": sample_id, "module": module}
     if any(receipt.get(key) != value for key, value in expected.items()):
         raise ValueError(f"Scheduler receipt identity mismatch: {sample_id}:{module}")
+    from .scheduler_state import read_started, started_path
+    started = read_started(plan, root, sample_id, module)
+    if started is not None and receipt.get("started_sha256") != sha256_file(started_path(root, sample_id, module)):
+        raise ValueError(f"Scheduler result belongs to an earlier worker attempt: {sample_id}:{module}")
     path = record_path(plan, sample_id, module)
     if receipt.get("result_path") != str(path.resolve()):
         raise ValueError(f"Scheduler receipt result path mismatch: {sample_id}:{module}")
@@ -443,6 +448,8 @@ def run_worker(plan_path: str, sample_id: str, module: str, force=False, *,
         root = _scheduler_root(plan, receipt_path.parent.parent)
         if receipt_path != root / sample_id / (module + ".json"):
             raise ValueError("Worker receipt path does not match its sample and module")
+        from .scheduler_state import mark_started
+        mark_started(plan, root, sample_id, module)
     records = None
     if upstream_receipts is not None:
         if module != "deepsafe" or receipt_path is None:
@@ -464,44 +471,131 @@ def run_worker(plan_path: str, sample_id: str, module: str, force=False, *,
                     "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
                     "sample_id": sample_id, "module": module,
                     "result_path": str(target.resolve()), "result_sha256": sha256_file(target),
-                    "execution_status": result["execution_status"], "recorded_at": now()})
+                    "execution_status": result["execution_status"], "recorded_at": now(),
+                    "started_sha256": sha256_file(root / sample_id / "started" / (module + ".json"))})
     return result
 
 
-def _run_scheduler(command, logfile: Path, env: dict):
-    """Save scheduler/worker output and mirror it to verbose stderr.
+def _scheduler_processes(pid, expected=None):
+    """Snapshot same-user Linux descendants, including separate sessions."""
+    from .run_control import owned_descendants, process_table
+    table = process_table()
+    root = table.get(pid)
+    if root is None or expected is None or root.identity != expected.identity:
+        return {}
+    return owned_descendants(table, {pid: root})
 
-    A separate reader keeps the ordinary subprocess invocation (and its exit
-    status) unchanged. Worker progress therefore reaches persistent GUI jobs,
-    while machine-readable launcher stdout remains one JSON document.
+
+def _signal_scheduler_processes(processes, sig):
+    # A pidfd binds the signal to the observed process even if its numeric PID
+    # is subsequently reused. Rechecking a start time before os.kill alone
+    # would still leave a time-of-check/time-of-use race.
+    from .run_control import _signal_verified
+    for process in processes.values():
+        _signal_verified(process, sig)
+
+
+def _stop_scheduler(proc):
+    # Snakemake shells and external native tools may own separate sessions.
+    # Capture their identity before the scheduler is terminated and they are
+    # reparented, then clean them as well as the scheduler's own process group.
+    owned = (_scheduler_processes(proc.pid, getattr(proc, "_basis_identity", None))
+             if sys.platform.startswith("linux") else {})
+    try:
+        if proc.poll() is None:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+    except ProcessLookupError:
+        pass
+    _signal_scheduler_processes(owned, signal.SIGTERM)
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+    finally:
+        _signal_scheduler_processes(owned, signal.SIGKILL)
+        if proc.poll() is None:
+            if os.name == "posix":
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("Cancelled Snakemake process did not exit after SIGKILL; "
+                               "check for uninterruptible operating-system I/O") from exc
+
+
+def _run_scheduler(command, logfile: Path, env: dict):
+    """Stream Snakemake output to stderr and retain its complete command log.
+
+    Normal rule progress is visible even without ``-v``. Stdout remains reserved
+    for the launcher's JSON/summary result. Cancellation cleans owned workers
+    before returning, so the output-directory lock cannot be released while
+    our scheduler continues running.
     """
+    logfile.parent.mkdir(parents=True, exist_ok=True)
     with logfile.open("w", encoding="utf-8") as log:
-        if not enabled():
-            return subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env)
         finished = threading.Event()
+        terminal = sys.stderr
 
         def forward():
             with logfile.open("r", encoding="utf-8", errors="replace") as reader:
                 while not finished.is_set():
-                    line = reader.readline()
-                    if line:
-                        sys.stderr.write(line)
-                        sys.stderr.flush()
+                    chunk = reader.read(8192)
+                    if chunk:
+                        terminal.write(chunk)
+                        terminal.flush()
                     else:
                         finished.wait(0.1)
-                # Drain the final lines after the child has exited.
-                for line in reader:
-                    sys.stderr.write(line)
-                sys.stderr.flush()
+                for chunk in iter(lambda: reader.read(8192), ""):
+                    terminal.write(chunk)
+                terminal.flush()
 
         thread = threading.Thread(target=forward, daemon=True)
         thread.start()
+        proc = None
+        previous_term = None
+        handles_term = threading.current_thread() is threading.main_thread()
+
+        def interrupted(signum, frame):
+            raise SystemExit(128 + signum)
+
         try:
-            return subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env)
+            if handles_term:
+                previous_term = signal.signal(signal.SIGTERM, interrupted)
+            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                    env=env, start_new_session=(os.name == "posix"))
+            if sys.platform.startswith("linux"):
+                from .run_control import read_process
+                proc._basis_identity = read_process(proc.pid)
+            return subprocess.CompletedProcess(command, proc.wait())
+        except BaseException:
+            previous_int = None
+            if handles_term:
+                # A second keypress must not interrupt bounded child cleanup.
+                previous_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            try:
+                if proc is not None:
+                    _stop_scheduler(proc)
+            finally:
+                if previous_int is not None:
+                    signal.signal(signal.SIGINT, previous_int)
+            raise
         finally:
+            if handles_term and previous_term is not None:
+                signal.signal(signal.SIGTERM, previous_term)
             log.flush()
             finished.set()
-            thread.join()
+            # A stalled terminal reader must not keep cancellation or a
+            # completed run waiting indefinitely; the full log is on disk.
+            thread.join(timeout=1)
 
 
 def run_pipeline(plan: dict, engine="local", dry_run=False, force=False) -> tuple[dict, int]:
@@ -521,7 +615,6 @@ def run_pipeline(plan: dict, engine="local", dry_run=False, force=False) -> tupl
             fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-@tracked("Pipeline execution and final reporting")
 def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=False) -> tuple[dict, int]:
     from .run_summary import build_plan_summary, build_run_summary, write_run_summary
     run_id = now().replace(":", "-") + "-" + uuid.uuid4().hex[:8]
@@ -542,6 +635,8 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
         receipt_root = outdir / "provenance" / "scheduler" / run_id
         run["scheduler_receipt_dir"] = str(receipt_root)
         run["reporting_mode"] = "snakemake_dag"
+        scheduler_log = receipt_root / "snakemake.log"
+        run["scheduler_log"] = str(scheduler_log)
         from .workflow_runtime import _write as write_workflow_document
         write_workflow_document(receipt_root / "run-context.json", run)
         snakefile = Path(__file__).parent / "resources" / "Snakefile"
@@ -549,7 +644,10 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
                    "--directory", str(outdir), "--cores", str(plan["config"]["execution"]["cores"]),
                    "--resources", f"mem_mb={plan['config']['execution']['memory_mb']}",
                    f"gpu={plan['config']['execution'].get('gpus', 0)}", "--keep-going", "--rerun-incomplete", "--rerun-triggers", "mtime",
+                   "--printshellcmds", "--show-failed-logs",
                    ]
+        if enabled():
+            command.append("--verbose")
         from .workflow_environments import has_managed_environments, conda_storage
         from .bootstrap import bootstrap_uses_conda
         managed = has_managed_environments(plan) or bootstrap_uses_conda(plan)
@@ -559,14 +657,14 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
         env, _ = native_child_environment(os.environ, ["conda", "run", "--prefix", sys.prefix])
         bootstrap = "import sys; sys.path.insert(0, " + repr(str(Path(__file__).parent.parent)) + "); from snakemake.cli import main; main()"
         command = [sys.executable, "-c", bootstrap, *command[3:]]
+        env["PYTHONUNBUFFERED"] = "1"
         env["BASIS_FORCE"] = "1" if force else "0"
         env["BASIS_SCHEDULER_RUN_ID"] = run_id
-        emit(f"Scheduler log: {outdir / 'snakemake.log'}")
+        emit(f"Scheduler log: {scheduler_log}")
         try:
-            with stage("Snakemake scheduling and worker execution"):
-                completed = _run_scheduler(command, outdir / "snakemake.log", env)
+            completed = _run_scheduler(command, scheduler_log, env)
             if completed.returncode:
-                engine_error = f"Snakemake exited {completed.returncode}; see {outdir / 'snakemake.log'}"
+                engine_error = f"Snakemake exited {completed.returncode}; see {scheduler_log}"
             else:
                 try:
                     from .workflow_runtime import read_document
@@ -583,7 +681,7 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
             # Still produce an explicit failed/incomplete report if the
             # scheduler cannot start. Existing output files are not current
             # evidence merely because they remain on disk.
-            engine_error = f"Snakemake could not start: {exc}; see {outdir / 'snakemake.log'}"
+            engine_error = f"Snakemake could not start: {exc}; see {scheduler_log}"
     else:
         if plan.get("bootstrap_resources"):
             raise ValueError("Automatic first-run resource preparation requires --engine snakemake")
@@ -616,6 +714,7 @@ def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt
     """Collect only current, attested records into a reporting snapshot."""
     from .run_summary import build_run_summary
     from .bootstrap import bootstrap_audit, module_resource_blockers, resource_failure_message
+    from .scheduler_state import failed_gate, read_started, started_path
     records, deep_records = [], []
     incomplete = []
     resource_audit = bootstrap_audit(plan, receipt_root) if plan.get("bootstrap_resources") and receipt_root is not None else []
@@ -641,19 +740,55 @@ def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt
                     # run. Valid receipts preserve completed independent jobs
                     # even when another scheduler job failed.
                     record = _base_record(plan, sample, module)
-                    record.update(execution_status="failed", interpretation="inconclusive",
-                                  error=engine_error or f"Current scheduler receipt unavailable or invalid: {exc}")
+                    sid = sample["sample_id"]
+                    receipt = Path(receipt_root) / sid / (module + ".json")
+                    record.update(execution_status="not_started", interpretation="inconclusive",
+                                  reason="scheduler_job_not_started",
+                                  error=engine_error or "No current-run worker start or result receipt was recorded")
+                    # An invalid final receipt, or an interrupted started worker,
+                    # is an execution/integrity failure. Never relabel either as
+                    # an innocently unscheduled downstream job.
+                    if receipt.exists():
+                        record.update(execution_status="failed", reason="scheduler_attestation_invalid",
+                                      error=f"Current scheduler result receipt is invalid: {exc}")
+                    else:
+                        try:
+                            started = read_started(plan, receipt_root, sid, module)
+                        except (OSError, ValueError, KeyError, TypeError) as start_error:
+                            record.update(execution_status="failed", reason="scheduler_start_attestation_invalid",
+                                          error=str(start_error))
+                        else:
+                            if started is not None:
+                                record.update(execution_status="failed", reason="scheduler_worker_incomplete",
+                                              started_at=started["started_at"],
+                                              error="Worker started but did not commit a valid result receipt. " + (engine_error or str(exc)),
+                                              artifacts=[str(started_path(receipt_root, sid, module))])
                     blockers = module_resource_blockers(plan, module, resource_audit)
                     if blockers:
-                        record.update(reason="resource_preparation_failed", blocked_resources=blockers,
-                                      error=resource_failure_message(blockers))
+                        record["blocked_resources"] = blockers
+                        if record["execution_status"] == "not_started":
+                            failures = any(item["status"] in {"failed", "blocked"} for item in blockers)
+                            record.update(execution_status="blocked",
+                                          reason="resource_preparation_failed" if failures else "resource_preparation_incomplete",
+                                          error=resource_failure_message(blockers))
+                            if engine_error:
+                                record["error"] += ". Scheduler: " + engine_error
+                    if record["execution_status"] == "not_started":
+                        try:
+                            gate = failed_gate(plan, receipt_root, sid, module)
+                        except (OSError, ValueError, KeyError, TypeError) as gate_error:
+                            record.update(execution_status="failed", reason="scheduler_gate_attestation_invalid",
+                                          error=str(gate_error))
+                        else:
+                            if gate:
+                                record.update(execution_status="blocked", **gate)
                     if module == "deepsafe":
                         upstream = [r["module"] for r in records if r["sample_id"] == sample["sample_id"]
                                     and r.get("module_decision", {}).get("requested")
                                     and r.get("execution_status") != "completed"]
                         record.update(candidates=[], upstream_incomplete=upstream)
-                        if upstream and not blockers:
-                            record.update(reason="upstream_execution_incomplete",
+                        if upstream and record["execution_status"] == "not_started":
+                            record.update(execution_status="blocked", reason="upstream_execution_incomplete",
                                           error="DeepSafe was not started because requested upstream modules did not complete: " + ", ".join(upstream))
             elif path.is_file():
                 record = read_json(path)

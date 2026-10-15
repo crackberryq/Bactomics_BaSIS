@@ -197,7 +197,7 @@ def render_sample_scope(run, samples, records, module_names=None):
         for row in own:
             label, tone = scope_label(row)
             execution = row["execution_status"]
-            execution_tone = "ok" if execution == "completed" else "bad" if execution == "failed" else "neutral"
+            execution_tone = "ok" if execution == "completed" else "bad" if execution == "failed" else "warn" if execution in {"blocked", "not_started"} else "neutral"
             if row["declared_reason"]:
                 notes = '<p>Declared reason: ' + _esc(row["declared_reason"]) + '</p><p class="small muted">Recorded decision: ' + _esc(row["reason"]) + '</p>'
             else:

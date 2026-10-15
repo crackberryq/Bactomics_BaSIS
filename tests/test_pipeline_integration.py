@@ -149,14 +149,15 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertEqual(refreshed["execution_status"], "completed")
         self.assertFalse(refreshed["cache_hit"])
 
-    def test_missing_import_file_is_failed_and_other_modules_still_report(self):
+    def test_missing_import_file_blocks_module_and_other_modules_still_report(self):
         path, _ = self.imported()
         path.unlink()
         self.assertEqual(self.cli(), 2)
         evidence = self.evidence()
         amr = next(r for r in evidence["records"] if r["sample_id"] == "DEMO_A" and r["module"] == "amrfinder")
         rgi = next(r for r in evidence["records"] if r["sample_id"] == "DEMO_A" and r["module"] == "rgi")
-        self.assertEqual(amr["execution_status"], "failed")
+        self.assertEqual(amr["execution_status"], "blocked")
+        self.assertEqual(amr["reason"], "resource_check_failed")
         self.assertEqual(rgi["execution_status"], "completed")
         self.assertTrue(Path(self.root / "results" / "report.html").is_file())
 

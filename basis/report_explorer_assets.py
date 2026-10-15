@@ -119,7 +119,7 @@ JS = r"""
   function buildTracks(){
     $('gx-track-list').replaceChildren();
     for(const t of list(sample.tracks)){
-      const available=!['not_assessed','unavailable','failed'].includes(t.status),label=node('label',null,'gx-track'+(available?'':' gx-unavailable'));
+      const available=!['not_assessed','unavailable','failed','blocked','not_started'].includes(t.status),label=node('label',null,'gx-track'+(available?'':' gx-unavailable'));
       const key=visibilityKey(t.id),check=node('input');check.type='checkbox';check.checked=available && visible.get(key)!==false;check.disabled=!available;
       check.setAttribute('aria-label',t.label+' track; '+human(t.status));
       if(!visible.has(key))visible.set(key,available);
@@ -135,7 +135,7 @@ JS = r"""
   }
   function renderOverview(){
     if(!contig)return;
-    const n=extent(),tracks=visibleTracks().filter(t=>!['not_assessed','unavailable','failed'].includes(t.status)),gc=list(contig.gc),hasGC=gc.some(g=>finite(g.gc_pct));
+    const n=extent(),tracks=visibleTracks().filter(t=>!['not_assessed','unavailable','failed','blocked','not_started'].includes(t.status)),gc=list(contig.gc),hasGC=gc.some(g=>finite(g.gc_pct));
     const height=68+tracks.length*31+(hasGC?112:0),svg=newSvg(height,'Genome overview for '+sample.id+', contig '+contig.id);
     ticks(svg,1,n,18);
     const axis=sv('rect',{x:L,y:23,width:P,height:Math.max(18,tracks.length*31+10),fill:'#f8fafb',rx:4});

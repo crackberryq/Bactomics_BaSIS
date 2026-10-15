@@ -1,4 +1,4 @@
-# Snakemake orchestration in BaSIS 0.3.0rc3
+# Snakemake orchestration in BaSIS 0.3.0rc4
 
 BaSIS uses one packaged `basis/resources/Snakefile` entry point. The CLI and local interface launch the same analysis workflow. Snakemake owns dependencies, environment deployment and CPU/memory/GPU scheduling. Python workers implement scientific analyses, parsing, evidence checks and report rendering within its rules.
 
@@ -99,16 +99,28 @@ Do not copy sample-specific imports, exclusions, embedding caches, reviewed quer
 
 ## Scheduling, recovery and evidence
 
-The GUI allows one job per workspace; that job can contain many Snakemake tasks. Verbose output streams scheduler and worker activity into stderr and GUI logs while JSON stdout remains machine-readable.
+The GUI allows one job per workspace; that job can contain many Snakemake tasks. The normal analysis path launches one Snakemake process. Native Snakemake output is forwarded to stderr and saved to `snakemake.log`. The `-v` flag also enables Snakemake's `--verbose`, `--printshellcmds` and `--show-failed-logs`, with live native-tool diagnostics. JSON stdout remains machine-readable. Output explicitly captured for FASTA, JSON or other data files stays separate from terminal diagnostics. The duplicate parent scheduler/launcher heartbeat timers are removed.
 
 Run-specific completion receipts are scheduler outputs. Scientific result files remain evidence and are verified before whole-result cache reuse. Inputs, resources, source/tool identities and required artifacts must match. `--force` explicitly requests recomputation; it is not a database refresh operation.
 
 DeepSafe stage JSON supports restart within the same workflow attempt. A new `basis run` creates new scheduler receipts and verifies current identities. Automatic reuse of partially completed DeepSafe stages across separate invocations is not promised; completed whole-module/DeepSafe caches remain reusable when verification passes.
 
-Native failures become explicit result records, allowing independent work and failure-aware reporting to complete. Scheduler failures remain incomplete and cannot promote stale outputs into current evidence. Reports distinguish execution, assessment coverage and biological interpretation. No-hit, not-assessed and failed states remain different.
+Preparation and native worker failures return unsuccessful exit codes to Snakemake. Independent jobs may finish under `--keep-going`; dependent jobs are blocked. Successful normal reporting remains a workflow target. If the DAG cannot reach that target, the launcher writes an incomplete failure summary from attested current-run diagnostics without changing failure into success. Reports distinguish failed, blocked and not-started execution from completed or reused evidence. A deferred candidate or unresolved scientific interpretation is not, by itself, a native command failure.
 
 ## Compatibility and validation limits
 
 `basis run --engine local` retains serial execution for compatibility; use the default Snakemake engine for automatic first-use preparation. The small synthetic demo and programmatic local APIs do not establish fresh-machine native readiness. The historical `workflow` extra remains accepted but is redundant.
 
 Software checks exercise synthetic inputs, native schemas, scheduling and controlled installer/tool doubles. They do not establish that every live package download succeeds, every tool runs correctly on a collaborator's computer, or a biological classifier is accurate. Full clean-machine native acceptance and independent biological validation remain pending. Preserve actual environment exports and resource snapshots, then test restoration and biological performance separately.
+
+## Inspecting and stopping an older running invocation
+
+On Linux/WSL, the read-only inspection helper identifies a same-user BaSIS launcher by its exact configuration path and displays its process descendants:
+
+```bash
+python -I -m basis.run_control -c study/config.yaml
+```
+
+Use the explicit `--stop` option to stop that invocation and its verified descendants before upgrading or retrying. It does not use broad process-name kills. If the launcher has already disappeared, the helper cannot establish ownership of an orphan by ancestry and will not guess. The current implementation must not be used to stop unrelated HybAs jobs.
+
+Install the new release in a separate Python environment, stop the old invocation, then rerun the same study configuration. Keep the resource cache and prior evidence in place. Compatible completed resource snapshots are verified and reused, and interrupted ProtT5 downloads retain their persistent download cache. Native analysis caches still require matching source, configuration, input, tool and artifact identities; a source release change can require recomputation. Do not run the rc2-only resource recovery helper against rc3 evidence.

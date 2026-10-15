@@ -113,6 +113,10 @@ def _track_status(records):
         return "partial"
     if "failed" in states:
         return "failed"
+    if "blocked" in states:
+        return "blocked"
+    if "not_started" in states:
+        return "not_started"
     return "not_assessed"
 
 

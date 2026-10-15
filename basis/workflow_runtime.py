@@ -1,13 +1,15 @@
 """Small, independently scheduled workers for the BaSIS Snakemake workflow.
 
-Scientific failures are recorded as data so the reporting DAG can finish. An
-invalid plan or a changed stage receipt is an infrastructure error, never a
-negative biological result.
+Execution failures are durable evidence and nonzero scheduler outcomes. Only
+successful workers publish readiness markers, so dependent analyses cannot run
+after a failed job. Scientific uncertainty and deferred candidates are not tool
+failures.
 """
 from __future__ import annotations
 
 import argparse
 import copy
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -28,6 +30,24 @@ def _write(path, value):
     value.pop("content_sha256", None)
     value["content_sha256"] = hash_object(value)
     atomic_json(path, value)
+    return value
+
+
+def ready_path(receipt):
+    """Separate disposable DAG outputs from durable diagnostic evidence."""
+    return Path(receipt).with_suffix(".ready.json")
+
+
+def _ready(receipt, plan, root, sid):
+    return _write(ready_path(receipt), {
+        "schema": "basis-workflow-ready-v1", **_identity(plan, root, sid),
+        "receipt": str(Path(receipt).resolve()), "receipt_sha256": sha256_file(receipt)})
+
+
+def _commit_check(path, value, plan, root, sid):
+    value = _write(path, value)
+    if value["status"] in {"ready", "not_requested"}:
+        _ready(path, plan, root, sid)
     return value
 
 
@@ -73,6 +93,8 @@ def _read_gate(path, plan, root, sid):
 
 def validate_inputs(plan, root, sid):
     sample = _sample(plan, sid)
+    path = root / sid / "input-validation.json"
+    ready_path(path).unlink(missing_ok=True)
     value = {"schema": "basis-workflow-input-check-v1", **_identity(plan, root, sid), "started_at": now()}
     try:
         checked = validate_sample(sample)
@@ -83,11 +105,13 @@ def validate_inputs(plan, root, sid):
     except Exception as exc:
         value.update(status="failed", error=str(exc))
     value["finished_at"] = now()
-    return _write(root / sid / "input-validation.json", value)
+    return _commit_check(path, value, plan, root, sid)
 
 
 def check_resources(plan, root, sid, module):
     sample = _sample(plan, sid)
+    receipt = root / sid / "checks" / (module + ".json")
+    ready_path(receipt).unlink(missing_ok=True)
     checked = _read_gate(root / sid / "input-validation.json", plan, root, sid)
     value = {"schema": "basis-workflow-resource-check-v1", **_identity(plan, root, sid),
              "module": module, "started_at": now(), "resources": {},
@@ -112,16 +136,22 @@ def check_resources(plan, root, sid, module):
     except Exception as exc:
         value.update(status="failed", error=str(exc))
     value["finished_at"] = now()
-    return _write(root / sid / "checks" / (module + ".json"), value)
+    return _commit_check(receipt, value, plan, root, sid)
 
 
 def _attest(plan, root, sid, module, result):
+    from .scheduler_state import started_path
     target = record_path(plan, sid, module)
-    atomic_json(root / sid / (module + ".json"), {
+    receipt = root / sid / (module + ".json")
+    started = started_path(root, sid, module)
+    atomic_json(receipt, {
         "schema": "basis-scheduler-receipt-v1", **_identity(plan, root, sid),
         "module": module, "result_path": str(target.resolve()),
         "result_sha256": sha256_file(target), "execution_status": result["execution_status"],
+        "started_sha256": sha256_file(started) if started.exists() else None,
         "recorded_at": now()})
+    if result["execution_status"] not in {"failed", "blocked"}:
+        _ready(receipt, plan, root, sid)
 
 
 def _execution_plan(plan, sample, module, allocated_threads=None):
@@ -144,12 +174,21 @@ def _execution_plan(plan, sample, module, allocated_threads=None):
 
 def run_module(plan, root, sid, module, force=False, allocated_threads=None):
     sample = _sample(plan, sid)
+    from .scheduler_state import mark_started
+    mark_started(plan, root, sid, module)
+    ready_path(root / sid / (module + ".json")).unlink(missing_ok=True)
     gate = _read_gate(root / sid / "checks" / (module + ".json"), plan, root, sid)
     if gate.get("module") != module:
         raise ValueError("Resource gate belongs to another module")
+    if gate["status"] == "failed":
+        result = _base_record(plan, sample, module)
+        result.update(execution_status="blocked", interpretation="inconclusive", error=gate["error"],
+                      reason="resource_check_failed", blocked_by=["check_configured_resources"],
+                      module_decision=module_decision(plan, sample, module), finished_at=now())
+        atomic_json(record_path(plan, sid, module), result)
+        _attest(plan, root, sid, module, result)
+        return result
     try:
-        if gate["status"] == "failed":
-            raise ValueError(gate["error"])
         result = execute_module(_execution_plan(plan, sample, module, allocated_threads), sample, module, force)
     except Exception as exc:
         result = _base_record(plan, sample, module)
@@ -165,6 +204,11 @@ def run_deep_stage(plan, root, sid, stage, force=False, allocated_threads=None):
     if stage not in STAGES:
         raise ValueError("Unknown DeepSafe workflow stage: " + stage)
     sample = _sample(plan, sid)
+    from .scheduler_state import mark_started
+    mark_started(plan, root, sid, "deepsafe", stage=stage)
+    path = root / sid / "deep-stages" / (stage + ".json")
+    ready_path(path).unlink(missing_ok=True)
+    ready_path(root / sid / "deepsafe.json").unlink(missing_ok=True)
     index = STAGES.index(stage)
     previous_path = root / sid / "deep-stages" / (STAGES[index - 1] + ".json") if index else None
     if previous_path:
@@ -175,21 +219,32 @@ def run_deep_stage(plan, root, sid, stage, force=False, allocated_threads=None):
     else:
         records = {module: _read_scheduler_result(plan, sid, module, root) for module in ALL_MODULES}
         gate = _read_gate(root / sid / "checks/deepsafe.json", plan, root, sid)
+        blocked_by = [module for module, record in records.items()
+                      if record.get("execution_status") in {"failed", "blocked"}]
+        if gate["status"] == "failed":
+            blocked_by.append("check_configured_resources")
         try:
             if gate["status"] == "failed":
                 raise ValueError(gate["error"])
+            if blocked_by:
+                raise ValueError("Upstream execution failed: " + ", ".join(blocked_by))
             selected_plan = _execution_plan(plan, sample, "deepsafe", allocated_threads)
             envelope = prepare_deep_execution(selected_plan, sample, force, records)
         except Exception as exc:
             result = _base_record(plan, sample, "deepsafe")
-            result.update(execution_status="failed", interpretation="inconclusive", error=str(exc), candidates=[])
+            result.update(execution_status="blocked" if blocked_by else "failed",
+                          interpretation="inconclusive", error=str(exc), candidates=[])
+            if blocked_by:
+                result.update(blocked_by=blocked_by, reason="upstream_job_failed")
             work = root / sid / "deep-stage-error"
             work.mkdir(parents=True, exist_ok=True)
             envelope = {"result": result, "records": list(records.values()), "config": {},
                         "work": str(work), "started": time.monotonic(), "cache_allowed": False,
                         "stopped": True, "commands": []}
         state = None
-    status = "cached" if envelope.get("cached") else "not_requested" if not plan["options"]["deep"] else "blocked" if envelope["stopped"] else "completed"
+    status = ("cached" if envelope.get("cached") else "not_requested" if not plan["options"]["deep"]
+              else "failed" if not previous_path and envelope["result"].get("execution_status") == "failed"
+              else "blocked" if envelope["stopped"] else "completed")
     if not envelope["stopped"]:
         runner = CommandRunner(envelope["config"], Path(envelope["work"]) / "commands.log")
         try:
@@ -209,12 +264,31 @@ def run_deep_stage(plan, root, sid, stage, force=False, allocated_threads=None):
                     envelope.setdefault("stage_retries", []).append({"stage": stage, "previous_output": str(interrupted),
                         "preserved_output": str(archived), "reason": "output_exists_without_committed_stage_receipt", "at": now()})
             state = run_stage(stage, sample, envelope["records"], envelope["config"], Path(envelope["work"]), runner, state)
+            failures = [c for c in state.get("candidates", []) if c.get("selected") and c.get("execution") == "failed"]
+            if failures:
+                raise RuntimeError("DeepSafe " + stage + " failed for " + "; ".join(
+                    str(c.get("protein_id") or c.get("candidate_id")) + ": " + str(c.get("reason", "analysis failed"))
+                    for c in failures))
         except Exception as exc:
-            envelope["result"].update(execution_status="failed", interpretation="inconclusive", error=str(exc), candidates=[])
+            envelope["result"].update(execution_status="failed", interpretation="inconclusive", error=str(exc))
             envelope["stopped"] = True
             status = "failed"
         envelope["commands"].extend(runner.commands)
-    if stage == STAGES[-1]:
+    if status == "failed":
+        # The rest of the DAG will be blocked. Seal partial evidence now rather
+        # than relying on the final stage to run after a failure.
+        candidates = copy.deepcopy(state.get("candidates", [])) if state else []
+        for candidate in candidates:
+            if candidate.get("selected") and candidate.get("execution") != "failed":
+                candidate.update(execution="not_assessed", reason="workflow_blocked_after_stage_failure")
+        envelope["result"].update(candidates=candidates, failed_stage=stage, complete=False,
+            metrics={"candidate_count": len(candidates), "selected_candidates": sum(bool(c.get("selected")) for c in candidates),
+                     "completed_candidates": 0, "failed_candidates": sum(c.get("execution") == "failed" for c in candidates),
+                     "not_assessed_candidates": sum(c.get("execution") == "not_assessed" for c in candidates),
+                     "deferred_candidates": sum(c.get("execution") == "deferred" for c in candidates)})
+        if state:
+            envelope["result"]["artifacts"] = list(dict.fromkeys(envelope["result"].get("artifacts", []) + state.get("artifacts", [])))
+    if stage == STAGES[-1] or status == "failed" or (not previous_path and status == "blocked"):
         payload = state.get("payload") if state and not envelope["stopped"] else None
         result = finish_deep_execution(plan, sample, envelope, payload)
         _attest(plan, root, sid, "deepsafe", result)
@@ -222,7 +296,10 @@ def run_deep_stage(plan, root, sid, stage, force=False, allocated_threads=None):
              "stage": stage, "status": status, "finished_at": now(),
              "previous_sha256": sha256_file(previous_path) if previous_path else None,
              "envelope": envelope, "state": state}
-    return _write(root / sid / "deep-stages" / (stage + ".json"), value)
+    value = _write(path, value)
+    if status not in {"failed", "blocked"}:
+        _ready(path, plan, root, sid)
+    return value
 
 
 def consolidate_evidence(plan, root, run):
@@ -272,19 +349,24 @@ def main(argv=None):
     if args.action == "deep-stage" and not args.stage:
         parser.error("deep-stage requires --stage")
     if args.action == "validate":
-        validate_inputs(plan, root, args.sample)
+        result = validate_inputs(plan, root, args.sample)
     elif args.action == "resources":
-        check_resources(plan, root, args.sample, args.module)
+        result = check_resources(plan, root, args.sample, args.module)
     elif args.action == "module":
-        run_module(plan, root, args.sample, args.module, args.force, args.threads)
+        result = run_module(plan, root, args.sample, args.module, args.force, args.threads)
     elif args.action == "deep-stage":
-        run_deep_stage(plan, root, args.sample, args.stage, args.force, args.threads)
+        result = run_deep_stage(plan, root, args.sample, args.stage, args.force, args.threads)
     elif args.action == "consolidate":
-        consolidate_evidence(plan, root, run)
+        result = consolidate_evidence(plan, root, run)
     elif args.action == "report":
-        render_report(plan, root)
+        result = render_report(plan, root)
     else:
-        capture_provenance(plan, root)
+        result = capture_provenance(plan, root)
+    if result.get("execution_status", result.get("status")) in {"failed", "blocked"}:
+        error = result.get("error") or result.get("envelope", {}).get("result", {}).get("error") or result.get("reason", "execution blocked")
+        print(f"BaSIS worker {args.action} failed: {error}", file=sys.stderr, flush=True)
+        print(f"Durable diagnostics: {root}", file=sys.stderr, flush=True)
+        return 1
     return 0
 
 
