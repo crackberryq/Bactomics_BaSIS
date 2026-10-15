@@ -63,6 +63,9 @@ def make_plan(config: dict, deep: bool, extend: bool) -> dict:
     from .devices import configure_devices
     from .bootstrap import plan_auto_resources
     config = configure_devices(config, extend)
+    # A copied GUI configuration has the same execution identity.
+    config = copy.deepcopy(config)
+    config.pop("config_path", None)
     config, bootstrap_resources = plan_auto_resources(config, deep, extend)
     samples = load_samples(config["samples"])
     validate_sample_overrides(config, samples)
@@ -430,6 +433,14 @@ def _read_scheduler_result(plan: dict, sample_id: str, module: str, root: str | 
     if hashlib.sha256(payload).hexdigest() != receipt.get("result_sha256"):
         raise ValueError(f"Scheduler result changed after worker completion: {sample_id}:{module}")
     record = json.loads(payload)
+    if root.name.startswith("state-") and record.get("execution_status") == "completed":
+        from .workflow_runtime import read_document, ready_path
+        ready = read_document(ready_path(root / sample_id / (module + ".json")))
+        if ready.get("receipt_sha256") != sha256_file(root / sample_id / (module + ".json")):
+            raise ValueError(f"Scheduler success marker is stale: {sample_id}:{module}")
+        for dependency, expected_digest in ready.get("dependency_checksums", {}).items():
+            if sha256_file(dependency) != expected_digest:
+                raise ValueError(f"Scheduler dependency changed: {sample_id}:{module}")
     if (not isinstance(record, dict) or record.get("schema_version") != 1
             or record.get("sample_id") != sample_id
             or record.get("module") != module
@@ -473,6 +484,9 @@ def run_worker(plan_path: str, sample_id: str, module: str, force=False, *,
                     "result_path": str(target.resolve()), "result_sha256": sha256_file(target),
                     "execution_status": result["execution_status"], "recorded_at": now(),
                     "started_sha256": sha256_file(root / sample_id / "started" / (module + ".json"))})
+        if result["execution_status"] not in {"failed", "blocked"}:
+            from .workflow_runtime import _ready
+            _ready(receipt_path, plan, root, sample_id)
     return result
 
 
@@ -622,6 +636,9 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
            "started_at": now(), "options": plan["options"], "config_hash": hash_object(plan["config"]),
            "source_hash": plan["source_hash"], "validation_mode": plan["config"]["validation_mode"],
            "engine": engine, "force": bool(force), "input_validations": plan["validations"], "enabled_modules": plan["enabled_modules"]}
+    local_job_id = os.environ.get("BASIS_LOCAL_JOB_ID", "")
+    if len(local_job_id) == 24 and all(c in "0123456789abcdef" for c in local_job_id):
+        run["local_job_id"] = local_job_id
     run["module_decisions"] = {s["sample_id"]: {m: module_decision(plan, s, m) for m in ALL_MODULES}
                                for s in plan["samples"]}
     run["enabled_modules_by_sample"] = {sid: [m for m, d in row.items() if d["action"] == "run"]
@@ -632,20 +649,28 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
     outdir = Path(plan["outdir"])
     engine_error = None
     if engine == "snakemake":
-        receipt_root = outdir / "provenance" / "scheduler" / run_id
+        from .scheduler_persistence import prepare_scheduler_state
+        receipt_root = outdir / "provenance" / "scheduler" / ("state-" + plan["plan_hash"])
+        launch_root = outdir / "provenance" / "scheduler" / run_id
         run["scheduler_receipt_dir"] = str(receipt_root)
+        run["scheduler_launch_dir"] = str(launch_root)
+        run["scheduler_state_policy"] = "stable_plan_namespace_v1"
         run["reporting_mode"] = "snakemake_dag"
-        scheduler_log = receipt_root / "snakemake.log"
+        scheduler_log = launch_root / "snakemake.log"
         run["scheduler_log"] = str(scheduler_log)
         from .workflow_runtime import _write as write_workflow_document
-        write_workflow_document(receipt_root / "run-context.json", run)
+        write_workflow_document(launch_root / "run-context.json", run)
+        run["scheduler_integrity_audit"] = prepare_scheduler_state(plan, receipt_root, launch_root, force=force)
+        write_workflow_document(launch_root / "run-context.json", run)
         snakefile = Path(__file__).parent / "resources" / "Snakefile"
         command = [sys.executable, "-m", "snakemake", "all", "--snakefile", str(snakefile), "--configfile", plan["plan_path"],
                    "--directory", str(outdir), "--cores", str(plan["config"]["execution"]["cores"]),
                    "--resources", f"mem_mb={plan['config']['execution']['memory_mb']}",
-                   f"gpu={plan['config']['execution'].get('gpus', 0)}", "--keep-going", "--rerun-incomplete", "--rerun-triggers", "mtime",
+                   f"gpu={plan['config']['execution'].get('gpus', 0)}", "--keep-going", "--rerun-incomplete", "--rerun-triggers", "mtime", "input", "params", "code", "software-env",
                    "--printshellcmds", "--show-failed-logs",
                    ]
+        if force:
+            command.append("--forceall")
         if enabled():
             command.append("--verbose")
         from .workflow_environments import has_managed_environments, conda_storage
@@ -659,7 +684,8 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
         command = [sys.executable, "-c", bootstrap, *command[3:]]
         env["PYTHONUNBUFFERED"] = "1"
         env["BASIS_FORCE"] = "1" if force else "0"
-        env["BASIS_SCHEDULER_RUN_ID"] = run_id
+        env["BASIS_SCHEDULER_RUN_ID"] = receipt_root.name
+        env["BASIS_SCHEDULER_LAUNCH_DIR"] = str(launch_root)
         emit(f"Scheduler log: {scheduler_log}")
         try:
             completed = _run_scheduler(command, scheduler_log, env)
@@ -668,7 +694,7 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
             else:
                 try:
                     from .workflow_runtime import read_document
-                    outcome = read_document(receipt_root / "outcome.json")
+                    outcome = read_document(launch_root / "outcome.json")
                     if (outcome.get("schema") != "basis-workflow-outcome-v1"
                             or outcome.get("plan_hash") != plan["plan_hash"]
                             or outcome.get("result", {}).get("run", {}).get("run_id") != run_id
@@ -735,6 +761,13 @@ def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt
             elif engine == "snakemake":
                 try:
                     record = _read_scheduler_result(plan, sample["sample_id"], module, receipt_root)
+                    receipt = read_json(Path(receipt_root) / sample["sample_id"] / (module + ".json"))
+                    producer = receipt.get("producer_launch_id", receipt.get("run_id"))
+                    record["scheduler_execution"] = {"status": "executed_this_launch" if producer == run["run_id"] else "preserved_by_snakemake",
+                        "producer_launch_id": producer, "current_launch_id": run["run_id"],
+                        "receipt": str(Path(receipt_root) / sample["sample_id"] / (module + ".json"))}
+                    if producer != run["run_id"]:
+                        record["cache_hit"] = True
                 except (OSError, ValueError, KeyError, TypeError) as exc:
                     # A saved result alone cannot establish execution in this
                     # run. Valid receipts preserve completed independent jobs
@@ -787,6 +820,14 @@ def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt
                                     and r.get("module_decision", {}).get("requested")
                                     and r.get("execution_status") != "completed"]
                         record.update(candidates=[], upstream_incomplete=upstream)
+                        from .deep_candidates import failure_diagnostics
+                        failures = failure_diagnostics(plan, receipt_root, sid)
+                        if failures:
+                            record.update(execution_status="failed", reason="deepsafe_stage_failed",
+                                          stage_failures=failures,
+                                          error="; ".join((f.get("protein_id") or f.get("candidate_id") or sid)
+                                              + ": " + str(f.get("stage")) + ": " + f["error"] for f in failures))
+                            record.setdefault("artifacts", []).extend(f["receipt"] for f in failures)
                         if upstream and record["execution_status"] == "not_started":
                             record.update(execution_status="blocked", reason="upstream_execution_incomplete",
                                           error="DeepSafe was not started because requested upstream modules did not complete: " + ", ".join(upstream))

@@ -1,4 +1,4 @@
-# Batch inputs in BaSIS 0.3.0rc5
+# Batch inputs in BaSIS 0.3.0rc6
 
 The batch importer creates a new study with `samples.tsv`, `config.yaml`, an original-sheet snapshot and `import-audit.json`. It never runs annotation or analysis tools. One sample sheet can contain several isolates; the normal run produces a consolidated report.
 
@@ -62,7 +62,7 @@ Optional metadata columns are `taxon`, `taxon_rank`, `taxon_source`, `amrfinder_
 Excel requires `openpyxl==3.1.5`. The deployment installer offers `--with-excel` to install it and `et-xmlfile==2.0.0` into the new venv; this explicitly permits a dependency download. The current clean deployment installer downloads Python dependencies; source checkouts use pip. Older frozen release installers may differ. A conventional wheel installation can select the optional extra:
 
 ```bash
-python -m pip install '/path/to/bactromics_basis-0.3.0rc5-py3-none-any.whl[excel]'
+python -m pip install '/path/to/bactromics_basis-0.3.0rc6-py3-none-any.whl[excel]'
 ```
 
 CSV/TSV import works without the Excel dependency. BaSIS reads formulas as formulas so it can reject them; it does not trust Excel's cached computed values. The original sheet is copied, checksummed and made read-only. Import validates table structure and file identity; `basis validate` or `basis doctor` performs sequence consistency checks. Import and execution each record their own hashes.
@@ -95,7 +95,7 @@ After reviewing preflight for the desired scope:
 basis run -c study-batch/config.yaml -d -e -v
 ```
 
-The default Snakemake engine prepares automatic first-run resources and schedules jobs within the configured CPU, memory and GPU budgets. The local compatibility engine processes samples serially and requires existing tools and manually prepared resources. Keep the configuration, sample manifest, import audit, original sheet, software identity and resource snapshots with the outputs. Module completion, deferred candidates and unresolved interpretation remain separate report states.
+Snakemake prepares automatic first-run resources, waits for study-wide readiness, and schedules jobs within the configured CPU, memory and GPU budgets. Repeating an unchanged study resumes verified completed tasks. Keep the configuration, sample manifest, import audit, original sheet, software identity and resource snapshots with the outputs. Module completion, deferred candidates and unresolved interpretation remain separate report states.
 
 This candidate is installed alongside earlier releases. The recovered pilot integration check is separate from independent biological validation. Software checks do not establish biological accuracy.
 

@@ -19,7 +19,7 @@ basis run -c study/config.yaml -d -e -v --output summary
 
 `-v` shows stages, sample progress, module outcomes, cache reuse, command-log paths and 30-second heartbeats on stderr. The final summary lists each sample's execution counts and scope state, with selected/deferred DeepSafe counts shown separately. It includes the report and evidence paths. Detailed diagnostic messages remain in the evidence and logs.
 
-The local engine processes samples serially. Snakemake retains its existing scheduling behavior: the launcher shows scheduler progress and its log path, while worker details are recorded in the scheduler log. This release adds no new parallel scheduling policy.
+Snakemake is the execution engine. The launcher forwards scheduler and worker output and records it in the launch log. Native analyses wait for the global setup barrier, then independent sample/module and DeepSafe candidate tasks run within the declared budgets. Repeating an unchanged study resumes verified completed tasks. See [orchestration](ORCHESTRATION.md).
 
 ## Machine-readable output
 
@@ -66,7 +66,8 @@ Exit code 0 retains its existing meaning for completed requested scope or a succ
 ## Check the installed release
 
 ```bash
-python -I BaSIS_check_run_controls.py
+basis verify-install
+basis demo --outdir synthetic-check -d -e -v --output summary
 ```
 
-The supplied helper requires the installed rc8 package and creates a fresh directory with small artificial fixtures. It performs no native analysis, model download or GPU inference. Upload its printed `run-controls-check-summary.zip` for review. Earlier checkers remain associated with their original release versions.
+The first command checks packaged source/assets. The second creates a fresh demonstration with small artificial fixtures through Snakemake. It performs no native biological analysis, model download or GPU inference. Historical study-specific checkers remain associated with their original release versions.

@@ -68,14 +68,8 @@ def eligible(candidate):
     if domains.get('architecture',{}).get('ambiguous_region_count',0):return 'overlapping_domain_models_require_review'
     return None
 
-def run_bounded(candidate,catalog,config,directory,runner,budget):
-    result={'status':'not_assessed','policy':POLICY,'runs':[],'artifacts':[],
-            'note':'All trees are exploratory and unrooted; support is not functional evidence.'}
-    reason=eligible(candidate)
-    if reason:result['reason']=reason;return result
-    maximum=int(config.get('maximum_tree_candidates',6))
-    if maximum<0:raise ValueError('maximum_tree_candidates must be >=0')
-    if budget['used']>=maximum:result['reason']='tree_candidate_budget_exhausted';return result
+def bounded_inputs(candidate,catalog):
+    """Verified inputs used by both budget planning and native execution."""
     query=candidate['query'];qid=query['id']
     original=read_fasta(Path(query['path']))[qid]
     if hashlib.sha256(original.encode()).hexdigest()!=query['sequence_sha256']:raise ValueError('Query changed before alignment')
@@ -87,6 +81,18 @@ def run_bounded(candidate,catalog,config,directory,runner,budget):
         seq,normalization[rid]=normalize_alignment_sequence(raw)
         if seq in seen:labels[seen[seq]]['references'].append(ref);continue
         key=f'R{len(seen)+1:05d}';seen[seq]=key;sequences[key]=seq;labels[key]={'references':[ref]}
+    return sequences,labels,normalization
+
+def run_bounded(candidate,catalog,config,directory,runner,budget):
+    result={'status':'not_assessed','policy':POLICY,'runs':[],'artifacts':[],
+            'note':'All trees are exploratory and unrooted; support is not functional evidence.'}
+    reason=eligible(candidate)
+    if reason:result['reason']=reason;return result
+    maximum=int(config.get('maximum_tree_candidates',6))
+    if maximum<0:raise ValueError('maximum_tree_candidates must be >=0')
+    if budget['used']>=maximum:result['reason']='tree_candidate_budget_exhausted';return result
+    sequences,labels,normalization=bounded_inputs(candidate,catalog)
+    qid=candidate['query']['id']
     if len(set(sequences.values()))<4:result['reason']='fewer_than_four_distinct_sequences';return result
     budget['used']+=1
     work=directory/'bounded_trees';work.mkdir(exist_ok=True)

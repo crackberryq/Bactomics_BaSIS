@@ -1,4 +1,4 @@
-# Local BaSIS interface (0.3.0rc5)
+# Local BaSIS interface (0.3.0rc6)
 
 The optional interface runs on Linux or WSL2. Analyses use the same installed
 BaSIS CLI, Snakemake workflow and adapters. The browser controls this computer;
@@ -17,34 +17,35 @@ instructions, including executable and command-prefix settings.
 
 ## Four-step workflow
 
-**Start here** shows the four steps and an optional labelled synthetic demo.
+**Overview** shows saved studies, the preparation/analysis/report sequence and an optional labelled synthetic demo. Its navy, teal, ivory and gold styling follows the evidence reports.
 A fresh study does not need a separate tool-installation or database-setup step.
 
-1. **Add samples:** preview/import Excel, CSV or TSV. A local sheet retains its
+1. **Add samples:** create a study from a HybAs folder, or preview/import Excel, CSV or TSV. A local sheet retains its
    original relative-path base. An uploaded sheet needs absolute input paths,
    or exact sample-name discovery with an explicit annotation root. Select the
    worksheet for multi-sheet workbooks. A fresh import without a base config
    creates the full preset with automatic first-run resources. Existing base
    configurations retain their declared resources, module modes and thresholds.
 2. **Run analysis:** choose the study config and whether to include DeepSafe and
-   Extend. **Start analysis** runs input checks and lets Snakemake prepare missing
-   requested environments, databases and models before the dependent analyses.
+   Extend. **Run / resume study** runs input checks and lets Snakemake prepare missing
+   requested environments, databases and models. All required setup checks must pass before sample analyses start.
    **Check readiness** is an optional read-only preview; resources awaiting
    preparation are reported as planned, not downloaded or verified. Advanced
-   settings expose CPU/RAM/GPU scheduling budgets, deployment and engine choices.
+   settings expose CPU/RAM/GPU scheduling budgets and deployment settings. Snakemake is the only execution engine.
 3. **Progress & jobs:** follow live scheduler/worker logs and inspect the exact
    command, software version, source-config checksum and timestamps. One job runs
-   per workspace. Repeated identical submissions reconnect to the saved job;
-   choose another attempt explicitly to retry finished work. Each analysis gets
-   its own resolved config snapshot, results directory and placement cache.
+   per workspace. An active duplicate submission reconnects to its job. Run/resume
+   after a finished or interrupted job creates a new launch record while preserving
+   the study's configured result directory and placement cache. Identical resolved
+   settings use the same immutable execution-config snapshot.
 4. **Explore results:** open rich reports and download evidence, tables, methods
    and citations. Build a control panel from an explicit list of results. For
    older panels, add the related result directories to serve sibling links;
    broad parent folders are unnecessary. The report server never derives access
    permissions from paths stored in evidence files.
 
-Snakemake owns input/resource checks, native module execution, nine DeepSafe
-stages per sample, consolidation, reporting and provenance. Completion and
+Snakemake owns input/resource checks, native module execution, shared DeepSafe
+prerequisites and candidate tasks, consolidation, reporting and provenance. Completion and
 interpretation remain separate: an overall `incomplete` scope can include
 intentionally deferred candidates, while all selected candidates completed.
 Model scores and phylogenetic support are not organism-safety verdicts.
@@ -84,16 +85,17 @@ BaSIS does not install or upgrade GPU drivers.
 available for explicit preparation, custom resources and inspection. They are
 optional administration pages, not prerequisites for the four-step workflow.
 See [resource setup](RESOURCE_SETUP.md) for the separate recipe-driven commands.
-The serial local engine requires existing tools and manually prepared resources;
-automatic first-run preparation requires Snakemake.
+The interface delegates execution to the installed CLI and Snakemake; it does not implement a second workflow scheduler.
 
 ## Persistent jobs and reproducibility
 
 Closing the browser does not stop a job. A reboot interrupts running analyses;
-such jobs are recorded as interrupted, never completed. New-attempt retries do
-not restore a terminated process. Deep stage JSON supports restart within one
-workflow attempt; a new GUI submission does not promise partial-stage reuse
-across attempts. Completed whole-result caches are verified separately.
+such jobs are recorded as interrupted, never completed. Run/resume starts a new
+launcher and resumes verified completed DAG tasks for the same execution plan.
+Successful candidate tasks survive a failed sibling. Changed inputs, resources,
+source or configuration can invalidate work; upgrading releases is not a promise
+of unchanged cache identities. The stop action targets the recorded launcher and
+verified process descendants, with PID identity checks; it never kills by process name.
 
 Snakemake schedules independent modules and samples within declared budgets.
 Those budgets are scheduling declarations, not operating-system memory limits.

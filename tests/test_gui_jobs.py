@@ -43,18 +43,20 @@ class JobTests(unittest.TestCase):
         self.assertEqual(actual["deep"]["reference_fasta"], str(source / "references.faa"))
         self.assertEqual(actual["deep"]["maximum_candidates"], 17)
         self.assertEqual(actual["modules"], cfg["modules"])
-        self.assertEqual(actual["outdir"], str(dest / "results"))
+        self.assertEqual(actual["outdir"], str(source / "results"))
+        self.assertEqual(out, str(source / "results"))
+        self.assertEqual(actual["deep"]["placement_cache_dir"], cfg["deep"]["placement_cache_dir"])
         self.assertEqual(actual["execution"]["cores"], 2)
         self.assertEqual(yaml.safe_load(file.read_text()), cfg)
         self.assertIn("-I", command)
         self.assertEqual(command[command.index("--engine") + 1], "snakemake")
 
     def test_engine_selection_is_explicit_and_preserved(self):
-        for engine in ("local", "snakemake"):
+        for engine in ("snakemake",):
             request = jobs.normalized_request({"kind": "demo", "engine": engine})
             command, _ = jobs._prepare(self.root, request, self.root)
             self.assertEqual(command[command.index("--engine") + 1], engine)
-        for request in ({"kind": "demo", "engine": "shell"},
+        for request in ({"kind": "demo", "engine": "local"}, {"kind": "demo", "engine": "shell"},
                         {"kind": "panel", "engine": "snakemake", "results": [str(self.root)]},
                         {"kind": "demo", "retry_failed": True}):
             with self.subTest(request=request), self.assertRaises(ValueError):

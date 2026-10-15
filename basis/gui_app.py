@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from html import escape
 import json
 import os
 from pathlib import Path
@@ -15,54 +16,53 @@ from basis.config import load_config
 from basis.environment_setup import recipe_names
 from basis.gui_artifacts import ReportServer
 from basis.jobs import list_jobs, read_job, scheduler_progress, submit, tail
+from basis.gui_theme import CSS, hero, phase_plan, state_badge, study_configurations
 from basis.report_citation import AUTHOR, ORCID, citation_text, write_citations
 
 st.set_page_config(page_title="BaSIS · Research workspace", page_icon="🧬", layout="wide")
 workspace = Path(os.environ.get("BASIS_GUI_WORKSPACE", str(Path.home() / "BaSIS-workspace"))).expanduser().resolve()
-st.markdown('''<style>
-.stApp {background:#f1f5f8;color:#243d50;}
-h1,h2,h3 {color:#101f33;letter-spacing:-.025em;}
-section[data-testid="stSidebar"] {background:#101f33;}
-section[data-testid="stSidebar"] * {color:#e3edf4;}
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {opacity:.8;}
-.block-container {max-width:1420px;padding-top:2rem;}
-.basis-hero {padding:30px 34px;border-radius:18px;background:radial-gradient(ellipse at 100% 0,#246276,transparent 55%),linear-gradient(115deg,#142d43,#173e52);color:white;margin-bottom:22px;}
-.basis-hero h1 {color:white;margin:7px 0 10px;font-size:2.3rem;line-height:1.2;}
-.basis-hero p {margin:0;max-width:790px;color:#dae9ef;line-height:1.6;}
-.basis-eyebrow {font-size:.7rem;font-weight:750;letter-spacing:.16em;text-transform:uppercase;color:#a9ddd6;}
-.basis-step {font-size:.72rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:#087c78;margin-bottom:9px;}
-div[data-testid="stMetric"] {background:white;border:1px solid #dce6ec;border-top:3px solid #087c78;border-radius:12px;padding:18px;}
-div[data-testid="stVerticalBlockBorderWrapper"]>div {border-radius:14px;}
-button[kind="primary"] {background:#087c78;border-color:#087c78;}
-button[kind="primary"]:hover {background:#066662;border-color:#066662;}
-@media(max-width:760px){.basis-hero{padding:23px;}.basis-hero h1{font-size:1.8rem;}}
-</style>''', unsafe_allow_html=True)
-PAGE_LABELS = {"Overview": "Start here", "Samples": "1 · Add samples", "Run": "2 · Run analysis",
-               "Jobs": "3 · Progress & jobs", "Results & export": "4 · Explore results",
-               "Setup": "Advanced · tool environments", "Resources": "Advanced · databases & models"}
-page = st.sidebar.radio("Your workspace", list(PAGE_LABELS), format_func=PAGE_LABELS.get, key="page")
-st.sidebar.caption(f"BaSIS {__version__} · Local Linux / WSL")
-with st.sidebar.expander("Workspace details"):
-    st.caption(str(workspace))
-    new_attempt = st.checkbox("New attempt after a previous job finished", key="new_attempt")
-    st.caption("Select for retries or changed inputs/resources. Active jobs are always reused.")
-st.sidebar.markdown(f"[{AUTHOR} · ORCID]({ORCID})")
-st.sidebar.caption("Analysis completion and biological interpretation are reported separately.")
-HEADINGS = {
-    "Overview": ("From genome to evidence", "Add samples and start your analysis. New studies prepare their required tools and resources automatically, then produce an interactive evidence report."),
-    "Setup": ("Prepare your analysis tools", "Plan, install and verify tool environments with Snakemake. Then check the databases and models required by your study."),
-    "Resources": ("Prepare your study resources", "Choose explicitly configured resources, review the plan and let Snakemake coordinate supported downloads and index building."),
-    "Samples": ("Bring your samples together", "Import a sample sheet from HybAs or another annotation workflow. Preview every sample before creating your study."),
-    "Run": ("Choose your analysis", "Select the evidence layers you need, check readiness and start a reproducible workflow."),
-    "Jobs": ("Follow your progress", "See the current activity and live workflow output. Jobs keep running when you leave this page."),
-    "Results & export": ("Explore the evidence", "Open your interactive report for genomic context, candidate details, motifs, trees and downloadable evidence."),
-}
-title, description = HEADINGS[page]
-st.markdown(f'<div class="basis-hero"><div class="basis-eyebrow">BaSIS · Research workspace</div><h1>{title}</h1><p>{description}</p></div>', unsafe_allow_html=True)
+st.markdown(CSS, unsafe_allow_html=True)
+PAGE_LABELS = {"Overview": "Overview", "Samples": "Samples & studies", "Run": "Run / resume",
+               "Jobs": "Live progress", "Results & export": "Reports & evidence",
+               "Setup": "Tool environments", "Resources": "Databases & models"}
 
 
 def navigate(destination):
     st.session_state["page"] = destination
+
+
+page = st.session_state.setdefault("page", "Overview")
+if page not in PAGE_LABELS:
+    page = st.session_state["page"] = "Overview"
+st.sidebar.markdown('<div class="basis-brand"><div class="basis-brand-mark">B</div><div><strong>BaSIS</strong><small>BACTROMICS ENVIRONMENT</small></div></div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="basis-nav-caption">Research workspace</div>', unsafe_allow_html=True)
+for name in ("Overview", "Samples", "Run", "Jobs", "Results & export"):
+    st.sidebar.button(PAGE_LABELS[name], key="nav_" + name, on_click=navigate, args=(name,),
+                      type="primary" if page == name else "secondary", width="stretch")
+with st.sidebar.expander("Advanced preparation", expanded=page in {"Setup", "Resources"}):
+    for name in ("Setup", "Resources"):
+        st.button(PAGE_LABELS[name], key="nav_" + name, on_click=navigate, args=(name,),
+                  type="primary" if page == name else "secondary", width="stretch")
+active_study = st.session_state.get("active_study")
+st.sidebar.markdown('<div class="basis-sidebar-study">CURRENT STUDY<strong>' + escape(Path(active_study).parent.name if active_study else "No study selected") + '</strong>Choose a study to run or resume its workflow.</div>', unsafe_allow_html=True)
+with st.sidebar.expander("Workspace details"):
+    st.caption(str(workspace))
+    st.caption("Saved jobs reconnect after a browser refresh. Run / resume retains the selected study outputs.")
+st.sidebar.caption(f"BaSIS {__version__} · Linux / WSL")
+st.sidebar.markdown(f"[{AUTHOR} · ORCID]({ORCID})")
+new_attempt = False
+HEADINGS = {
+    "Overview": ("From genome to evidence", "A connected workspace for your genomic safety studies. Prepare a study, follow its analysis and explore every finding through one evidence report."),
+    "Setup": ("Prepare your analysis tools", "Plan, install and verify tool environments with Snakemake. Then check the databases and models required by your study."),
+    "Resources": ("Prepare your study resources", "Choose explicitly configured resources, review the plan and let Snakemake coordinate supported downloads and index building."),
+    "Samples": ("Bring your samples together", "Import a sample sheet from HybAs or another annotation workflow. Preview every sample before creating your study."),
+    "Run": ("Your study. One workflow.", "Choose your evidence layers and start or resume the same study. Snakemake manages preparation, analysis and recovery."),
+    "Jobs": ("Every step, in view", "Follow recorded workflow activity and live logs. The workflow continues when you leave this page; return here to reconnect."),
+    "Results & export": ("Explore the evidence", "Open your interactive report for genomic context, candidate details, motifs, trees and downloadable evidence."),
+}
+title, description = HEADINGS[page]
+st.markdown('<div class="basis-breadcrumb"><span>Bactromics / <strong>' + escape(PAGE_LABELS[page]) + '</strong></span><span class="basis-local">Local research workspace</span></div>', unsafe_allow_html=True)
+st.markdown(hero(title, description, __version__), unsafe_allow_html=True)
 
 
 def next_step(label, destination, key):
@@ -108,16 +108,16 @@ def launch(request, new=False):
     try:
         job = submit(workspace, request, new_attempt=new or new_attempt)
         st.session_state["selected_job"] = job["id"]
-        st.success(f"Job submitted · {job['state']}. Open Progress & jobs to follow it.")
+        st.success(f"{job['state'].replace('_', ' ').capitalize()} · Open Live progress to follow this job.")
         next_step("Follow this job →", "Jobs", "follow_submitted_job")
         if job.get("reconnected"):
-            st.info("Reconnected to a saved job. To recheck changed inputs or resources, select New attempt in the sidebar.")
-    except (ValueError, OSError, yaml.YAMLError) as exc:
+            st.info("Reconnected to the saved job. Run / resume starts a new workflow invocation after a finished run, retaining the same study outputs.")
+    except (ValueError, OSError, RuntimeError, yaml.YAMLError) as exc:
         st.error(str(exc))
 
 
 def config_field(key="config"):
-    return st.text_input("Configuration path on this computer", key=key,
+    return st.text_input("Study configuration", key=key,
                          placeholder="/home/jimi/bactomics/study/config.yaml")
 
 
@@ -131,6 +131,10 @@ def inspect_results(root, related_roots=()):
     if not root.is_dir():
         st.info("Select an existing results directory.")
         return
+    report = next((root / n for n in ("index.html", "report.html") if (root / n).is_file()), None)
+    if report:
+        st.link_button("Open interactive report ↗", report_server(str(root), related_roots).url(report.name), type="primary")
+        st.caption("Open the complete evidence workspace: findings, genomic context, candidate details, motifs, trees and source files.")
     evidence_path = root / "evidence.json"
     if evidence_path.is_file() and evidence_path.stat().st_size > 256 * 1024 * 1024:
         st.info("This evidence file exceeds the interface preview limit. Open the saved report for its summaries.")
@@ -142,55 +146,52 @@ def inspect_results(root, related_roots=()):
             rows.append({"Sample": record.get("sample_id"), "Module": record.get("module"),
                          "Execution": record.get("execution_status"), "Error": record.get("error")})
         if rows:
-            st.dataframe(rows, use_container_width=True, hide_index=True)
+            st.dataframe(rows, width="stretch", hide_index=True)
         for record in data.get("deep_records", []):
             if record.get("module") == "deepsafe":
                 metrics = record.get("metrics", {})
                 st.caption(f"{record.get('sample_id')} DeepSafe · selected {metrics.get('selected_candidates', 0)} · "
                            f"completed {metrics.get('completed_candidates', 0)} · deferred {metrics.get('deferred_candidates', 0)}")
-    report = next((root / n for n in ("index.html", "report.html") if (root / n).is_file()), None)
-    if report:
-        st.link_button("Open interactive report ↗", report_server(str(root), related_roots).url(report.name), type="primary")
-        st.caption("Only the selected report folder and explicitly added related folders are served. Keep these folders together when sharing.")
-    for name in ("evidence.json", "run-summary.json", "findings.tsv", "recommendations.tsv", "methods.txt", "CITATION.cff", "BaSIS.bib", "BaSIS.ris"):
-        path = root / name
-        if path.is_file() and path.stat().st_size <= 50 * 1024 * 1024:
-            st.download_button("Download " + name, path.read_bytes(), file_name=name, key="dl_" + str(path))
+    with st.expander("Download evidence and methods"):
+        st.caption("These are saved artifacts from the selected results directory. Related folders must remain available for links in the report.")
+        for name in ("evidence.json", "run-summary.json", "findings.tsv", "recommendations.tsv", "methods.txt", "CITATION.cff", "BaSIS.bib", "BaSIS.ris"):
+            path = root / name
+            if path.is_file() and path.stat().st_size <= 50 * 1024 * 1024:
+                st.download_button("Download " + name, path.read_bytes(), file_name=name, key="dl_" + str(path))
     st.code(str(root), language=None)
 
 
 if page == "Overview":
     jobs = list_jobs(workspace)
-    st.subheader("Your next step")
-    cards = st.columns(4)
-    for col, number, heading, detail, label, target in zip(
-        cards, ("01", "02", "03", "04"),
-        ("Add samples", "Run analysis", "Follow progress", "Explore results"),
-        ("Import Excel, CSV or TSV with sample names or input paths.",
-         "Choose Safety, DeepSafe and Extend. First-run setup is automatic.",
-         "Follow environment setup, downloads and analysis in the live log.",
-         "Open rich reports, trees and the supporting evidence."),
-        ("Add samples →", "Prepare a run →", "View progress →", "Open results →"),
-        ("Samples", "Run", "Jobs", "Results & export")):
-        with col, st.container(border=True):
-            st.markdown(f'<div class="basis-step">Step {number}</div>', unsafe_allow_html=True)
-            st.markdown("### " + heading)
-            st.write(detail)
-            next_step(label, target, "start_" + number)
-    st.divider()
+    studies = study_configurations(workspace, jobs)
     a, b, c = st.columns(3)
-    a.metric("Saved jobs", len(jobs))
+    a.metric("Studies in this workspace", len(studies))
     b.metric("Active jobs", sum(j["state"] in {"queued", "running", "orphaned_active"} for j in jobs))
-    c.metric("Tool environment recipes", len(recipe_names()))
-    with st.container(border=True):
-        st.subheader("Try the workflow first")
-        st.write("The synthetic demonstration creates example results without biological tools, databases or GPU inference.")
+    c.metric("Saved job records", len(jobs))
+    st.markdown(phase_plan(), unsafe_allow_html=True)
+    a, b = st.columns([1.2, 1])
+    with a, st.container(border=True):
+        st.markdown('<div class="basis-step">Start a study</div>', unsafe_allow_html=True)
+        st.subheader("Bring your samples together")
+        st.write("Open a HybAs sample folder or import an Excel, CSV or TSV sheet. Existing BaSIS studies can be selected directly.")
+        next_step("Add samples or open a study →", "Samples", "start_01")
+        next_step("Run / resume an existing study →", "Run", "start_02")
+    with b, st.container(border=True):
+        st.markdown('<div class="basis-step">Continue your work</div>', unsafe_allow_html=True)
+        st.subheader("Pick up where you left off")
+        st.write("Reconnect to an active workflow, inspect a stopped run, or explore your saved evidence.")
+        next_step("Follow live progress →", "Jobs", "start_03")
+        next_step("Open reports & evidence →", "Results & export", "start_04")
+    if jobs:
+        st.subheader("Recent activity")
+        st.dataframe([{"Operation": j.get("kind"), "Status": j.get("state", "unknown").replace("_", " "),
+                       "Started (UTC)": j.get("created_at", "")[:19],
+                       "Study": Path(j.get("request", {}).get("config") or j.get("outdir") or ".").parent.name}
+                      for j in jobs[:8]], width="stretch", hide_index=True)
+    with st.expander("Explore a synthetic demonstration"):
+        st.write("Create example reports without biological tools, databases or GPU inference.")
         if st.button("Run synthetic demonstration", key="run_demo"):
             launch({"kind": "demo", "engine": "snakemake"})
-    if jobs:
-        with st.expander("Recent activity", expanded=True):
-            st.dataframe([{k: j.get(k) for k in ("kind", "state", "created_at")} for j in jobs[:10]], hide_index=True)
-            next_step("View saved jobs →", "Jobs", "recent_jobs")
 
 elif page == "Setup":
     st.subheader("Prepare tool environments in advance")
@@ -266,7 +267,19 @@ elif page == "Resources":
     next_step("Check study readiness →", "Setup", "resources_preflight")
 
 elif page == "Samples":
-    st.subheader("Create a study from a sample sheet")
+    st.subheader("Start from a HybAs sample")
+    st.write("Select the sample folder or its annotation directory. BaSIS imports the available annotation and recorded taxonomy.")
+    hybas_dir = st.text_input("HybAs sample folder", key="hybas_dir", placeholder="/home/jimi/bactomics/isolate2")
+    with st.expander("Study location and scope"):
+        init_directory = st.text_input("New study directory (optional)", key="init_directory", placeholder="Leave blank to save in this workspace")
+        init_preset = st.selectbox("Safety preset", ("full", "core"), key="init_preset",
+                                  format_func=lambda value: "Full · all supported screening modules" if value == "full" else "Core · baseline screening modules")
+    if st.button("Create study from HybAs", key="init_hybas", type="primary", disabled=not hybas_dir.strip()):
+        launch({"kind": "init", "hybas_dir": hybas_dir, "preset": init_preset,
+                **({"directory": init_directory} if init_directory.strip() else {})})
+    st.caption("Study creation records inputs and configuration. Installation and analysis start when you choose Run / resume.")
+    st.divider()
+    st.subheader("Or import a sample sheet")
     st.write("Use Excel, CSV or TSV. File paths refer to this Linux/WSL computer. Preview preserves identifiers and reports row-level issues before creating a study.")
     source = st.text_input("Sample-sheet path", placeholder="/home/jimi/bactomics/samples.xlsx")
     uploaded = st.file_uploader("Or upload a sheet using absolute input paths", type=["xlsx", "csv", "tsv"])
@@ -295,16 +308,28 @@ elif page == "Samples":
         launch({**request, "preview": True})
     if b.button("Create new study", disabled=not source):
         launch({**request, "preview": False})
-    st.caption("Each import writes a new study inside its job folder. Open the import job for its configuration path, then start analysis. New studies use automatic resource preparation unless you supply an existing base configuration.")
+    st.caption("Imported studies appear in the saved-study selector on Run / resume. New studies use automatic preparation unless you supply an existing base configuration.")
     next_step("Continue to run analysis →", "Run", "samples_next")
 
 elif page == "Run":
     st.subheader("Choose your study")
+    saved_studies = study_configurations(workspace, list_jobs(workspace))
+    if saved_studies:
+        def choose_saved_study():
+            chosen = st.session_state.get("saved_study")
+            if chosen:
+                st.session_state["run_config"] = chosen
+                st.session_state["active_study"] = chosen
+        st.selectbox("Saved studies", [""] + saved_studies, key="saved_study", on_change=choose_saved_study,
+                     format_func=lambda value: "Select a saved study…" if not value else str(Path(value).parent))
+    if "run_config" not in st.session_state and active_study:
+        st.session_state["run_config"] = active_study
     cfg = config_field("run_config")
     config = None
     if cfg:
         try:
             config = load_config(Path(cfg).expanduser())
+            st.session_state["active_study"] = cfg
         except (ValueError, OSError, yaml.YAMLError) as exc:
             st.error(str(exc))
     if config is not None and st.session_state.get("budget_source") != cfg:
@@ -314,18 +339,43 @@ elif page == "Run":
         st.session_state["run_environment_backend"] = "external" if config["execution"].get("environment_backend") == "external" else "auto"
         st.session_state["run_conda_prefix"] = config["execution"].get("conda_prefix") or str(workspace / ".basis-envs")
     if config is not None and config.get("resources", {}).get("policy") == "auto":
-        st.info("Automatic first-run setup is enabled. Snakemake checks inputs, installs required tool environments, and prepares missing databases and models. The first run can involve large downloads; later runs reuse verified resources.")
+        st.info("Automatic setup is enabled. All tools, databases and models required for this run are prepared and verified before sample analysis starts. First-run downloads can be large.")
+    st.markdown(phase_plan(), unsafe_allow_html=True)
+    if config is not None:
+        with st.expander("Samples in this study"):
+            try:
+                from basis.inputs import load_samples_diagnostic
+                entries = load_samples_diagnostic(config["samples"])
+                st.dataframe([{"Sample": entry["declaration"].get("sample_id", ""),
+                               "Taxon": (entry.get("sample") or entry["declaration"]).get("taxon") or "Not declared",
+                               "Input declaration": "; ".join(entry["errors"]) or "Resolved · validation runs before analysis"}
+                              for entry in entries], hide_index=True, width="stretch")
+            except (OSError, ValueError, KeyError) as exc:
+                st.caption("Sample preview: " + str(exc))
+    resume_options = st.session_state.pop("resume_options", None)
+    if resume_options and resume_options.get("config") == cfg:
+        for key in ("cores", "memory_mb", "gpus"):
+            if key in resume_options:
+                st.session_state["budget_" + key] = resume_options[key]
+        st.session_state["run_deep"] = resume_options.get("deep", False)
+        st.session_state["run_extend"] = resume_options.get("extend", False)
+        st.session_state["run_environment_backend"] = resume_options.get("environment_backend", "auto")
+        if resume_options.get("conda_prefix"):
+            st.session_state["run_conda_prefix"] = resume_options["conda_prefix"]
     st.subheader("Analysis layers")
     a, b, c = st.columns(3)
     with a, st.container(border=True):
+        st.markdown('<div class="basis-step">01 · Included</div>', unsafe_allow_html=True)
         st.markdown("### Safety")
         st.write("Screen with the core modules enabled in your study configuration.")
         st.caption("Baseline evidence · configured modules")
     with b, st.container(border=True):
-        deep = st.checkbox("DeepSafe", value=True)
+        st.markdown('<div class="basis-step">02 · Candidate review</div>', unsafe_allow_html=True)
+        deep = st.checkbox("DeepSafe", value=True, key="run_deep")
         st.write("Investigate selected candidates using domains, motifs, context and eligible reference analyses.")
     with c, st.container(border=True):
-        extend = st.checkbox("Extend", value=True)
+        st.markdown('<div class="basis-step">03 · Model evidence</div>', unsafe_allow_html=True)
+        extend = st.checkbox("Extend", value=True, key="run_extend")
         st.write("Add PathogenFinder2 model evidence and prioritise proteins for follow-up.")
     st.caption("Snakemake schedules the required steps and resource budgets. Scientific interpretation and evidence gates remain part of BaSIS.")
     with st.expander("Advanced settings · resources and execution"):
@@ -333,38 +383,42 @@ elif page == "Run":
         cores = a.number_input("CPU cores", min_value=1, value=4, key="budget_cores")
         memory = b.number_input("Memory budget (MiB)", min_value=1, value=16000, step=1000, key="budget_memory_mb")
         gpu = c.number_input("Scheduled GPUs", min_value=0, max_value=1, value=0, key="budget_gpus")
-        engine = st.selectbox("Execution engine", ("snakemake", "local"),
-                              format_func=lambda value: "Snakemake · recommended" if value == "snakemake" else "Local BaSIS runner")
         environment_backend = st.selectbox("Environment deployment", ("auto", "external"), key="run_environment_backend",
-            format_func=lambda value: "Automatic · manage missing, reuse configured prefixes" if value == "auto" else "Existing tools only · no automatic environment creation",
-            disabled=engine == "local")
+            format_func=lambda value: "Automatic · manage missing, reuse configured prefixes" if value == "auto" else "Existing tools only · verify configured environments")
         run_conda = st.text_input("Snakemake environment cache", value=str(workspace / ".basis-envs"), key="run_conda_prefix")
-        st.caption("Automatic mode uses native Snakemake Conda deployment for stages without a configured command prefix and retains configured per-module deployment overrides. Explicit command prefixes keep using their existing environments. Existing-tools mode overrides deployment for every module and DeepSafe, using configured prefixes or executable PATH without creating environments.")
-        if engine == "local":
-            st.info("The local runner uses existing tools only; automatic Conda deployment requires the Snakemake engine.")
-            environment_backend = "external"
+        st.caption("Snakemake is the workflow engine. Automatic mode creates missing environments from pinned recipes and reuses configured prefixes; existing-tools mode only verifies the supplied environments.")
         st.caption("CPU/RAM/GPU values are scheduling budgets. Tool settings and model device choices come from the configuration.")
         if config is not None:
             st.dataframe([{"Module": n, "Enabled in config": m.get("enabled"), "Mode": m.get("mode", "native"),
                            "Executable": m.get("executable"), "Database": m.get("database")} for n, m in config["modules"].items()], hide_index=True)
             st.json({"deep": config["deep"], "sample_module_overrides": config.get("sample_module_overrides", {})})
-        fresh = st.checkbox("Create another attempt if these settings have already finished")
     request = {"config": cfg, "deep": deep, "extend": extend, "cores": int(cores), "memory_mb": int(memory), "gpus": int(gpu),
                "environment_backend": environment_backend}
     if run_conda.strip():
         request["conda_prefix"] = str((workspace / Path(run_conda).expanduser()).resolve())
     a, b = st.columns(2)
     if a.button("Check readiness", disabled=config is None):
-        launch({**request, "kind": "doctor"}, fresh)
-    if b.button("Start analysis", type="primary", disabled=config is None):
-        launch({**request, "kind": "run", "engine": engine}, fresh)
-    st.caption("Input checks run automatically when you start. Check readiness provides an optional preview without downloads. Each job gets its own configuration, results and placement cache. Repeated clicks reconnect to the same job unless another finished attempt is explicitly requested.")
+        launch({**request, "kind": "doctor"}, True)
+    if b.button("Run / resume study", type="primary", disabled=config is None, key="run_study"):
+        launch({**request, "kind": "run", "engine": "snakemake"}, True)
+    st.caption("Input checks run automatically. Run / resume retains the configured study output directory; Snakemake reruns missing, incomplete or invalidated work. Repeated clicks reconnect while the same request is active.")
+    if config is not None:
+        with st.expander("Study files and CLI starting point"):
+            command = ["basis", "run", "-c", cfg, "--engine", "snakemake", "--cores", str(int(cores)), "-v", "--output", "summary"]
+            command += (["-d"] if deep else []) + (["-e"] if extend else [])
+            st.code(shlex.join(command), language="bash")
+            st.caption("This command uses the source configuration. GUI budget and environment choices are captured in the job configuration; Live progress shows its exact launch command.")
+            st.caption("Study outputs: " + str(config.get("outdir", "not configured")))
+            st.caption("Sample sheet: " + str(config.get("samples", "not configured")))
+            if Path(cfg).expanduser().is_file():
+                st.download_button("Download source configuration", Path(cfg).expanduser().read_bytes(), "config.yaml", key="source_config_download")
 
 elif page == "Jobs":
     st.subheader("Progress and saved jobs")
     jobs = list_jobs(workspace)
     if not jobs:
-        st.info("No jobs yet. Start with the synthetic demonstration on Overview.")
+        st.markdown('<div class="basis-empty"><strong>Your workflow activity will appear here.</strong>Create or select a study, then use Run / resume. This page reconnects to saved jobs and displays their actual logs.</div>', unsafe_allow_html=True)
+        next_step("Choose a study →", "Run", "empty_jobs_run")
     else:
         ids = [j["id"] for j in jobs]
         initial = st.session_state.get("selected_job")
@@ -374,9 +428,11 @@ elif page == "Jobs":
         @st.fragment(run_every=3)
         def monitor():
             job = read_job(workspace, chosen)
-            a, b = st.columns(2)
-            a.metric("Job status", job["state"].replace("_", " "))
-            b.metric("Exit code", str(job.get("exit_code")) if job.get("exit_code") is not None else "In progress")
+            st.markdown(state_badge(job["state"]), unsafe_allow_html=True)
+            a, b, c = st.columns(3)
+            a.metric("Operation", job.get("kind", "not recorded"))
+            b.metric("Job status", job["state"].replace("_", " "))
+            c.metric("Exit code", str(job.get("exit_code")) if job.get("exit_code") is not None else "Pending")
             st.caption(job.get("message", "Progress refreshes every three seconds. Reconnect after closing the browser using this workspace."))
             st.markdown("#### Live workflow output")
             st.caption("Snakemake scheduling, native tool activity and completion messages appear here. The saved console log retains the full output.")
@@ -388,7 +444,41 @@ elif page == "Jobs":
                 st.progress(observed["scheduler_percent"] / 100,
                     text=f"Scheduler: {observed['completed_steps']} of {observed['scheduled_steps']} steps completed")
                 st.caption("Step counts may grow as candidate analyses are scheduled. Scheduler progress does not indicate biological interpretation.")
-            st.code(console, language=None)
+            with st.container(height=420, border=True):
+                st.code(console, language=None)
+            if job.get("kind") == "run" and job.get("state") == "running":
+                if st.button("Stop this workflow", key="stop_" + chosen):
+                    try:
+                        from basis.jobs import stop_job
+                        stopped = stop_job(workspace, chosen)
+                        st.info(stopped.get("message", "Stop request handled; inspect the recorded outcome below."))
+                        with st.expander("Verified stop record", expanded=True):
+                            st.json(stopped.get("stop_result", stopped))
+                    except (OSError, ValueError, RuntimeError) as exc:
+                        st.error(str(exc))
+                st.caption("Stopping verifies the recorded launcher identity and its descendants. Other studies and unrelated processes are not selected.")
+            if job.get("kind") == "run" and job.get("state") not in {"running", "queued", "orphaned_active"}:
+                source = job.get("request", {}).get("config")
+                if source and st.button("Resume this study →", key="resume_" + chosen):
+                    st.session_state["active_study"] = source
+                    st.session_state["run_config"] = source
+                    st.session_state["resume_options"] = job.get("request", {})
+                    st.session_state["page"] = "Run"
+                    st.rerun()
+            if job.get("kind") in {"import", "init"} and job.get("outdir"):
+                imported_config = Path(job["outdir"]) / "config.yaml"
+                if imported_config.is_file():
+                    if st.button("Use this study →", key="use_" + chosen):
+                        st.session_state["active_study"] = str(imported_config)
+                        st.session_state["run_config"] = str(imported_config)
+                        st.session_state["page"] = "Run"
+                        st.rerun()
+            if job.get("outdir"):
+                report_root = Path(job["outdir"]) / "results" if job.get("kind") == "demo" else Path(job["outdir"])
+                report = next((report_root / n for n in ("index.html", "report.html") if (report_root / n).is_file()), None)
+                if report:
+                    st.link_button("Open latest study report ↗", report_server(str(report_root)).url(report.name), type="primary")
+                    st.caption("This is the latest report saved in the study directory. Its timestamp and scope may belong to a different attempt; the job log above remains specific to this launch.")
             with st.expander("Command and reproducibility record"):
                 st.code(shlex.join(job["command"]), language="bash")
                 st.json(job)
@@ -410,11 +500,15 @@ elif page == "Results & export":
     if jobs:
         chosen = st.selectbox("Saved job", [j["id"] for j in jobs], format_func=lambda value: next(j["kind"] + " · " + j["created_at"][:19] for j in jobs if j["id"] == value))
         job = next(j for j in jobs if j["id"] == chosen)
+        if job.get("kind") == "run" and job.get("state") not in {"completed", "incomplete"}:
+            st.info("Saved study reports can come from an earlier attempt. Check the report timestamp and scope against this job before interpretation.")
         default = str(Path(job["outdir"]) / "results") if job["kind"] == "demo" else job["outdir"]
     else:
         default = ""
+    st.caption("The study directory contains its latest saved report. To identify the generating run, check the report timestamp and evidence provenance.")
     folder = st.text_input("Results directory (saved job or an existing study)", value=default)
-    related = st.text_area("Related result directories (one per line; needed for links to other study folders)")
+    with st.expander("Linked reports and portable control panel"):
+        related = st.text_area("Related result directories (one per line; needed for links to other study folders)")
     related_roots = tuple(p.strip() for p in related.splitlines() if p.strip())
     if folder:
         try:

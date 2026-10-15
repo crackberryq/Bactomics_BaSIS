@@ -2,6 +2,8 @@
 # CONTROLLER_SOURCE are established. Resource preparation is part of that DAG.
 from basis.bootstrap import bootstrap_environment, ready_path
 
+LAUNCH = globals().get("LAUNCH", RECEIPTS)
+
 BOOTSTRAP_SPECS = {entry["id"]: entry for entry in PLAN.get("bootstrap_resources", [])}
 
 rule bootstrap_resource:
@@ -24,6 +26,6 @@ rule bootstrap_resource:
         plan=PLAN_PATH,
         root=RECEIPTS
     log:
-        RECEIPTS + "/bootstrap/{resource}.worker.log"
+        LAUNCH + "/bootstrap/{resource}.worker.log"
     shell:
         "PYTHONPATH={params.source:q} {params.python:q} -m basis.bootstrap --plan {params.plan:q} --run-dir {params.root:q} --resource {wildcards.resource:q} --threads {threads} 2>&1 | tee {log:q}"

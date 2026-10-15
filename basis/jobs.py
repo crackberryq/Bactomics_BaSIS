@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import uuid
 
 from . import __version__
@@ -118,10 +119,11 @@ def normalized_request(request):
     r = dict(request)
     allowed = {"kind", "config", "deep", "extend", "cores", "memory_mb", "gpus",
                "envs", "create", "retry_failed", "engine", "prefix_root", "file", "sheet", "root", "input_mode", "base_config", "preview", "results",
-               "resources", "execute", "conda_prefix", "environment_backend"}
+               "resources", "execute", "conda_prefix", "environment_backend",
+               "hybas_dir", "directory", "preset", "resource_dir"}
     if set(r) - allowed:
         raise ValueError("Unknown job options: " + ", ".join(sorted(set(r) - allowed)))
-    if r.get("kind") not in {"run", "doctor", "demo", "setup", "resources", "import", "audit", "panel"}:
+    if r.get("kind") not in {"run", "doctor", "demo", "setup", "resources", "import", "audit", "panel", "init"}:
         raise ValueError("Unsupported job operation")
     for key in ("config", "file", "base_config"):
         if r.get(key):
@@ -142,10 +144,27 @@ def normalized_request(request):
         raise ValueError("At most one scheduled GPU is supported")
     if r.get("input_mode", "auto") not in {"auto", "external", "hybas"}:
         raise ValueError("Invalid input mode")
-    if "engine" in r and (r["kind"] not in {"run", "demo", "setup"} or r["engine"] not in {"local", "snakemake"}):
-        raise ValueError("Engine must be local or snakemake for a run, demo or setup job")
-    if r["kind"] in {"run", "setup"}:
+    if "engine" in r and (r["kind"] not in {"run", "demo", "setup"} or r["engine"] != "snakemake"):
+        raise ValueError("Run, demo and setup jobs use the snakemake engine")
+    if r["kind"] in {"run", "demo", "setup"}:
         r.setdefault("engine", "snakemake")
+    if any(key in r for key in ("hybas_dir", "directory", "preset", "resource_dir")) and r["kind"] != "init":
+        raise ValueError("Study initialization options are only valid for init")
+    if r["kind"] == "init":
+        if not isinstance(r.get("hybas_dir"), str) or not r["hybas_dir"].strip():
+            raise ValueError("Select a HybAs annotation directory")
+        root = Path(r["hybas_dir"]).expanduser().resolve(strict=True)
+        if not root.is_dir():
+            raise ValueError("HybAs input must be a directory")
+        r["hybas_dir"] = str(root)
+        r.setdefault("preset", "full")
+        if r["preset"] not in {"core", "full"}:
+            raise ValueError("Study preset must be core or full")
+        for key in ("directory", "resource_dir"):
+            if key in r:
+                if not isinstance(r[key], str) or not r[key].strip():
+                    raise ValueError(key + " must be a nonempty directory path")
+                r[key] = str(Path(r[key]).expanduser().resolve())
     if r.get("retry_failed") and r["kind"] != "setup":
         raise ValueError("retry_failed is only valid for environment setup")
     if "prefix_root" in r:
@@ -178,6 +197,38 @@ def normalized_request(request):
     return r
 
 
+def _resolved_config_snapshot(workspace, config):
+    """Publish immutable resolved settings, keeping identical Snake inputs stable.
+
+    A completed temporary file is linked into place without overwriting an
+    existing target. Existing content must match, including after a race.
+    """
+    import yaml
+    payload = yaml.safe_dump(config, sort_keys=True).encode("utf-8")
+    digest = hashlib.sha256(payload).hexdigest()
+    root = job_root(workspace) / "resolved-configs"
+    if root.is_symlink():
+        raise ValueError("Resolved configuration store must not be a symlink")
+    root.mkdir(parents=True, exist_ok=True)
+    target = root / (digest + ".yaml")
+    if not target.exists() and not target.is_symlink():
+        descriptor, temporary = tempfile.mkstemp(prefix=".config-", dir=root)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                os.link(temporary, target)
+            except FileExistsError:
+                pass
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+    if target.is_symlink() or not target.is_file() or target.read_bytes() != payload:
+        raise ValueError("Resolved configuration snapshot is corrupt; existing file was not replaced: " + str(target))
+    return target, payload
+
+
 def _prepare(directory, request, workspace):
     import yaml
     r = request
@@ -200,10 +251,9 @@ def _prepare(directory, request, workspace):
                    (i > 0 and prefix[i-1] in {"-p", "--prefix"} and not Path(token).is_absolute()) or \
                    token.startswith("--prefix=") and not Path(token.split("=", 1)[1]).is_absolute():
                     raise ValueError("Use absolute command-prefix paths before starting a background job: " + token)
-        outdir = directory / "results"
-        cfg["outdir"] = str(outdir)
-        # A private cache prevents two studies writing the same placement bundle.
-        cfg["deep"]["placement_cache_dir"] = str(directory / "placement-cache")
+        # The study owns scientific outputs and caches. New launch records must
+        # not change Snake targets or hide previously completed work.
+        outdir = Path(cfg["outdir"])
         for key in ("cores", "memory_mb", "gpus", "environment_backend", "conda_prefix"):
             if key in r:
                 cfg["execution"][key] = r[key]
@@ -212,8 +262,8 @@ def _prepare(directory, request, workspace):
             # environment, including stages with a prior managed override.
             for section in list(cfg["modules"].values()) + [cfg["deep"]]:
                 section["environment_backend"] = "external"
-        config = directory / "config.yaml"
-        config.write_text(yaml.safe_dump(cfg, sort_keys=False))
+        config, payload = _resolved_config_snapshot(workspace, cfg)
+        (directory / "config.yaml").write_bytes(payload)  # per-attempt audit copy
         command += [kind, "-c", str(config), "-v"]
         command += (["-d"] if r.get("deep") else []) + (["-e"] if r.get("extend") else [])
         if kind == "run":
@@ -223,9 +273,7 @@ def _prepare(directory, request, workspace):
             command += ["--report-dir", str(outdir)]
     elif kind == "demo":
         outdir = directory / "demo"
-        command += ["demo", "--outdir", str(outdir), "-d", "-e", "-v", "--output", "summary"]
-        if r.get("engine"):
-            command += ["--engine", r["engine"]]
+        command += ["demo", "--outdir", str(outdir), "-d", "-e", "-v", "--output", "summary", "--engine", "snakemake"]
     elif kind == "setup":
         command += ["setup-environments", "--workspace", str(workspace),
                     "--engine", r.get("engine", "snakemake"), "--cores", str(r.get("cores", 1))]
@@ -269,6 +317,12 @@ def _prepare(directory, request, workspace):
         else:
             outdir = directory / "study"
             command += ["--directory", str(outdir)]
+    elif kind == "init":
+        outdir = Path(r["directory"]) if r.get("directory") else directory / "study"
+        command += ["init", "--directory", str(outdir), "--hybas-dir", r["hybas_dir"],
+                    "--preset", r.get("preset", "full")]
+        if r.get("resource_dir"):
+            command += ["--resource-dir", r["resource_dir"]]
     return command, str(outdir) if outdir else None
 
 
@@ -316,7 +370,26 @@ def submit(workspace, request, *, new_attempt=False):
         return state
 
 
-def outcome(kind, code, outdir):
+def _evidence_path(kind, outdir):
+    return Path(outdir or ".") / ("results/evidence.json" if kind == "demo" else "evidence.json")
+
+
+def _evidence_snapshot(kind, outdir):
+    """Record prior evidence without trusting or requiring its JSON contents."""
+    path = _evidence_path(kind, outdir)
+    if not path.exists():
+        return {"exists": False}
+    payload = path.read_bytes()
+    result = {"exists": True, "sha256": hashlib.sha256(payload).hexdigest()}
+    try:
+        data = json.loads(payload)
+        result["run_id"] = data["run"]["run_id"]
+    except (ValueError, KeyError, TypeError):
+        result["run_id"] = None
+    return result
+
+
+def outcome(kind, code, outdir, *, evidence_before=None, started_at=None, job_id=None):
     if kind == "resources" and outdir:
         summary = Path(outdir) / "summary.json"
         if not summary.is_file():
@@ -333,10 +406,25 @@ def outcome(kind, code, outdir):
         if code == 0 and result.get("status") == "completed":
             return "completed", "Selected tool environments verified. Databases and models require separate readiness checks."
         return "needs_attention", "Environment setup needs attention; inspect setup/summary.json and the log."
-    evidence_path = Path(outdir or ".") / ("results/evidence.json" if kind == "demo" else "evidence.json")
+    evidence_path = _evidence_path(kind, outdir)
     if kind in {"run", "demo"} and evidence_path.is_file():
-        evidence = json.loads(evidence_path.read_text())
-        completeness = evidence.get("run", {}).get("completeness")
+        try:
+            payload = evidence_path.read_bytes()
+            evidence = json.loads(payload)
+            run = evidence["run"]
+            completeness = run.get("completeness")
+            if evidence_before is not None:
+                launch_started = datetime.fromisoformat(started_at)
+                run_started = datetime.fromisoformat(run["started_at"])
+                run_finished = datetime.fromisoformat(run["finished_at"])
+                if (not isinstance(run.get("run_id"), str) or not run["run_id"]
+                        or run["run_id"] == evidence_before.get("run_id")
+                        or hashlib.sha256(payload).hexdigest() == evidence_before.get("sha256")
+                        or (job_id is not None and run.get("local_job_id") != job_id)
+                        or run_started < launch_started or run_finished < run_started):
+                    return "failed", "Saved evidence does not attest this launch; inspect the current command log."
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return "failed", "No valid current-run evidence was produced; inspect the command log."
         if code == 0 and completeness == "completed_requested_scope":
             return "completed", completeness
         if code == 2 and completeness == "incomplete":
@@ -349,6 +437,61 @@ def outcome(kind, code, outdir):
     if kind == "doctor" or (kind == "import" and code == 2):
         return "needs_attention", "Preflight or input checks reported issues; inspect the log."
     return "failed", "Command failed; inspect the saved log."
+
+
+def stop_job(workspace, job_id):
+    """Stop only this job's recorded, still-identical BaSIS run launcher.
+
+    No program-name or output-path process search is used. Native descendants
+    are handled by run_control's pidfd verification, never numeric PID kills.
+    """
+    from .run_control import matches_config, read_process, stop_invocation
+    directory = job_path(workspace, job_id)
+    status_path = directory / "status.json"
+    audit_path = directory / "cancellation.json"
+    with lock(directory / "stop.lock", blocking=False):
+        state = json.loads(status_path.read_text())
+        if state.get("kind") != "run" or state.get("state") != "running":
+            raise ValueError("Only a recorded running analysis job can be stopped here; no signals sent")
+        pid = state.get("child_pid")
+        identity = state.get("child_identity")
+        command = state.get("command", [])
+        if (type(pid) is not int or not isinstance(identity, list) or len(identity) != 2 or _identity(pid) != identity
+                or not state.get("worker_identity")
+                or _identity(state.get("worker_pid")) != state["worker_identity"]):
+            raise ValueError("Recorded worker or child identity no longer matches; no signals sent")
+        launcher = read_process(pid)
+        if (launcher is None or launcher.uid != os.getuid()
+                or launcher.start_time != str(identity[1])
+                or launcher.ppid != state.get("worker_pid")
+                or not isinstance(command, list) or not all(isinstance(value, str) for value in command)
+                or tuple(command) != launcher.argv
+                or launcher.cwd != str(workspace_path(workspace))
+                or command.count("-c") != 1 or command[-1:] == ["-c"]):
+            raise ValueError("Recorded child process changed; no signals sent")
+        config = command[command.index("-c") + 1]
+        if not matches_config(launcher, config):
+            raise ValueError("Recorded analysis configuration does not match; no signals sent")
+        audit = {"schema": "basis-job-cancellation-v1", "job_id": job_id,
+                 "requested_at": now(), "child_pid": pid, "child_identity": identity,
+                 "command": command, "state": "requested", "signals": []}
+        atomic_json(audit_path, audit)
+        try:
+            result = stop_invocation(launcher)
+        except (OSError, ValueError, RuntimeError) as exc:
+            audit.update(state="rejected", error=str(exc), finished_at=now())
+            atomic_json(audit_path, audit)
+            raise
+        audit.update(state=result["status"], result=result, signals=result.get("signals", []), finished_at=now())
+        atomic_json(audit_path, audit)
+        with lock(directory / "status.lock"):
+            latest = json.loads(status_path.read_text())
+            latest["cancellation"] = str(audit_path)
+            latest["stop_status"] = result["status"]
+            if result["status"] == "stopped" and result.get("signals"):
+                latest.update(state="cancelled", finished_at=now(), message="Stopped the verified analysis invocation. Resume uses the same study outputs.")
+            atomic_json(status_path, latest)
+        return {**latest, "stop_result": result}
 
 
 def scheduler_progress(log_text):
@@ -378,19 +521,40 @@ def work(workspace, identifier):
             state.update(state="running", started_at=now(), worker_pid=os.getpid(), worker_identity=_identity(os.getpid()))
             atomic_json(path, state)
         try:
+            if state["kind"] in {"run", "demo"}:
+                state["evidence_before"] = _evidence_snapshot(state["kind"], state.get("outdir"))
+                state["evidence_current"] = False
             with Path(state["log"]).open("ab", buffering=0) as output:
                 child = subprocess.Popen(state["command"], stdin=subprocess.DEVNULL,
                     stdout=output, stderr=subprocess.STDOUT, cwd=workspace,
-                    env={**os.environ, "PYTHONUNBUFFERED": "1"}, pass_fds=(fd,))
-                state["child_pid"] = child.pid
-                atomic_json(path, state)
+                    env={**os.environ, "PYTHONUNBUFFERED": "1", "BASIS_LOCAL_JOB_ID": identifier}, pass_fds=(fd,))
+                state.update(child_pid=child.pid, child_identity=_identity(child.pid))
+                with lock(directory / "status.lock"):
+                    atomic_json(path, state)
                 code = child.wait()
-            result, message = outcome(state["kind"], code, state.get("outdir"))
+            result, message = outcome(state["kind"], code, state.get("outdir"),
+                                      evidence_before=state.get("evidence_before"),
+                                      started_at=state["started_at"], job_id=identifier)
             state.update(state=result, exit_code=code, message=message)
+            if state["kind"] in {"run", "demo"} and result in {"completed", "incomplete"}:
+                evidence = json.loads(_evidence_path(state["kind"], state.get("outdir")).read_text())
+                if evidence["run"].get("local_job_id") != identifier:
+                    raise ValueError("Study evidence changed while recording this job outcome")
+                state.update(evidence_current=True, result_run_id=evidence["run"]["run_id"])
         except Exception as exc:
             state.update(state="failed", message=str(exc))
         state["finished_at"] = now()
-        atomic_json(path, state)
+        with lock(directory / "status.lock"):
+            latest = json.loads(path.read_text())
+            latest.update(state)
+            cancellation = directory / "cancellation.json"
+            if cancellation.is_file():
+                audit = json.loads(cancellation.read_text())
+                latest["cancellation"] = str(cancellation)
+                if (audit.get("child_identity") == state.get("child_identity")
+                        and audit.get("state") == "stopped" and audit.get("signals")):
+                    latest.update(state="cancelled", stop_status="stopped", message="Stopped the verified analysis invocation. Resume uses the same study outputs.")
+            atomic_json(path, latest)
 
 
 def tail(path, max_bytes=32000):
@@ -405,7 +569,7 @@ def tail(path, max_bytes=32000):
 def main(argv=None):
     import yaml
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("list", "show", "start", "_work"))
+    parser.add_argument("operation", choices=("list", "show", "start", "stop", "_work"))
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--job")
     parser.add_argument("--request", help="JSON file containing typed job options")
@@ -419,11 +583,13 @@ def main(argv=None):
             data = list_jobs(args.workspace)
         elif args.operation == "show":
             data = read_job(args.workspace, args.job)
+        elif args.operation == "stop":
+            data = stop_job(args.workspace, args.job)
         else:
             data = submit(args.workspace, json.loads(Path(args.request).read_text()), new_attempt=args.new_attempt)
         print(json.dumps(data, indent=2))
         return 0
-    except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+    except (OSError, ValueError, TypeError, RuntimeError, yaml.YAMLError) as exc:
         print("Job error: " + str(exc), file=sys.stderr)
         return 2
 

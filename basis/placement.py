@@ -36,7 +36,8 @@ def placement_gate(candidate):
     return None
 
 
-def run_family_placements(candidates, config, outdir, runner, catalogue=None):
+def run_family_placements(candidates, config, outdir, runner, catalogue=None, *,
+                          prepared_panels=None, initial_used=0):
     """Add the requested layer without replacing previous trees or decisions.
 
     Biological insufficiency is an explicit abstention. Tool/resource corruption
@@ -51,7 +52,9 @@ def run_family_placements(candidates, config, outdir, runner, catalogue=None):
     outdir = Path(outdir)
     cache = Path(config.get("placement_cache_dir") or outdir / "placement-cache")
     budget = int(config.get("maximum_placement_candidates", 20))
-    used, artifacts = 0, []
+    used, artifacts = int(initial_used), []
+    if used < 0:
+        raise ValueError("Placement budget offset must be nonnegative")
     for candidate in candidates:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", str(candidate.get("candidate_id", ""))):
             raise ValueError("Invalid placement candidate identifier")
@@ -64,8 +67,9 @@ def run_family_placements(candidates, config, outdir, runner, catalogue=None):
         elif enabled:
             emit(f"DeepSafe {candidate.get('protein_id')}: auditing competing reference panel")
             try:
-                panel = prepare_panel(candidate, registry, cache / "sequences", catalogue=catalogue,
-                                      allow_download=config.get("placement_allow_download", True))
+                panel = (prepared_panels[candidate["candidate_id"]] if prepared_panels is not None
+                         else prepare_panel(candidate, registry, cache / "sequences", catalogue=catalogue,
+                                            allow_download=config.get("placement_allow_download", True)))
                 # Keep the complete, immutable panel in an inspectable artifact.
                 directory.mkdir(parents=True, exist_ok=True)
                 panel_path = directory / "panel.json"

@@ -1,3 +1,15 @@
+# 0.3.0rc6 — persistent Snakemake tasks and study control panel
+
+- Use Snakemake exclusively for public analysis, demonstration and environment-setup commands; Streamlit delegates to the same installed CLI.
+- Add a global readiness barrier so requested tools and resources pass setup checks before sample analyses begin.
+- Separate stable task completion receipts from per-launch logs and reporting history. An unchanged study resumes valid completed tasks; source, input, configuration or resource changes can require recomputation.
+- Expose DeepSafe candidate tasks to Snakemake, retaining shared reference searches, deterministic budgets and existing scientific applicability checks.
+- Preserve the study result directory and placement cache across GUI retries, use immutable resolved-config snapshots, and reject stale evidence as proof of a new successful launch.
+- Redesign the local interface using the evidence reports' navy, teal, ivory and gold theme, with saved studies, HybAs folder initialization, clear analysis choices, observed progress and report access.
+- Add identity-checked cancellation from the job panel without broad process-name kills.
+
+Scientific thresholds, reference-selection policies and interpretation rules are unchanged. Software verification is separate from clean-machine native acceptance and independent biological validation, which remain pending.
+
 # 0.3.0rc5 — portable Linux process cancellation
 
 - Support Linux Python builds without the optional Python pidfd bindings through libc or explicit supported Linux syscall ABIs.

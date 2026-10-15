@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
 import sys
 import time
 import uuid
@@ -39,9 +40,31 @@ def ready_path(receipt):
 
 
 def _ready(receipt, plan, root, sid):
+    receipt = Path(receipt)
+    value = read_json(receipt)
+    dependencies = dict(value.get("dependency_checksums") or {})
+    parent = receipt.parent
+    if sid is not None:
+        if parent == root / sid / "checks":
+            paths = [ready_path(root / sid / "input-validation.json")]
+            from .bootstrap import bootstrap_dependencies
+            paths.extend(Path(p) for p in bootstrap_dependencies(plan, sid, value["module"]))
+        elif parent == root / sid and value.get("schema") == "basis-scheduler-receipt-v1":
+            paths = [ready_path(root / sid / "checks" / (value["module"] + ".json"))]
+            if value["module"] == "deepsafe":
+                final = ready_path(root / sid / "deep-stages/finalize.json")
+                if final.exists():
+                    paths.append(final)
+        elif parent == root / sid / "deep-stages" and value.get("stage") == "prepare":
+            paths = [ready_path(root / sid / (module + ".json")) for module in ALL_MODULES]
+            paths.append(ready_path(root / sid / "checks/deepsafe.json"))
+        else:
+            paths = []
+        dependencies.update({str(path): sha256_file(path) for path in paths if path.exists()})
     return _write(ready_path(receipt), {
         "schema": "basis-workflow-ready-v1", **_identity(plan, root, sid),
-        "receipt": str(Path(receipt).resolve()), "receipt_sha256": sha256_file(receipt)})
+        "receipt": str(receipt.resolve()), "receipt_sha256": sha256_file(receipt),
+        "dependency_checksums": dependencies})
 
 
 def _commit_check(path, value, plan, root, sid):
@@ -68,11 +91,21 @@ def _load(plan_path, run_dir):
     if hash_object(document) != plan.get("plan_hash"):
         raise ValueError("Execution plan checksum mismatch")
     root = _scheduler_root(plan, run_dir)
-    run = read_document(root / "run-context.json")
+    run = read_document(_report_root(root) / "run-context.json")
     run.pop("content_sha256")
-    if run.get("run_id") != root.name or run.get("source_hash") != plan["source_hash"] or run.get("config_hash") != hash_object(plan["config"]):
+    if run.get("run_id") != _report_root(root).name or run.get("source_hash") != plan["source_hash"] or run.get("config_hash") != hash_object(plan["config"]):
         raise ValueError("Workflow run context does not match execution plan")
     return plan, root, run
+
+
+def _report_root(root):
+    value = os.environ.get("BASIS_SCHEDULER_LAUNCH_DIR")
+    if not value:
+        return root
+    path = Path(value).resolve()
+    if path.parent != Path(root).resolve().parent or path == Path(root).resolve():
+        raise ValueError("Launch history must be a separate sibling of scheduler state")
+    return path
 
 
 def _sample(plan, sid):
@@ -115,7 +148,7 @@ def check_resources(plan, root, sid, module):
     checked = _read_gate(root / sid / "input-validation.json", plan, root, sid)
     value = {"schema": "basis-workflow-resource-check-v1", **_identity(plan, root, sid),
              "module": module, "started_at": now(), "resources": {},
-             "scope": "configured_path_availability; content fingerprints are verified by the scientific worker"}
+             "scope": "required resource content and native tool identity verified before global setup barrier"}
     requested = plan["options"]["deep"] if module == "deepsafe" else module_decision(plan, sample, module)["action"] == "run"
     try:
         if not requested:
@@ -125,18 +158,57 @@ def check_resources(plan, root, sid, module):
                 raise ValueError("Input validation failed: " + checked.get("error", "unknown input error"))
             from .bootstrap import apply_resources
             resolved = apply_resources(plan, root, module, sample_id=sid)
+            from .workflow_environments import execution_config
             cfg = resolved["config"]["deep"] if module == "deepsafe" else module_config(resolved["config"], module, sample)
+            cfg = execution_config(resolved, sid, module, cfg)
             for key in sorted(PATH_KEYS - {"placement_cache_dir"}):
                 if cfg.get(key):
                     path = Path(cfg[key])
                     value["resources"][key] = {"path": str(path), "exists": path.exists()}
                     if not path.exists():
                         raise ValueError("Configured resource does not exist: " + key + "=" + str(path))
+            from .scheduler_persistence import resource_fingerprints, capture_tool_identity
+            value["verified_config"] = cfg
+            value["resource_fingerprints"] = resource_fingerprints(cfg, require_present=True)
+            if cfg.get("mode", "native") == "native" and plan["config"].get("validation_mode") != "synthetic_fixture":
+                runner = CommandRunner(cfg, _report_root(root) / sid / "logs" / ("check_" + module + ".commands.log"))
+                value["tool_identity"] = capture_tool_identity(module, cfg, runner)
+                if module != "deepsafe":
+                    from .execution import probe_version
+                    version = probe_version(module, cfg, runner)
+                    value["tool_version"] = version
+                    if version.get("status") == "failed":
+                        raise ValueError("Required tool startup failed: " + version.get("error", module))
             value["status"] = "ready"
     except Exception as exc:
         value.update(status="failed", error=str(exc))
     value["finished_at"] = now()
     return _commit_check(receipt, value, plan, root, sid)
+
+
+def setup_ready(plan, root):
+    """All requested tools/resources must be ready before native sample jobs."""
+    from .progress import emit
+    receipt = root / "setup.json"
+    ready_path(receipt).unlink(missing_ok=True)
+    gates = []
+    value = {"schema": "basis-workflow-setup-v1", **_identity(plan, root), "started_at": now()}
+    try:
+        for sample in plan["samples"]:
+            sid = sample["sample_id"]
+            for module in ALL_MODULES + ["deepsafe"]:
+                gate_path = root / sid / "checks" / (module + ".json")
+                gate = _read_gate(gate_path, plan, root, sid)
+                if gate.get("module") != module or gate.get("status") not in {"ready", "not_requested"}:
+                    raise ValueError("Setup prerequisite failed: " + sid + ":" + module)
+                gates.append({"sample_id": sid, "module": module, "status": gate["status"],
+                              "path": str(gate_path), "sha256": sha256_file(gate_path)})
+        value.update(status="ready", gates=gates)
+        emit("Setup complete: all requested tools, databases and models verified; sample analyses may start")
+    except Exception as exc:
+        value.update(status="failed", error=str(exc), gates=gates)
+    value["finished_at"] = now()
+    return _commit_check(receipt, value, plan, root, None)
 
 
 def _attest(plan, root, sid, module, result):
@@ -149,6 +221,7 @@ def _attest(plan, root, sid, module, result):
         "module": module, "result_path": str(target.resolve()),
         "result_sha256": sha256_file(target), "execution_status": result["execution_status"],
         "started_sha256": sha256_file(started) if started.exists() else None,
+        "producer_launch_id": _report_root(root).name,
         "recorded_at": now()})
     if result["execution_status"] not in {"failed", "blocked"}:
         _ready(receipt, plan, root, sid)
@@ -166,6 +239,17 @@ def _execution_plan(plan, sample, module, allocated_threads=None):
         selected["config"]["deep"] = execution_config(selected, sample["sample_id"], module, selected["config"]["deep"])
     else:
         selected["config"]["modules"][module] = execution_config(selected, sample["sample_id"], module, selected["config"]["modules"][module])
+    if root is not None:
+        gate_path = root / sample["sample_id"] / "checks" / (module + ".json")
+        if gate_path.is_file():
+            gate = _read_gate(gate_path, plan, root, sample["sample_id"])
+            cfg = selected["config"]["deep"] if module == "deepsafe" else selected["config"]["modules"][module]
+            cfg["scheduler_setup_identity"] = hash_object({
+                "resources": gate.get("resource_fingerprints"),
+                "tools": gate.get("tool_identity"), "version": gate.get("tool_version")})
+            if (gate.get("resource_fingerprints", {}).get("untracked_resource_scopes")
+                    or gate.get("tool_identity", {}).get("reuse_supported") is False):
+                cfg["cache"] = False
     if allocated_threads is not None:
         cfg = selected["config"]["deep"] if module == "deepsafe" else selected["config"]["modules"][module]
         cfg["threads"] = min(int(cfg.get("threads", 1)), allocated_threads)
@@ -305,32 +389,32 @@ def run_deep_stage(plan, root, sid, stage, force=False, allocated_threads=None):
 def consolidate_evidence(plan, root, run):
     bundle = collect_workflow_evidence(plan, run, "snakemake", root)
     value = {"schema": "basis-workflow-consolidation-v1", **_identity(plan, root), "bundle": bundle}
-    return _write(root / "consolidated.json", value)
+    return _write(_report_root(root) / "consolidated.json", value)
 
 
 def render_report(plan, root):
-    snapshot = _read_gate(root / "consolidated.json", plan, root, None)
+    snapshot = _read_gate(_report_root(root) / "consolidated.json", plan, root, None)
     artifacts = render_workflow_report(snapshot["bundle"], plan["outdir"])
     value = {"schema": "basis-workflow-report-v1", **_identity(plan, root), "artifacts": artifacts,
              "artifact_checksums": {path: sha256_file(path) for path in artifacts.values()
                                     if isinstance(path, str) and Path(path).is_file()}}
-    return _write(root / "report-artifacts.json", value)
+    return _write(_report_root(root) / "report-artifacts.json", value)
 
 
 def capture_provenance(plan, root):
-    snapshot = _read_gate(root / "consolidated.json", plan, root, None)
-    report = _read_gate(root / "report-artifacts.json", plan, root, None)
+    snapshot = _read_gate(_report_root(root) / "consolidated.json", plan, root, None)
+    report = _read_gate(_report_root(root) / "report-artifacts.json", plan, root, None)
     for path, digest in report["artifact_checksums"].items():
         if sha256_file(path) != digest:
             raise ValueError("Report artifact changed before provenance capture: " + path)
     result, code = capture_workflow_provenance(plan, snapshot["bundle"], report["artifacts"])
-    return _write(root / "outcome.json", {"schema": "basis-workflow-outcome-v1",
+    return _write(_report_root(root) / "outcome.json", {"schema": "basis-workflow-outcome-v1",
                   **_identity(plan, root), "result": result, "exit_code": code})
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("validate", "resources", "module", "deep-stage", "consolidate", "report", "provenance"))
+    parser.add_argument("action", choices=("validate", "resources", "setup", "module", "deep-stage", "consolidate", "report", "provenance"))
     parser.add_argument("--plan", required=True)
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--sample")
@@ -339,6 +423,7 @@ def main(argv=None):
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--threads", type=int)
     args = parser.parse_args(argv)
+    args.force = args.force or os.environ.get("BASIS_FORCE") == "1"
     if args.threads is not None and args.threads < 1:
         parser.error("--threads must be positive")
     plan, root, run = _load(args.plan, args.run_dir)
@@ -352,6 +437,8 @@ def main(argv=None):
         result = validate_inputs(plan, root, args.sample)
     elif args.action == "resources":
         result = check_resources(plan, root, args.sample, args.module)
+    elif args.action == "setup":
+        result = setup_ready(plan, root)
     elif args.action == "module":
         result = run_module(plan, root, args.sample, args.module, args.force, args.threads)
     elif args.action == "deep-stage":

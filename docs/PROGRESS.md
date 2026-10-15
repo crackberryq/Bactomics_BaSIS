@@ -15,5 +15,7 @@ paths remain available for diagnosis. Native stdout files are unchanged.
 Verbose mode is a runtime environment setting, not scientific configuration.
 Toggling verbosity alone does not change cache keys or results. Installing the
 source update still invalidates prior source-dependent caches as usual.
-With the Snakemake engine, worker progress is saved in snakemake.log; the
-launcher emits its own overall heartbeat. Local execution shows stages directly.
+Snakemake and worker progress are forwarded live and saved in each launch's
+snakemake.log. Verbose mode includes native command diagnostics. The launcher
+does not add a duplicate overall heartbeat. GUI percentages come from observed
+Snakemake job counts; checkpoint expansion can change the number of pending jobs.

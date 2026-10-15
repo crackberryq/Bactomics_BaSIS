@@ -50,10 +50,10 @@ def main(argv=None):
                         help="Writable workspace; default: current working directory")
     parser.add_argument("--env", action="append", choices=recipe_names(), dest="environments",
                         help="Environment recipe to select; repeatable")
-    parser.add_argument("--prefix-root", help="Snakemake Conda cache (local: named environment parent); default: WORKSPACE/.basis-envs")
+    parser.add_argument("--prefix-root", help="Snakemake Conda cache; default: WORKSPACE/.basis-envs")
     parser.add_argument("--manager", choices=("conda", "mamba", "micromamba"), default="conda")
-    parser.add_argument("--engine", choices=("snakemake", "local"), default="snakemake",
-                        help="Snakemake natively deploys Conda recipes; local preserves manager-driven named-prefix setup")
+    parser.add_argument("--engine", choices=("snakemake",), default="snakemake",
+                        help="Snakemake deploys and verifies the requested Conda environments")
     parser.add_argument("--cores", type=int, default=1, help="Maximum concurrent setup workers (default: 1)")
     parser.add_argument("--report-dir", help="New directory for this setup attempt and summary")
     parser.add_argument("--retry-failed", action="store_true",
@@ -72,7 +72,7 @@ def main(argv=None):
         prefix_root = workspace_path(project / (args.prefix_root or ".basis-envs"))
         selected = tuple(dict.fromkeys(args.environments or DEFAULT_ENVIRONMENTS))
         if args.engine == "snakemake" and args.manager != "conda":
-            raise ValueError("Native Snakemake deployment uses Conda; other managers require explicit --engine local")
+            raise ValueError("Snakemake deployment requires Conda")
         if args.create:
             if not shutil.which(args.manager):
                 raise ValueError("Package manager is not on PATH: " + args.manager)

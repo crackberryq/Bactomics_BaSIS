@@ -88,7 +88,8 @@ class SchedulerLauncherTests(unittest.TestCase):
                         contextlib.redirect_stderr(io.StringIO()):
                     run_pipeline(plan, engine="snakemake")
                 command, log, env = scheduler.call_args.args
-                self.assertEqual(log.parent.name, env["BASIS_SCHEDULER_RUN_ID"])
+                self.assertEqual(str(log.parent), env["BASIS_SCHEDULER_LAUNCH_DIR"])
+                self.assertTrue(env["BASIS_SCHEDULER_RUN_ID"].startswith("state-"))
                 self.assertEqual(log.name, "snakemake.log")
                 self.assertIn("--printshellcmds", command)
                 self.assertIn("--show-failed-logs", command)
@@ -264,14 +265,14 @@ class NativeSchedulerSyntheticTests(unittest.TestCase):
         self.assertEqual(first["run"]["engine"], "snakemake")
         self.assertEqual(first["run"]["reporting_mode"], "snakemake_dag")
         receipts = Path(first["run"]["scheduler_receipt_dir"])
+        launch = Path(first["run"]["scheduler_launch_dir"])
         for name in ("consolidated.json", "report-artifacts.json", "outcome.json"):
-            self.assertTrue((receipts / name).is_file())
-        from basis.deep_stages import STAGES
+            self.assertTrue((launch / name).is_file())
         for sid in ("DEMO_A", "DEMO_B"):
-            self.assertEqual({p.stem for p in (receipts / sid / "deep-stages").glob("*.json")
-                              if not p.name.endswith(".ready.json")}, set(STAGES))
+            self.assertTrue((receipts / sid / "deep-stages/prepare.ready.json").is_file())
+            self.assertTrue(list((receipts / sid / "deep-candidates").rglob("*.ready.json")))
         scheduler_log = Path(first["run"]["scheduler_log"]).read_text()
-        for name in ("validate_inputs", "amrfinder", "pathogenfinder2", "deep_domains", "deep_phylogeny", "deep_patterns", "capture_provenance"):
+        for name in ("validate_inputs", "amrfinder", "pathogenfinder2", "setup_ready", "capture_provenance"):
             self.assertIn(name, scheduler_log)
         for deep in evidence["deep_records"]:
             sid = deep["sample_id"]
@@ -332,8 +333,8 @@ class NativeSchedulerSyntheticTests(unittest.TestCase):
         self.assertFalse((receipts / "DEMO_A/pathogenfinder2.ready.json").exists())
         self.assertTrue((receipts / "DEMO_A/amrfinder.ready.json").is_file(), "Independent jobs must complete")
         self.assertFalse((receipts / "DEMO_A/deep-stages/prepare.json").exists(), "Dependent DeepSafe must not start")
-        self.assertFalse((receipts / "outcome.json").exists(), "Normal DAG reporting target must remain blocked")
-        self.assertIn(failed["error"], (receipts / "DEMO_A/logs/pathogenfinder2.log").read_text())
+        self.assertFalse((Path(result["run"]["scheduler_launch_dir"]) / "outcome.json").exists(), "Normal DAG reporting target must remain blocked")
+        self.assertIn(failed["error"], (Path(result["run"]["scheduler_launch_dir"]) / "DEMO_A/logs/pathogenfinder2.log").read_text())
 
 
 if __name__ == "__main__":

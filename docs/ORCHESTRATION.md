@@ -1,4 +1,4 @@
-# Snakemake orchestration in BaSIS 0.3.0rc5
+# Snakemake orchestration in BaSIS 0.3.0rc6
 
 BaSIS uses one packaged `basis/resources/Snakefile` entry point. The CLI and local interface launch the same analysis workflow. Snakemake owns dependencies, environment deployment and CPU/memory/GPU scheduling. Python workers implement scientific analyses, parsing, evidence checks and report rendering within its rules.
 
@@ -33,13 +33,13 @@ These are illustrative paths, not values to paste without changing `USER`. Initi
 
 The analysis DAG contains:
 
-1. Per-sample input validation and planned resource preparation/checks.
-2. First-use database/model preparation rules, before the analyses that require them. Their own dependencies include tool environments and prerequisite resource snapshots.
-3. Named module rules for screening, context, typing, CRISPR/Cas and Extend. Independent jobs run within the declared budgets.
-4. Nine DeepSafe stages per sample: preparation/selection, domains, references, phylogeny, PROSITE patterns, PROSITE profiles, registry motifs, family placement and finalization. Selection waits for upstream result records, including Extend when requested.
+1. Input validation, required Conda environment deployment, and resource preparation/checks.
+2. A study-wide readiness barrier: all requested tool and resource checks must succeed before any sample analysis starts. Failed setup is retried through the same DAG.
+3. Named module rules for screening, context, typing, CRISPR/Cas and Extend. Independent jobs run within the declared budgets after readiness succeeds.
+4. DeepSafe preparation and selection wait for upstream result records, including Extend when requested. Snakemake exposes candidate tasks for domain, phylogeny, PROSITE, registry motif and placement work. Reference retrieval/review and deterministic budget planning remain shared prerequisites; candidate results are aggregated for finalization.
 5. Evidence consolidation, linked reports and final provenance capture.
 
-DeepSafe stages process selected candidates within each sample; each candidate is not a separate scheduler job. Scientific applicability checks still determine whether a candidate receives a tree, placement or motif observation. Prepared reference catalogues and seed panels do not constitute universally validated family classifiers. Deferred, unsupported and unresolved cases remain visible.
+Scientific applicability checks determine whether a selected candidate receives a tree, placement or motif observation. Scheduling a candidate does not assert that all analyses apply. Prepared reference catalogues and seed panels do not constitute universally validated family classifiers. Deferred, unsupported and unresolved cases remain visible.
 
 HybAs input resolution imports the recorded target and its rank. An automatically assigned phylum requires a matching selected target, positive support, and consistent phylum ancestry in every available enabled Kraken report. The report paths, hashes and ancestry are retained. Missing or conflicting ancestry is left unresolved; user declarations are preserved. A leading species hit does not become a species call. This allows ICEscreen scope to be resolved automatically where the supplied evidence supports Bacillota; matching GenBank is also required.
 
@@ -101,15 +101,17 @@ Do not copy sample-specific imports, exclusions, embedding caches, reviewed quer
 
 The GUI allows one job per workspace; that job can contain many Snakemake tasks. The normal analysis path launches one Snakemake process. Native Snakemake output is forwarded to stderr and saved to `snakemake.log`. The `-v` flag also enables Snakemake's `--verbose`, `--printshellcmds` and `--show-failed-logs`, with live native-tool diagnostics. JSON stdout remains machine-readable. Output explicitly captured for FASTA, JSON or other data files stays separate from terminal diagnostics. The duplicate parent scheduler/launcher heartbeat timers are removed.
 
-Run-specific completion receipts are scheduler outputs. Scientific result files remain evidence and are verified before whole-result cache reuse. Inputs, resources, source/tool identities and required artifacts must match. `--force` explicitly requests recomputation; it is not a database refresh operation.
+Completion receipts use a stable `provenance/scheduler/state-<plan-hash>` directory for an unchanged plan. Every launch also retains its own logs, context and reporting history. Scientific result files remain evidence and are verified before reuse. Inputs, resources, source/tool identities and required artifacts must match. `--force` explicitly requests recomputation; it is not a database refresh operation.
 
-DeepSafe stage JSON supports restart within the same workflow attempt. A new `basis run` creates new scheduler receipts and verifies current identities. Automatic reuse of partially completed DeepSafe stages across separate invocations is not promised; completed whole-module/DeepSafe caches remain reusable when verification passes.
+Repeating the same study configuration resumes valid completed Snakemake tasks, including candidate tasks. Missing or invalid completion evidence is invalidated for Snakemake to rerun with its dependants. A changed source release or execution plan creates a new state namespace and can require recomputation; this is deliberately conservative. Run history is retained separately from reusable work.
+
+Stable native reuse requires a fully fingerprinted Conda environment and supported resource dependencies. Tools outside that boundary, unrecognized custom resource structures, or relative paths to reviewed tree artifacts receive fresh checks and disabled native cache reuse on each launch. This avoids reusing results when BaSIS cannot verify their full dependency identity.
 
 Preparation and native worker failures return unsuccessful exit codes to Snakemake. Independent jobs may finish under `--keep-going`; dependent jobs are blocked. Successful normal reporting remains a workflow target. If the DAG cannot reach that target, the launcher writes an incomplete failure summary from attested current-run diagnostics without changing failure into success. Reports distinguish failed, blocked and not-started execution from completed or reused evidence. A deferred candidate or unresolved scientific interpretation is not, by itself, a native command failure.
 
 ## Compatibility and validation limits
 
-`basis run --engine local` retains serial execution for compatibility; use the default Snakemake engine for automatic first-use preparation. The small synthetic demo and programmatic local APIs do not establish fresh-machine native readiness. The historical `workflow` extra remains accepted but is redundant.
+Public analysis, demo and environment-setup commands use Snakemake exclusively. The internal serial implementation is retained for software tests and older programmatic integrations; it is not a GUI or CLI engine choice. The small synthetic demo does not establish fresh-machine native readiness. The historical `workflow` extra remains accepted but is redundant.
 
 Software checks exercise synthetic inputs, native schemas, scheduling and controlled installer/tool doubles. They do not establish that every live package download succeeds, every tool runs correctly on a collaborator's computer, or a biological classifier is accurate. Full clean-machine native acceptance and independent biological validation remain pending. Preserve actual environment exports and resource snapshots, then test restoration and biological performance separately.
 

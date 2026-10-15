@@ -48,7 +48,7 @@ class RunControlTests(unittest.TestCase):
             (["-vde", "-c", "fixture.yaml"], "fixture.yaml", True, True, True, "snakemake", False, False, 8),
             (["--config=fixture.yaml", "-ed"], "fixture.yaml", True, True, False, "snakemake", False, False, 8),
             (["--cores", "2", "-cfixture.yaml", "-d"], "fixture.yaml", True, False, False, "snakemake", False, False, 2),
-            (["--engine=local", "-e", "-c", "fixture.yaml"], "fixture.yaml", False, True, False, "local", False, False, 8),
+            (["--engine=snakemake", "-e", "-c", "fixture.yaml"], "fixture.yaml", False, True, False, "snakemake", False, False, 8),
             (["--dry-run", "--config", "fixture.yaml"], "fixture.yaml", False, False, False, "snakemake", True, False, 8),
             (["--force", "--config=fixture.yaml"], "fixture.yaml", False, False, False, "snakemake", False, True, 8),
             (["--output", "json", "--config", "fixture.yaml", "--verbose"], "fixture.yaml", False, False, True, "snakemake", False, False, 8),
@@ -104,7 +104,10 @@ class RunControlTests(unittest.TestCase):
                 self.assertEqual(_normalize_run_argv(args), args)
         for args in (["--unrecognized"], ["-x", "-c", "fixture.yaml"],
                      ["run", "-c", "fixture.yaml", "--output", "invalid"],
-                     ["demo", "--outdir", "fixture", "--output", "invalid"]):
+                     ["demo", "--outdir", "fixture", "--output", "invalid"],
+                     ["run", "-c", "fixture.yaml", "--engine", "local"],
+                     ["demo", "--outdir", "fixture", "--engine", "local"],
+                     ["setup-environments", "--workspace", "fixture", "--engine", "local"]):
             with self.subTest(args=args), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as error:
                     main(args)
@@ -156,6 +159,7 @@ class RunControlTests(unittest.TestCase):
 
     def test_demo_verbose_and_summary_options_are_accepted(self):
         args = parser().parse_args(["demo", "--outdir", "fixture", "-vde", "--output", "summary"])
+        self.assertEqual(args.engine, "snakemake")
         self.assertTrue(args.verbose)
         self.assertTrue(args.deep)
         self.assertTrue(args.extend)

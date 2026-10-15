@@ -1,6 +1,6 @@
 # Deploy BaSIS 0.2.0rc13
 
-This is the historical rc13 deployment procedure. For the current rc2 pip
+This is the historical rc13 deployment procedure. For the current rc6 pip
 installation, automatic first-run preparation and fresh study workflow, use
 [installation](INSTALL.md) and [the quickstart](GITHUB_QUICKSTART.md).
 
