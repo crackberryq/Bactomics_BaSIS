@@ -12,8 +12,8 @@ import time
 import unittest
 from unittest.mock import patch
 
-from basis.bootstrap import (MANIFEST, apply_resources, bootstrap_dependencies,
-    plan_auto_resources, receipt_path, run_resource, verify_snapshot)
+from basis.bootstrap import (MANIFEST, apply_resources, bootstrap_audit, bootstrap_dependencies,
+    plan_auto_resources, ready_path, receipt_path, run_resource, verify_snapshot)
 from basis.config import default_config
 from basis.util import atomic_json, hash_object, read_json, sha256_file
 
@@ -265,10 +265,100 @@ class BootstrapTests(unittest.TestCase):
         with patch.dict("os.environ", {"BASIS_SCHEDULER_RUN_ID": "run-test"}):
             dependencies = bootstrap_dependencies(plan, "sample", "vfdb")
             self.assertEqual(len(dependencies), 1)
-            self.assertTrue(dependencies[0].endswith("/run-test/bootstrap/vfdb.json"))
+            self.assertTrue(dependencies[0].endswith("/run-test/bootstrap/vfdb.ready.json"))
             self.assertGreater(len(bootstrap_dependencies(plan, "sample", "deepsafe")), 1)
             plan["module_decisions"] = {"sample": {"vfdb": {"action": "withheld"}}}
             self.assertEqual(bootstrap_dependencies(plan, "sample", "vfdb"), [])
+
+    def test_failure_audit_reports_all_roots_and_blocks_unscheduled_dependants(self):
+        from basis.workflow_runtime import _write
+        cfg = self.config()
+        plan = self.plan(cfg, deep=True)
+        root = self.root / "audit"
+        for spec in plan["bootstrap_resources"]:
+            if spec["id"] not in {"vfdb", "antismash"}:
+                continue
+            _write(receipt_path(root, spec["id"]), {
+                "schema": "basis-bootstrap-receipt-v1", "run_id": root.name,
+                "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
+                "resource_id": spec["id"], "cache_key": spec["cache_key"],
+                "status": "failed", "error": "fixture failure: " + spec["id"]})
+        audit = {row["resource_id"]: row for row in bootstrap_audit(plan, root)}
+        self.assertEqual(audit["deep_catalogue"]["status"], "blocked")
+        self.assertEqual(set(audit["deep_catalogue"]["blocked_by"]), {"vfdb", "antismash"})
+        self.assertEqual({r["resource_id"] for r in audit["deep_catalogue"]["root_causes"]}, {"vfdb", "antismash"})
+        self.assertFalse(receipt_path(root, "deep_catalogue").exists())
+        value = read_json(receipt_path(root, "vfdb"))
+        value["error"] = "unattested edit"
+        atomic_json(receipt_path(root, "vfdb"), value)
+        changed = {row["resource_id"]: row for row in bootstrap_audit(plan, root)}
+        self.assertIn("checksum mismatch", changed["vfdb"]["error"])
+        self.assertNotIn("unattested edit", changed["vfdb"]["error"])
+
+    @unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake is unavailable")
+    def test_real_snakemake_failure_is_nonzero_durable_and_blocks_dependants_only(self):
+        from basis.workflow_runtime import _write, read_document
+        wrapper = self.root / "native fixture.py"
+        wrapper.write_text('''import sys
+from pathlib import Path
+if sys.argv[1] == "fail":
+    raise SystemExit("fixture resource installation failed")
+if sys.argv[1] == "amrfinder_update":
+    root = Path(sys.argv[sys.argv.index("--database") + 1])
+    version = root / "fixture-release"
+    version.mkdir(parents=True)
+    for name in ["AMRProt.fa", "AMRProt.fa.phr", "AMR.LIB"] + ["AMR.LIB.h3" + x for x in "fimp"]:
+        (version / name).write_text(">fixture\\nMACDEFG\\n")
+    (version / "version.txt").write_text("fixture-1\\n")
+    (root / "latest").symlink_to(version, target_is_directory=True)
+elif sys.argv[1] == "amrfinder":
+    print("AMRFinder fixture-1")
+else:
+    raise SystemExit("Unexpected native command")
+''')
+        cfg = self.config("amrfinder")
+        cfg["modules"]["amrfinder"]["command_prefix"] = [sys.executable, str(wrapper)]
+        plan = self.plan(cfg)
+        base = plan["bootstrap_resources"][0]
+        for name, deps in (("card", []), ("deep_catalogue", ["card"])):
+            spec = copy.deepcopy(base)
+            spec.update(id=name, dependencies=deps, targets=["rgi" if name == "card" else "deepsafe"],
+                        cache_key="fixture-" + name, snapshot=str(self.root / "cache/snapshots" / name))
+            spec["command_prefix"].append("fail")
+            plan["bootstrap_resources"].append(spec)
+        plan.pop("plan_hash")
+        plan["plan_hash"] = hash_object(plan)
+        plan_path = self.root / "plan.json"
+        atomic_json(plan_path, plan)
+        root = Path(plan["outdir"]) / "provenance/scheduler/partial-failure"
+        _write(root / "run-context.json", {"run_id": root.name, "source_hash": plan["source_hash"],
+                "config_hash": hash_object(plan["config"])})
+        controller = str(Path(__file__).resolve().parents[1])
+        rules = Path(controller) / "basis/resources/rules/bootstrap.smk"
+        completed = self.root / "independent-completed.txt"
+        snake = self.root / "failure.smk"
+        snake.write_text("\n".join([
+            "import sys", "PLAN = config", "PLAN_PATH = " + repr(str(plan_path)),
+            "RECEIPTS = " + repr(str(root)), "PYTHON = sys.executable", "CONTROLLER_SOURCE = " + repr(controller),
+            "rule all:", "    input: " + repr(str(completed)) + ", RECEIPTS + '/bootstrap/deep_catalogue.ready.json'",
+            "include: " + repr(str(rules)),
+            "rule independent_consumer:", "    input: RECEIPTS + '/bootstrap/amrfinder.ready.json'",
+            "    output: " + repr(str(completed)), "    shell: 'echo completed > {output:q}'", ""]))
+        proc = subprocess.run([sys.executable, "-m", "snakemake", "--snakefile", str(snake),
+                "--configfile", str(plan_path), "--cores", "2", "--keep-going", "--directory", str(self.root)],
+                text=True, capture_output=True, timeout=90,
+                env={**os.environ, "PYTHONPATH": controller, "BASIS_SCHEDULER_RUN_ID": root.name})
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("Error in rule bootstrap_resource", proc.stdout + proc.stderr)
+        self.assertTrue(completed.is_file(), proc.stdout + proc.stderr)
+        self.assertEqual(read_document(receipt_path(root, "card"))["status"], "failed")
+        self.assertFalse(ready_path(root, "card").exists())
+        self.assertFalse(receipt_path(root, "deep_catalogue").exists())
+        self.assertTrue(ready_path(root, "amrfinder").exists())
+        audit = {row["resource_id"]: row for row in bootstrap_audit(plan, root)}
+        self.assertEqual(audit["amrfinder"]["status"], "ready")
+        self.assertEqual(audit["deep_catalogue"]["status"], "blocked")
+        self.assertEqual(audit["deep_catalogue"]["root_causes"][0]["resource_id"], "card")
 
     @unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake is unavailable")
     def test_real_snakemake_resource_job_publishes_and_reuses_attested_snapshot(self):
@@ -310,7 +400,7 @@ else:
                 "import sys", "PLAN = config", "PLAN_PATH = " + repr(str(plan_path)),
                 "RECEIPTS = " + repr(str(root)), "PYTHON = sys.executable",
                 "CONTROLLER_SOURCE = " + repr(controller),
-                "rule all:", "    input: RECEIPTS + '/bootstrap/amrfinder.json'",
+                "rule all:", "    input: RECEIPTS + '/bootstrap/amrfinder.ready.json'",
                 "include: " + repr(str(rules)), ""]))
             proc = subprocess.run([sys.executable, "-m", "snakemake", "--snakefile", str(snake),
                 "--configfile", str(plan_path), "--cores", "2", "--directory", str(self.root)],

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -11,6 +12,8 @@ from unittest.mock import patch
 from basis.bootstrap_deep import (PROSITE_BASE, PROTT5_REPOSITORY, PROTT5_REVISION,
                                  prepare_deep_resource)
 from basis.references import load_catalog
+from basis.prosite_profiles import run_profiles
+from basis.references import sequence_hash
 from basis.util import sha256_file
 
 
@@ -53,11 +56,21 @@ class PF2Runner:
             (weights / name).write_bytes(b"classifier-fixture-" + name.encode())
         self.downloads = []
         self.commit = "3837caf6710da5da3038f5d1246dd82ab26e003a"
+        self.failures = 0
+        self.failure = OSError("network disconnected")
+        self.partial_resumed = False
 
     def snapshot(self, **kwargs):
+        assert os.environ['HF_HUB_DISABLE_XET'] == '1'
         self.downloads.append(kwargs)
         model = Path(kwargs["local_dir"])
-        model.mkdir(parents=True)
+        model.mkdir(parents=True, exist_ok=True)
+        partial = model / '.partial-test'
+        if self.failures:
+            self.failures -= 1
+            partial.write_bytes(b'resume-me')
+            raise self.failure
+        self.partial_resumed = partial.is_file()
         for name in kwargs["allow_patterns"]:
             (model / name).write_bytes(b"model-fixture")
         (model / "config.json").write_text(json.dumps({"model_type": "t5", "d_model": 1024}))
@@ -70,6 +83,8 @@ class PF2Runner:
             "vcs_info": {"commit_id": self.commit}}))
         package = types.SimpleNamespace(submodule_search_locations=[str(self.package)])
         with patch.dict(sys.modules, {"huggingface_hub": module}), \
+                patch.dict(os.environ, {}), \
+                patch("time.sleep"), \
                 patch("importlib.metadata.distribution", return_value=distribution), \
                 patch("importlib.util.find_spec", return_value=package), \
                 patch.object(sys, "argv", ["-c", *argv[3:]]):
@@ -105,12 +120,48 @@ class BootstrapDeepTests(unittest.TestCase):
                 prepare_deep_resource({"provider": "prosite"}, Path(temp) / "bad",
                                       DownloadRunner(changing_release=True))
 
-    def test_prosite_missing_referenced_rule_rejected(self):
+    def test_prosite_missing_referenced_rule_is_audited_without_losing_profile(self):
         with tempfile.TemporaryDirectory() as temp:
             data = prosite_fixture()
             data["prorule.dat"] = data["prorule.dat"].replace("PRU99999", "PRU99998")
-            with self.assertRaisesRegex(ValueError, "rules are absent"):
-                prepare_deep_resource({"provider": "prosite"}, Path(temp) / "bad", DownloadRunner(data))
+            destination = Path(temp) / "partial"
+            result = prepare_deep_resource({"provider": "prosite"}, destination, DownloadRunner(data))
+            coverage = result['provenance']['rule_coverage']
+            self.assertEqual(coverage['status'], 'partial')
+            self.assertEqual(coverage['unavailable_rule_ids'], ['PRU99999'])
+            self.assertEqual(coverage['affected_profiles'], {'PS99998': ['PRU99999']})
+            self.assertEqual(result['provenance']['profile_count'], 1)
+            self.assertEqual(json.loads((destination / 'rule-coverage.json').read_text()), coverage)
+            self.assertEqual((destination / 'prorule.dat').read_text(), data['prorule.dat'])
+
+    def test_prosite_empty_prorule_still_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data = prosite_fixture()
+            data['prorule.dat'] = 'CC   Release 2026_03\n//\n'
+            with self.assertRaisesRegex(ValueError, 'snapshot is empty'):
+                prepare_deep_resource({'provider': 'prosite'}, Path(temp) / 'bad', DownloadRunner(data))
+
+    def test_profile_scan_reports_applicable_absent_rule_as_unassessed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = prosite_fixture()
+            data['prorule.dat'] = data['prorule.dat'].replace('PRU99999', 'PRU99998')
+            prepare_deep_resource({'provider': 'prosite'}, root / 'snapshot', DownloadRunner(data))
+            query = root / 'query.faa'
+            query.write_text('>Q\nACD\n')
+            candidates = [{'selected': True, 'execution': 'completed', 'query': {
+                'id': 'Q', 'path': str(query), 'sequence_sha256': sequence_hash('ACD')}}]
+            class ProfileRunner:
+                def run(self, argv, stdout_path, cwd):
+                    stdout_path.write_text('>Q/1-3 motif=PS99998|PROFILE norm_score=10 raw_score=100 level=0 motif_start=1 motif_end=-1 motif_rev=F strand=+\nACD\n')
+            run_profiles(candidates, {'prosite_profiles': True, 'prosite_snapshot': str(root / 'snapshot')},
+                         root / 'run', ProfileRunner())
+            result = candidates[0]['analyses']['prosite_profiles']
+            self.assertEqual(result['status'], 'completed')
+            self.assertEqual(result['reason'], 'profiles_detected_with_unavailable_rules')
+            self.assertEqual(result['hits'][0]['coordinate_mapping_status'], 'completed')
+            self.assertEqual(result['hits'][0]['mapping_status'], 'not_assessed')
+            self.assertEqual(result['unavailable_rule_ids'], ['PRU99999'])
 
     def test_prott5_exact_revision_and_classifiers_no_inference(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -126,6 +177,50 @@ class BootstrapDeepTests(unittest.TestCase):
             self.assertEqual(len(list(Path(fields["weights_model"]).glob("*.pt"))), 5)
             self.assertFalse(result["provenance"]["gpu_computation_performed"])
             self.assertFalse(result["provenance"]["model_loaded"])
+            self.assertEqual(result['provenance']['download_attempts'], 1)
+            self.assertEqual(result['provenance']['download_transport'], 'huggingface_hub_https_xet_disabled')
+
+    def test_prott5_interrupted_download_reuses_persistent_partial_cache(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner = PF2Runner(root)
+            runner.failures = 2
+            spec = {'provider': 'prott5', 'cache_directory': str(root / 'resources')}
+            result = prepare_deep_resource(spec, root / 'staging', runner)
+            self.assertEqual(len(runner.downloads), 3)
+            self.assertTrue(runner.partial_resumed)
+            self.assertEqual(len({r['local_dir'] for r in runner.downloads}), 1)
+            self.assertEqual(Path(runner.downloads[0]['local_dir']), root / 'resources/downloads/prott5' / PROTT5_REVISION)
+            self.assertTrue((root / 'staging/model/pytorch_model.bin').is_file())
+            self.assertFalse((root / 'staging/model/.partial-test').exists())
+            self.assertEqual(result['provenance']['download_attempts'], 3)
+
+    def test_prott5_failure_bounded_and_cache_retained(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner = PF2Runner(root)
+            runner.failures = 9
+            spec = {'provider': 'prott5', 'cache_directory': str(root / 'resources')}
+            with self.assertRaisesRegex(RuntimeError, 'failed after 4 attempt'):
+                prepare_deep_resource(spec, root / 'failed', runner)
+            self.assertEqual(len(runner.downloads), 4)
+            self.assertTrue((Path(runner.downloads[-1]['local_dir']) / '.partial-test').is_file())
+            self.assertFalse((root / 'failed/model-identity.json').exists())
+            runner.failures = 0
+            prepare_deep_resource(spec, root / 'new-staging', runner)
+            self.assertTrue(runner.partial_resumed)
+            self.assertEqual(runner.downloads[-1]['local_dir'], runner.downloads[0]['local_dir'])
+
+    def test_prott5_permanent_failure_is_not_retried_or_exposed_with_signed_url(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner = PF2Runner(root)
+            runner.failures = 9
+            runner.failure = ValueError('https://example.invalid/file?secret=private')
+            with self.assertRaises(RuntimeError) as error:
+                prepare_deep_resource({'provider': 'prott5'}, root / 'failed', runner)
+            self.assertEqual(len(runner.downloads), 1)
+            self.assertNotIn('secret', str(error.exception))
 
     def test_prott5_external_model_not_redownloaded(self):
         with tempfile.TemporaryDirectory() as temp:

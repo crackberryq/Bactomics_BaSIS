@@ -615,8 +615,10 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
 def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt_root=None, engine_error=None) -> dict:
     """Collect only current, attested records into a reporting snapshot."""
     from .run_summary import build_run_summary
+    from .bootstrap import bootstrap_audit, module_resource_blockers, resource_failure_message
     records, deep_records = [], []
     incomplete = []
+    resource_audit = bootstrap_audit(plan, receipt_root) if plan.get("bootstrap_resources") and receipt_root is not None else []
     for sample in plan["samples"]:
         for module in ALL_MODULES + ["deepsafe"]:
             path = record_path(plan, sample["sample_id"], module)
@@ -641,6 +643,18 @@ def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt
                     record = _base_record(plan, sample, module)
                     record.update(execution_status="failed", interpretation="inconclusive",
                                   error=engine_error or f"Current scheduler receipt unavailable or invalid: {exc}")
+                    blockers = module_resource_blockers(plan, module, resource_audit)
+                    if blockers:
+                        record.update(reason="resource_preparation_failed", blocked_resources=blockers,
+                                      error=resource_failure_message(blockers))
+                    if module == "deepsafe":
+                        upstream = [r["module"] for r in records if r["sample_id"] == sample["sample_id"]
+                                    and r.get("module_decision", {}).get("requested")
+                                    and r.get("execution_status") != "completed"]
+                        record.update(candidates=[], upstream_incomplete=upstream)
+                        if upstream and not blockers:
+                            record.update(reason="upstream_execution_incomplete",
+                                          error="DeepSafe was not started because requested upstream modules did not complete: " + ", ".join(upstream))
             elif path.is_file():
                 record = read_json(path)
             else:
@@ -656,9 +670,8 @@ def collect_workflow_evidence(plan: dict, run: dict, engine="snakemake", receipt
                 if decision["requested"] and record["execution_status"] != "completed":
                     incomplete.append(f"{sample['sample_id']}:{module}")
     run["finished_at"] = now()
-    if plan.get("bootstrap_resources") and receipt_root is not None:
-        from .bootstrap import bootstrap_audit
-        run["resource_preparation"] = bootstrap_audit(plan, receipt_root)
+    if resource_audit:
+        run["resource_preparation"] = resource_audit
     run["completeness"] = "incomplete" if incomplete or engine_error else "completed_requested_scope"
     run["incomplete_modules"] = incomplete
     if engine_error:

@@ -1,6 +1,6 @@
 # Explicit resource preparation
 
-BaSIS 0.3.0rc2 uses the same packaged Snakefile for analysis, environment setup,
+BaSIS 0.3.0rc3 uses the same packaged Snakefile for analysis, environment setup,
 and resource preparation. Fresh full-preset studies prepare missing requested
 resources automatically during `basis run`; a separate recipe is not required.
 The first successful preparation records the source, resolved version and file
@@ -9,6 +9,35 @@ checksums. Later runs verify and reuse that snapshot without silently refreshing
 This page describes the optional administrative workflow for explicit resource
 recipes and custom destinations. Its commands do not change study configurations.
 Existing manual configurations retain their explicit resource paths and policy.
+
+## Retrying the 0.3.0rc2 first-install failures
+
+The rc3 repair includes a deliberately narrow recovery helper. It verifies ready
+rc2 resource receipts, the saved plan and run identity, the audited provider
+implementation, unchanged tool recipes, and every recorded snapshot/external
+file checksum. It writes a new configuration and audit without modifying the
+old study. It can preserve completed AMRFinder, CARD, geNomad, MOB-suite, BacMet,
+ISEScan and ICEscreen resources. It does not import old biological result calls.
+
+```bash
+python -m basis.resource_recovery -c study/config.yaml \
+  --out-config study/config.retry-rc3.yaml --outdir study/results-rc3
+basis run -c study/config.retry-rc3.yaml -d -e -v --cores 4 --output summary
+```
+
+Failed or unprepared resources remain automatic. The optional
+`--vfdb-snapshot /absolute/path/to/recorded-vfdb-directory` accepts the earlier
+BaSIS Set A manifest format, verifying its index and normalized FASTA against
+the recorded checksums. This explicit local reuse is useful when the official
+VFDB HTTPS certificate cannot be validated. It is not independent vendor
+authentication or proof that the current server certificate works. Do not
+disable TLS verification. A new computer without a verified snapshot must wait
+for a valid official download or receive an independently verified resource.
+
+Failed bootstrap jobs now return nonzero to Snakemake. Diagnostic receipts
+remain in `provenance/scheduler/RUN/bootstrap/*.json`; only successful jobs
+publish `*.ready.json`. Independent jobs can finish under `--keep-going`; the
+final failure report identifies root resource errors and blocked dependencies.
 
 Create a separate YAML file with `schema_version: 1` and a `resources` mapping.
 Each named resource has its own immutable snapshot destination. A plan is

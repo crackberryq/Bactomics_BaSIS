@@ -12,7 +12,20 @@ from .util import sha256_file
 
 LIMITATION=('Profile matches and residue-condition observations are exploratory. Full ProRule case logic, '
  'taxonomic scope, fusion/repeat/size requirements and functional annotation are not evaluated. '
+ 'A rule referenced by a profile can be absent from the official bulk release; its residue annotations are not assessed. '
  'Neither matched nor mismatched residues establish activity, resistance or safety.')
+
+def profile_rule_coverage(profiles,rules):
+    """Audit links independently of profile detection or rule interpretation."""
+    referenced={rid for profile in profiles.values() for rid in profile['rule_ids']}
+    missing=referenced-set(rules)
+    affected={ac:sorted(set(profile['rule_ids']) & missing) for ac,profile in profiles.items()
+              if set(profile['rule_ids']) & missing}
+    return {'status':'partial' if missing else 'complete',
+      'scope':'Availability of profile-linked rules in this bulk snapshot; not full ProRule interpretation',
+      'referenced_rule_count':len(referenced),'available_referenced_rule_count':len(referenced-missing),
+      'unavailable_rule_ids':sorted(missing),'affected_profiles':affected,
+      'policy':'Retain profile detections; mark unavailable rule annotations not assessed. No unversioned rule substitution.'}
 
 def load_profile_snapshot(directory):
     directory=Path(directory).resolve();_,provenance=load_snapshot(directory)
@@ -27,6 +40,7 @@ def load_profile_snapshot(directory):
         if not re.search(r'^ID   .*; MATRIX\.',block,re.M):continue
         length=re.search(r'^MA   /GENERAL_SPEC:.*LENGTH=(\d+);',block,re.M)
         if not length:raise ValueError('Profile length unavailable: '+ac)
+        if ac in profiles:raise ValueError('Duplicate PROSITE profile accession: '+ac)
         profiles[ac]={'accession':ac,'name':re.search(r'^ID   ([^;]+)',block,re.M).group(1),
           'length':int(length.group(1)),'description':' '.join(re.findall(r'^DE   (.*)',block,re.M)),
           'documentation_ids':re.findall(r'^DO   (PDOC\d+);',block,re.M),
@@ -35,6 +49,7 @@ def load_profile_snapshot(directory):
     for block in rules_text.split('\n//'):
         ac=re.search(r'^AC   (PRU\d+);',block,re.M)
         if not ac:continue
+        if ac.group(1) in rules:raise ValueError('Duplicate ProRule accession: '+ac.group(1))
         predictors=re.findall(r'^TR   PROSITE; (PS\d+);',block,re.M)
         features=[];current=None;origin=None
         for line in block.splitlines():
@@ -56,7 +71,8 @@ def load_profile_snapshot(directory):
           'version':(re.search(r'^# Version: (.*)',block,re.M).group(1) if re.search(r'^# Version: (.*)',block,re.M) else None),
           'source_url':'https://prosite.expasy.org/rule/'+ac.group(1)}
     provenance.pop('excluded_profiles',None)
-    provenance.update(pattern_only=False,profile_count=len(profiles),prorule_count=len(rules),limitation=LIMITATION)
+    provenance.update(pattern_only=False,profile_count=len(profiles),prorule_count=len(rules),limitation=LIMITATION,
+                      rule_coverage=profile_rule_coverage(profiles,rules))
     return profiles,rules,provenance
 
 def alignment_map(alignment,query,start,end,profile_length,motif_start,motif_end):
@@ -112,7 +128,10 @@ def evaluate_sites(hit,rules):
     for rid in hit['rule_ids']:
         rule=rules.get(rid)
         if not rule:
-            results.append({'rule_id':rid,'status':'rule_unavailable','sites':[]});continue
+            results.append({'rule_id':rid,'status':'rule_unavailable','sites':[],
+              'reason':'referenced_rule_absent_from_release_snapshot',
+              'source_url':'https://prosite.expasy.org/rule/'+rid,
+              'full_rule_evaluated':False,'function_established':False});continue
         sites=[];unsupported=[]
         for feature in rule['features']:
             if not feature['conditions']:continue
@@ -137,6 +156,25 @@ def evaluate_sites(hit,rules):
           'sites':sites,'unsupported_conditions':unsupported,'full_rule_evaluated':False,'function_established':False})
     return results
 
+def annotate_residue_rules(hit,rules):
+    """Keep valid coordinates, but never report absent residue rules completed."""
+    hit['coordinate_mapping_status']=hit['mapping_status']
+    hit['residue_rules']=evaluate_sites(hit,rules)
+    unavailable=[r['rule_id'] for r in hit['residue_rules'] if r['status']=='rule_unavailable']
+    hit['unavailable_rule_ids']=unavailable
+    if unavailable:
+        available=len(hit['residue_rules'])-len(unavailable)
+        hit['residue_mapping_status']='partial' if available else 'not_assessed'
+        if hit['mapping_status']=='completed':
+            hit['mapping_status']=hit['residue_mapping_status']
+            hit['mapping_reason']='referenced_rules_unavailable_in_release'
+    elif hit['coordinate_mapping_status']!='completed':
+        hit['residue_mapping_status']='not_assessable'
+    elif any(r.get('unsupported_conditions') for r in hit['residue_rules']):
+        hit['residue_mapping_status']='partial_supported_conditions_assessed'
+    else:
+        hit['residue_mapping_status']='supported_conditions_assessed' if any(r['sites'] for r in hit['residue_rules']) else 'no_supported_residue_conditions'
+
 def run_profiles(candidates,config,outdir,runner):
     for c in candidates:
         c.setdefault('analyses',{})['prosite_profiles']={'status':'not_assessed','reason':'candidate_deferred' if not c.get('selected') else 'profiles_not_enabled','function_established':False}
@@ -159,9 +197,12 @@ def run_profiles(candidates,config,outdir,runner):
     runner.run(argv,stdout_path=output,cwd=work)
     hits=parse_xpsa(output,queries,profiles)
     for q,c in owners.items():
-        for hit in hits[q]:hit['residue_rules']=evaluate_sites(hit,rules)
-        c['analyses']['prosite_profiles']={'status':'completed','reason':'profiles_detected' if hits[q] else 'no_profile_detected',
+        for hit in hits[q]:annotate_residue_rules(hit,rules)
+        unavailable=sorted({rid for hit in hits[q] for rid in hit['unavailable_rule_ids']})
+        reason='profiles_detected_with_unavailable_rules' if unavailable else 'profiles_detected' if hits[q] else 'no_profile_detected'
+        c['analyses']['prosite_profiles']={'status':'completed','reason':reason,
             'hits':hits[q],'hit_count':len(hits[q]),'provenance':provenance,'normalization':normalization[q],
+            'unavailable_rule_ids':unavailable,
             'function_established':False,'limitation':LIMITATION}
     result=work/'scan.json';result.write_text(json.dumps({'provenance':provenance,'command':argv,'hits':hits,'normalization':normalization},indent=2)+'\n')
     return [str(fasta),str(output),str(result)]

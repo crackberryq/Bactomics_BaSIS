@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import uuid
 
 from .config import ALL_MODULES, PATH_KEYS
@@ -178,6 +179,11 @@ def receipt_path(root, resource_id):
     return Path(root) / "bootstrap" / (resource_id + ".json")
 
 
+def ready_path(root, resource_id):
+    """Success-only DAG output; diagnostic receipts survive a failed job."""
+    return receipt_path(root, resource_id).with_suffix(".ready.json")
+
+
 def bootstrap_dependencies(plan, sid, module):
     from .sample_policy import module_decision
     if module == "deepsafe":
@@ -189,7 +195,7 @@ def bootstrap_dependencies(plan, sid, module):
         return []
     run_id = os.environ.get("BASIS_SCHEDULER_RUN_ID", plan["plan_hash"])
     root = Path(plan["outdir"]) / "provenance/scheduler" / run_id
-    return [str(receipt_path(root, spec["id"])) for spec in plan.get("bootstrap_resources", []) if module in spec["targets"]]
+    return [str(ready_path(root, spec["id"])) for spec in plan.get("bootstrap_resources", []) if module in spec["targets"]]
 
 
 def bootstrap_environment(plan, resource_id):
@@ -343,7 +349,7 @@ def verify_snapshot(spec):
     return manifest
 
 
-def _load_receipt(plan, root, spec):
+def _read_receipt(plan, root, spec):
     from .workflow_runtime import read_document
     receipt = read_document(receipt_path(root, spec["id"]))
     expected = {"schema": "basis-bootstrap-receipt-v1", "run_id": Path(root).name,
@@ -351,6 +357,11 @@ def _load_receipt(plan, root, spec):
                 "resource_id": spec["id"], "cache_key": spec["cache_key"]}
     if any(receipt.get(k) != v for k, v in expected.items()):
         raise ValueError("Resource receipt identity mismatch: " + spec["id"])
+    return receipt
+
+
+def _load_receipt(plan, root, spec):
+    receipt = _read_receipt(plan, root, spec)
     if receipt.get("status") != "ready":
         raise ValueError("Resource preparation failed: " + spec["id"] + ": " + receipt.get("error", "unknown failure"))
     manifest_path = Path(spec["snapshot"]) / MANIFEST
@@ -379,16 +390,70 @@ def apply_resources(plan, root, module, sample_id=None):
 
 
 def bootstrap_audit(plan, root):
-    result = []
-    for spec in plan.get("bootstrap_resources", []):
-        path = receipt_path(root, spec["id"])
-        if not path.is_file():
-            result.append({"resource_id": spec["id"], "status": "not_requested_or_not_completed"})
-            continue
-        from .workflow_runtime import read_document
-        receipt = read_document(path)
-        result.append({k: receipt.get(k) for k in ("resource_id", "status", "reused", "manifest", "manifest_sha256", "error")})
-    return result
+    """Explain current-run failures and unscheduled dependants without executing them."""
+    specs, found = _specs(plan), {}
+    needed = set(specs)
+    if plan.get("samples"):
+        from .sample_policy import module_decision
+        needed = {name for name, spec in specs.items() if any(
+            bool(plan.get("options", {}).get("deep")) if module == "deepsafe" else
+            plan["config"]["modules"][module].get("mode", "native") == "native" and any(
+                module_decision(plan, sample, module)["action"] == "run" for sample in plan["samples"])
+            for module in spec["targets"])}
+        pending = list(needed)
+        while pending:
+            for dependency in specs[pending.pop()].get("dependencies", []):
+                if dependency not in needed:
+                    needed.add(dependency)
+                    pending.append(dependency)
+
+    def visit(name, active=()):
+        if name in found:
+            return found[name]
+        if name in active:
+            raise ValueError("Cyclic resource preparation dependencies")
+        spec = specs[name]
+        dependencies = [visit(dep, (*active, name)) for dep in spec.get("dependencies", [])]
+        path = receipt_path(root, name)
+        item = {"resource_id": name, "status": "not_started" if name in needed else "not_requested", "receipt": str(path),
+                "dependencies": list(spec.get("dependencies", [])), "root_causes": []}
+        if path.is_file():
+            try:
+                receipt = _read_receipt(plan, root, spec)
+                if receipt.get("status") not in {"ready", "failed"}:
+                    raise ValueError("Unrecognized resource receipt status: " + name)
+                item.update({k: receipt.get(k) for k in (
+                    "status", "reused", "manifest", "manifest_sha256", "error", "command_log")})
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                item.update(status="failed", error="Invalid resource receipt: " + str(exc))
+        blocked = [dep for dep in dependencies if dep["status"] in {"failed", "blocked"}]
+        if blocked and item["status"] != "ready":
+            item["blocked_by"] = [dep["resource_id"] for dep in blocked]
+            item["root_causes"] = list({cause["resource_id"]: cause for dep in blocked
+                                       for cause in dep["root_causes"]}.values())
+            if item["status"] == "not_started":
+                item.update(status="blocked", error="Not started because required resource preparation failed")
+        if item["status"] == "failed" and not item["root_causes"]:
+            item["root_causes"] = [{"resource_id": name, "error": item.get("error") or "Unknown preparation failure",
+                                    "command_log": item.get("command_log"), "receipt": str(path)}]
+        found[name] = item
+        return item
+
+    return [visit(spec["id"]) for spec in plan.get("bootstrap_resources", [])]
+
+
+def module_resource_blockers(plan, module, audit):
+    required = {spec["id"] for spec in plan.get("bootstrap_resources", []) if module in spec["targets"]}
+    return [copy.deepcopy(item) for item in audit if item["resource_id"] in required and item["status"] != "ready"]
+
+
+def resource_failure_message(blockers):
+    causes = {cause["resource_id"]: cause for item in blockers for cause in item.get("root_causes", [])}
+    detail = "; ".join(name + ": " + str(cause["error"]) for name, cause in causes.items())
+    if not detail:
+        detail = "required preparation did not finish; inspect the scheduler log"
+    return "Resource preparation failed: " + detail + ". Blocked resources: " + ", ".join(
+        item["resource_id"] + " (" + item["status"] + ")" for item in blockers)
 
 
 def _runner(plan, spec, logfile, allocated_threads=None):
@@ -420,6 +485,8 @@ def run_resource(plan, root, resource_id, allocated_threads=None):
     from .workflow_runtime import _write
     spec = _specs(plan)[resource_id]
     root = Path(root)
+    # A retry cannot inherit an earlier readiness marker for this same run.
+    ready_path(root, resource_id).unlink(missing_ok=True)
     value = {"schema": "basis-bootstrap-receipt-v1", "run_id": root.name,
              "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
              "resource_id": spec["id"], "provider": spec["provider"], "cache_key": spec["cache_key"],
@@ -488,7 +555,12 @@ def run_resource(plan, root, resource_id, allocated_threads=None):
     value["command_log"] = str(logfile) if logfile.exists() else None
     if runner is not None:
         value["commands"] = runner.commands
-    return _write(receipt_path(root, resource_id), value)
+    receipt = _write(receipt_path(root, resource_id), value)
+    if receipt["status"] == "ready":
+        _write(ready_path(root, resource_id), {"schema": "basis-bootstrap-ready-v1",
+               "run_id": root.name, "plan_hash": plan["plan_hash"], "resource_id": resource_id,
+               "receipt": str(receipt_path(root, resource_id)), "receipt_sha256": sha256_file(receipt_path(root, resource_id))})
+    return receipt
 
 
 def main(argv=None):
@@ -500,9 +572,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     from .workflow_runtime import _load
     plan, root, _ = _load(args.plan, args.run_dir)
-    run_resource(plan, root, args.resource, args.threads)
-    # Failed preparation is data: dependent checks block analysis and reporting
-    # explains the resource failure instead of fabricating negative findings.
+    receipt = run_resource(plan, root, args.resource, args.threads)
+    if receipt["status"] != "ready":
+        print("Resource preparation failed: " + args.resource + ": " + str(receipt.get("error")), file=sys.stderr, flush=True)
+        print("Failure receipt: " + str(receipt_path(root, args.resource)), file=sys.stderr, flush=True)
+        return 1
     return 0
 
 

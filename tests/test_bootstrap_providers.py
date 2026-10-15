@@ -24,6 +24,13 @@ class FakeRunner:
 
     def run(self, argv, cwd=None):
         self.commands.append(list(argv))
+        if argv[:3] == ["python", "-I", "-c"] and argv[3] == providers._PYTHON_RESOURCE_LOCATION:
+            prefix = Path(self.prefix[-1])
+            package = argv[4]
+            locations = list(prefix.glob("lib/python*/site-packages/" + package)) if package else []
+            return SimpleNamespace(stdout=json.dumps({"schema": "basis-native-python-location-v1",
+                "prefix": str(prefix), "executable": str(prefix / "bin/python"), "package": package,
+                "locations": [str(path) for path in locations]}))
         if self.callback:
             self.callback(argv, Path(cwd))
         if argv[:2] == ["diamond", "version"]:
@@ -128,6 +135,17 @@ class BootstrapProviderTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "2.1.7"):
             providers._diamond(OldRunner(), self.root / "source.faa", self.root / "index", 2, self.root)
 
+    def test_expired_certificate_is_actionable_and_not_retried(self):
+        for error in (ssl.SSLCertVerificationError(1, "certificate has expired"),
+                      urllib.error.URLError(ssl.SSLCertVerificationError(1, "certificate has expired"))):
+            with self.subTest(error=type(error).__name__), \
+                    patch.object(providers, "_download_once", side_effect=error) as download, \
+                    patch.object(providers.time, "sleep") as sleep:
+                with self.assertRaisesRegex(RuntimeError, "Certificate verification remains enabled"):
+                    providers._download(providers.VFDB_URL, self.root / "expired.gz")
+                self.assertEqual(download.call_count, 1)
+                sleep.assert_not_called()
+
     def test_amrfinder_resolves_versioned_directory_and_checks_index(self):
         def native(argv, root):
             if argv[0] != "amrfinder_update":
@@ -168,7 +186,7 @@ class BootstrapProviderTests(unittest.TestCase):
     def test_antismash_bundle_exposes_pfam_to_deepsafe(self):
         env = self.root / "env"
         model = "lib/python3.11/site-packages/antismash/detection/hmm_detection/data/bgc_seeds.hmm"
-        write_files(env, ["conda-meta/history", model])
+        write_files(env, ["bin/python", "conda-meta/history", model])
         self.runner = FakeRunner(env)
         def native(argv, root):
             if argv[0] == "antismash":
@@ -185,7 +203,7 @@ class BootstrapProviderTests(unittest.TestCase):
     def test_antismash_environment_asset_cannot_escape_native_environment(self):
         env = self.root / "env"
         model = env / "lib/python3.11/site-packages/antismash/data/model.hmm"
-        write_files(env, ["conda-meta/history"])
+        write_files(env, ["bin/python", "conda-meta/history"])
         model.parent.mkdir(parents=True)
         outside = self.root / "outside.hmm"
         outside.write_text("outside model")
@@ -225,7 +243,7 @@ class BootstrapProviderTests(unittest.TestCase):
 
     def test_bundled_models_copied_hashed_and_native_source_binding_declared(self):
         env = self.root / "env"
-        write_files(env, ["conda-meta/history", "bin/pHMMs/clusters.single.faa", "bin/pHMMs/clusters.faa.hmm"])
+        write_files(env, ["bin/python", "conda-meta/history", "bin/pHMMs/clusters.single.faa", "bin/pHMMs/clusters.faa.hmm"])
         runner = FakeRunner(env)
         result = providers.prepare_resource(self.spec("isescan"), self.destination, runner)
         self.assertEqual(result["module_updates"]["isescan"]["database"], str(env / "bin/pHMMs"))
@@ -235,7 +253,7 @@ class BootstrapProviderTests(unittest.TestCase):
 
     def test_bundled_models_cannot_escape_native_environment(self):
         env = self.root / "env"
-        write_files(env, ["conda-meta/history", "bin/pHMMs/clusters.single.faa", "bin/pHMMs/clusters.faa.hmm"])
+        write_files(env, ["bin/python", "conda-meta/history", "bin/pHMMs/clusters.single.faa", "bin/pHMMs/clusters.faa.hmm"])
         outside = self.root / "outside"
         outside.write_text("outside")
         (env / "bin/pHMMs/escape").symlink_to(outside)

@@ -1,13 +1,13 @@
-# Install and run BaSIS 0.3.0rc2
+# Install and run BaSIS 0.3.0rc3
 
 Use Linux x86-64 or Ubuntu inside WSL2, Python 3.11+, Git and Conda on PATH. The GitHub source release is pip-installable; no public PyPI release is claimed. NVIDIA hardware and drivers are optional for Extend acceleration.
 
 ## 1. Install the application
 
 ```bash
-python3 -m venv basis-0.3.0rc2
-source basis-0.3.0rc2/bin/activate
-python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc2'
+python3 -m venv basis-0.3.0rc3
+source basis-0.3.0rc3/bin/activate
+python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc3'
 python -m pip check
 basis verify-install
 ```
@@ -60,7 +60,7 @@ HybAs imports retain the selected target's rank. Consistent selected-target ance
 
 All 14 module adapters are native-capable in this candidate. That does not mean every sample is in every tool's scope, that every comparator family is validated, or that all tools have passed a live clean-machine acceptance run.
 
-The MLST adapter uses version 2.35.0 and its bundled PubMLST snapshot; it does not silently update to the live PubMLST collection. CRISPRCasFinder uses pinned 4.3.2 source and CASFinder 3.1.0 models on Linux x86-64. Its report separates Cas component candidates from typed systems and records the algorithm mode. Short contigs retain upstream unordered mode; the circular-genome assumption in ordered mode does not establish physical chromosome circularity.
+The MLST adapter uses version 2.35.0 and its bundled PubMLST snapshot; it does not silently update to the live PubMLST collection. CRISPRCasFinder uses pinned 4.3.2 source and CASFinder 3.1.0 models on Linux x86-64. The Conda recipe pairs MacSyFinder 2.0 with its supported HMMER 3.3.2 dependency. Its report separates Cas component candidates from typed systems and records the algorithm mode. Short contigs retain upstream unordered mode; the circular-genome assumption in ordered mode does not establish physical chromosome circularity.
 
 ## 4. Optional preflight and interface
 

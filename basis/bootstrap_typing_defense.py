@@ -86,7 +86,7 @@ def _probe_vmatch(database, destination, runner):
 
 
 def prepare_resource(spec, destination, runner):
-    backend = spec.get("backend") or spec.get("module")
+    backend = spec.get("provider") or spec.get("backend") or spec.get("module")
     destination = Path(destination).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     manifest = destination / "provenance.json"

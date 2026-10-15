@@ -191,7 +191,8 @@ class DashboardTests(unittest.TestCase):
             self.assertIn('href="' + path.name + '" download', html)
         optional = doc.find(ident="optional-modules")[0]
         self.assertEqual(optional.text.count("Disabled in this run’s configuration"), 6)
-        self.assertIn("Import-only in this BaSIS release", optional.text)
+        self.assertIn("Native adapter available", optional.text)
+        self.assertNotIn("Import-only in this BaSIS release", optional.text)
         self.assertIn("It does not mean a negative result", optional.text)
         saved = json.loads(Path(paths["evidence_json"]).read_text())
         self.assertEqual(saved["records"], disabled)

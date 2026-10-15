@@ -113,6 +113,14 @@ ProtT5 model is not fully fixed by a PF2 source commit. The automatic full prese
 instead supplies a pinned local model snapshot. For manual long-term reuse, use a
 reviewed local model and an immutable model identity/digest; the manifest records
 the identity available for that run.
+Automatic preparation uses the Hub's regular HTTPS transport with Xet disabled,
+the pinned model revision, one download worker and at most four attempts.
+Partial downloads remain under the configured resource directory in
+`downloads/prott5/<revision>` for retry; only complete required files are copied
+into the sealed model snapshot. TLS verification remains enabled. Model
+provenance records the transport and attempt count, and download preparation
+never loads the model or performs GPU inference. See the
+[Hugging Face environment-variable documentation](https://huggingface.co/docs/huggingface_hub/en/package_reference/environment_variables#hfhubdisablexet).
 Supplying an identity string alone does not verify the local model's bytes;
 the outer workflow must record their digest. The source revision in the
 manifest describes the supported adapter contract; use the pinned environment

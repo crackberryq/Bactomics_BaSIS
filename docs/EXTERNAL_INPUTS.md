@@ -1,4 +1,4 @@
-# External annotated input — 0.3.0rc2
+# External annotated input — 0.3.0rc3
 
 BaSIS can use a bacterial assembly and matching annotations produced outside HybAs. Kraken output is not required. Set `input_mode` to `external` to skip adjacent HybAs metadata, even when the files happen to use an `isolate/annotation/` folder layout.
 

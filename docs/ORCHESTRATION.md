@@ -1,4 +1,4 @@
-# Snakemake orchestration in BaSIS 0.3.0rc2
+# Snakemake orchestration in BaSIS 0.3.0rc3
 
 BaSIS uses one packaged `basis/resources/Snakefile` entry point. The CLI and local interface launch the same analysis workflow. Snakemake owns dependencies, environment deployment and CPU/memory/GPU scheduling. Python workers implement scientific analyses, parsing, evidence checks and report rendering within its rules.
 

@@ -69,11 +69,18 @@ for attempt in range(4):
 '''
 
 _PROTT5 = r'''
-import importlib.metadata, importlib.util, json, shutil, sys
+import importlib.metadata, importlib.util, json, os, shutil, sys, time
 from pathlib import Path
+# Hub settings are read at import time. The regular HTTPS transport avoids the
+# additional Xet CAS endpoint, which fails on some otherwise working networks.
+# This changes transport only: the repository/revision and TLS checks are fixed.
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
+os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
 from huggingface_hub import snapshot_download
 destination, repository, revision, source_commit = Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
 download_model, copy_weights = sys.argv[5] == "yes", sys.argv[6] == "yes"
+download_directory = Path(sys.argv[7])
 distribution = importlib.metadata.distribution("PathogenFinder2")
 if distribution.version != "0.7.1":
     raise ValueError("Expected PathogenFinder2 0.7.1 for the inspected adapter")
@@ -96,9 +103,37 @@ for name in required_weights:
         raise ValueError("Missing bundled classifier weights: " + name)
 if download_model:
     model = destination / "model"
-    snapshot_download(repo_id=repository, revision=revision, local_dir=str(model),
-        allow_patterns=["config.json", "pytorch_model.bin", "special_tokens_map.json",
-                        "spiece.model", "tokenizer_config.json", "README.md"], max_workers=1)
+    model_files = ["config.json", "pytorch_model.bin", "special_tokens_map.json",
+                   "spiece.model", "tokenizer_config.json", "README.md"]
+    for attempt in range(1, 5):
+        print("ProtT5 HTTPS download attempt %d/4; pinned revision %s; partial downloads retained" %
+              (attempt, revision), flush=True)
+        try:
+            snapshot_download(repo_id=repository, revision=revision, local_dir=str(download_directory),
+                allow_patterns=model_files, max_workers=1)
+            break
+        except Exception as exc:
+            response = getattr(exc, "response", None)
+            status = getattr(response, "status_code", getattr(exc, "code", None))
+            retryable = not isinstance(exc, (ValueError, PermissionError)) and status not in (400, 401, 403, 404, 422)
+            # Signed download URLs can appear in exception text. Do not copy
+            # those credentials into the diagnostic message or traceback.
+            diagnostic = type(exc).__name__ + (" HTTP " + str(status) if status else "")
+            if attempt == 4 or not retryable:
+                raise RuntimeError("Pinned ProtT5 HTTPS download failed after %d attempt(s): %s. "
+                    "Partial files remain in %s; retry uses the same revision and cache." %
+                    (attempt, diagnostic, download_directory)) from None
+            print("ProtT5 download interrupted (%s); retrying the same cache" % diagnostic, flush=True)
+            time.sleep(min(2 ** attempt, 8))
+    # The download cache survives a failed workflow, independently of staging.
+    # Publish only complete required files; no HF partial files enter a snapshot.
+    if model.resolve() != download_directory.resolve():
+        model.mkdir()
+        for name in model_files:
+            source = download_directory / name
+            if not source.is_file() or not source.stat().st_size:
+                raise ValueError("Pinned ProtT5 download lacks required file: " + name)
+            shutil.copyfile(source, model / name)
 if copy_weights:
     copied = destination / "classifier_weights"
     copied.mkdir()
@@ -108,7 +143,10 @@ identity = {"repository": repository, "revision": revision,
     "pathogenfinder2_version": distribution.version, "pf2_source_commit": source_commit,
     "installed_direct_url": direct_url, "classifier_source": str(weights),
     "classifier_files": required_weights, "gpu_computation_performed": False,
-    "model_downloaded": download_model, "weights_copied": copy_weights}
+    "model_downloaded": download_model, "weights_copied": copy_weights,
+    "download_transport": "huggingface_hub_https_xet_disabled",
+    "download_cache": str(download_directory) if download_model else None,
+    "download_attempts": attempt if download_model else 0}
 (destination / "model-identity.json").write_text(json.dumps(identity, indent=2) + "\n")
 '''
 
@@ -177,10 +215,15 @@ def _prosite(spec, destination, runner):
     profiles, rules, profile_meta = load_profile_snapshot(destination)
     if not profiles or not rules:
         raise ValueError("PROSITE profile/rule snapshot is empty")
-    referenced = {rule for profile in profiles.values() for rule in profile["rule_ids"]}
-    missing = referenced - set(rules)
-    if missing:
-        raise ValueError("PROSITE profile rules are absent from the same-release ProRule file: " + ", ".join(sorted(missing)))
+    # Official release 2026_03 itself has profile links to rules absent from its
+    # bulk ProRule file. Profile detection remains valid, but the missing rule's
+    # annotations cannot be assessed. Do not mix in unversioned web rules.
+    coverage = profile_meta["rule_coverage"]
+    atomic_json(destination / "rule-coverage.json", coverage)
+    if coverage["unavailable_rule_ids"]:
+        emit("PROSITE profiles ready with partial ProRule coverage: " +
+             str(len(coverage["unavailable_rule_ids"])) +
+             " linked rules absent from the release; affected residue annotations will be marked unavailable")
     return {"module_updates": {}, "deep_updates": {
         "prosite_snapshot": str(destination), "prosite_profiles": True,
         "executables": {"pfscan": "pfscanV3"}}, "provenance": {
@@ -188,6 +231,7 @@ def _prosite(spec, destination, runner):
         "files": _checksums(destination), "pattern_count": len(patterns),
         "eligible_pattern_count": pattern_meta["eligible_patterns"],
         "profile_count": len(profiles), "prorule_count": len(rules),
+        "rule_coverage": coverage,
         "limitation": profile_meta["limitation"], "analyses_run": False}}
 
 
@@ -206,9 +250,11 @@ def _prott5(spec, destination, runner):
     if external_model and not external.get("prot_t5_identity"):
         raise ValueError("An existing ProtT5 directory requires its recorded prot_t5_identity; bootstrap will not assert the downloaded model identity for external files")
     emit("Preparing pinned ProtT5 and bundled PathogenFinder2 classifier weights; no GPU inference")
+    download_directory = (Path(spec["cache_directory"]) / "downloads" / "prott5" / revision
+                          if spec.get("cache_directory") else destination / "model")
     runner.run(["python", "-c", _PROTT5, str(destination), repository, revision,
                 PF2_SOURCE_COMMIT, "no" if external_model else "yes",
-                "no" if external_weights else "yes"], cwd=destination)
+                "no" if external_weights else "yes", str(download_directory)], cwd=destination)
     for name in (PROTT5_FILES if not external_model else ("config.json", "spiece.model")):
         _required_file(model / name)
     if external_model and not any((model / name).is_file() for name in ("pytorch_model.bin", "model.safetensors")):

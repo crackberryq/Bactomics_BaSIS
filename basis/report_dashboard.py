@@ -35,11 +35,11 @@ OPTIONAL_SCOPE = {
     'icescreen': ('ICEscreen', 'Integrative conjugative and mobilizable elements in Bacillota',
                   'Native adapter available; requires annotated GenBank, explicit Bacillota scope and native validation.'),
     'crisprcasfinder': ('CRISPRCasFinder', 'CRISPR arrays and associated Cas proteins',
-                        'Import-only in this BaSIS release; no native adapter is implemented.'),
+                        'Native adapter available; uses CRISPRCasFinder and its pinned CASFinder models.'),
     'minced': ('MinCED', 'CRISPR arrays',
                'Native adapter available; detects repeat-spacer arrays, without Cas-protein typing. CRISPRCasFinder is an alternative workflow.'),
     'mlst': ('MLST', 'Sequence typing using applicable allele schemes',
-             'Import-only in this BaSIS release; requires an applicable typing scheme.')}
+             'Native adapter available; no applicable scheme is reported separately from a completed type assignment.')}
 QUEUES = {'native_screen': 'Core screening', 'ml_attention': 'ML attention', 'exploratory': 'Exploratory'}
 LAYERS = {'integrity': 'Sequence integrity', 'context': 'Genomic context', 'domains': 'Pfam domains',
           'motifs': 'Custom motifs', 'prosite_patterns': 'PROSITE patterns',
@@ -327,6 +327,29 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     hero = '<header class="hero"><div><p class="eyebrow">CORE SCREENING · DEEP EVIDENCE · MODEL INSIGHT</p><h1>Genomic evidence,<br>ready for review.</h1><p>Trace the screening calls, inspect focused analyses,<br class="desktop-only"> and see exactly what remains unresolved.</p><div class="hero-meta">' + badge(headline, 'ok' if all_done and done == len(selected) else 'warn') + '<span>' + esc(_date(run.get('finished_at'))) + '</span></div></div><div class="hero-art" aria-hidden="true"><svg viewBox="0 0 250 210"><g fill="none" stroke="#60d4c4" stroke-width="1.5" opacity=".65"><circle cx="125" cy="105" r="82"/><circle cx="125" cy="105" r="65" stroke-dasharray="5 9"/><ellipse cx="125" cy="105" rx="37" ry="82" transform="rotate(35 125 105)"/><path d="M49 75L172 40 192 130 91 174 49 75 192 130M91 174L172 40"/></g><g fill="#abf0df"><circle cx="49" cy="75" r="6"/><circle cx="172" cy="40" r="8"/><circle cx="192" cy="130" r="5"/><circle cx="91" cy="174" r="7"/></g><text x="125" y="112" text-anchor="middle" fill="white" font-size="29" font-family="sans-serif">BaSIS</text></svg></div></header>'
     overview = hero + '<div class="stats">' + stat('Requested modules', f'{completed} / {requested_count}', 'completed execution · explicit exclusions omitted; holds retained') + stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'None selected', 'completed DeepSafe analyses' if selected else 'no selected-candidate analyses requested') + stat('Deferred candidates', num(len(deferred)), 'retained for later exploratory review') + stat('Execution failures', num(failed), 'failed or unknown requested module records') + '</div>'
     overview += '<div class="callout"><strong>Execution and interpretation are separate.</strong><p>Recorded overall scope: ' + esc(human(run.get('completeness'))) + '. ' + num(len(deferred)) + ' candidates remain deferred. Completed analyses do not establish protein function or organism safety.</p></div>'
+    failed_resources = [item for item in run.get('resource_preparation', [])
+                        if item.get('status') in {'failed', 'blocked', 'not_started'}]
+    failed_records = [rec for rec in requested if r._execution(rec) in {'failed', 'unknown'}]
+    if failed_resources or failed_records or run.get('engine_error'):
+        issues = '<article class="panel" id="execution-issues"><h3>Execution issues</h3><p>Resolve these preparation or execution failures before interpreting the affected screens. Independent completed results retain their recorded status.</p>'
+        if run.get('engine_error'):
+            issues += '<p class="small">' + esc(run['engine_error']) + '</p>'
+        if failed_resources:
+            issues += '<h4>Resource preparation</h4>' + table(
+                ['Resource', 'Status', 'Recorded cause', 'Blocked by', 'Diagnostics'],
+                [(esc(item.get('resource_id')), badge(item.get('status')),
+                  esc(item.get('error') or 'Resource preparation did not complete; inspect the scheduler log.'),
+                  esc(', '.join(item.get('blocked_by') or []) or '—'),
+                  r._artifact_list([{'path': item[key], 'label': label} for key, label in
+                                    [('command_log', 'Command log'), ('receipt', 'Preparation receipt')]
+                                    if item.get(key)], outdir)) for item in failed_resources])
+        if failed_records:
+            issues += '<details class="evidence-list"><summary>Affected module records (' + str(len(failed_records)) + ')</summary>' + table(
+                ['Sample', 'Module', 'Recorded cause', 'Evidence'],
+                [(esc(r._sample_id(rec)), esc(NAMES.get(r._module(rec), r._module(rec))),
+                  esc(rec.get('error') or rec.get('reason') or 'No completed result recorded.'),
+                  link(raw_paths[id(rec)], 'Evidence', 'text-link')) for rec in failed_records]) + '</details>'
+        overview += issues + '</article>'
     replays = run.get('report_replays') or []
     if replays:
         replay = replays[-1]
@@ -412,7 +435,12 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     extend = ''.join(_extend(v,outdir,raw_paths[id(v)]) for v in models) or '<p class="panel empty">Extend was not requested or no model record was supplied.</p>'
     extend += render_attention_explorer(records, selected)
     content += section('extend','06','Extend · model insight','The native prediction, ensemble variation and attention coverage in one place.',extend)
-    deep = '<div class="panel"><div class="panel-head"><div><h3>Deep family assessment</h3><p class="muted">' + str(len(selected)) + ' selected candidates · ' + str(q['native_screen']) + ' from core screens · ' + str(q['ml_attention']) + ' from ML attention</p></div>' + link('deferred-candidates.tsv','Deferred queue · TSV') + '</div><p>Selected execution: <strong>' + (str(done) + ' / ' + str(len(selected)) + ' completed' if selected else 'not requested — no candidates selected') + '</strong>. Biological interpretations and review holds remain attached to each candidate.</p>'
+    selected_execution = str(done) + ' / ' + str(len(selected)) + ' completed' if selected else 'no candidates selected'
+    if not selected and any(r._execution(rec) == 'failed' for rec in deep_records):
+        selected_execution = 'unavailable — DeepSafe execution failed or was blocked'
+    elif not selected and not (run.get('options') or {}).get('deep'):
+        selected_execution = 'not requested — no candidates selected'
+    deep = '<div class="panel"><div class="panel-head"><div><h3>Deep family assessment</h3><p class="muted">' + str(len(selected)) + ' selected candidates · ' + str(q['native_screen']) + ' from core screens · ' + str(q['ml_attention']) + ' from ML attention</p></div>' + link('deferred-candidates.tsv','Deferred queue · TSV') + '</div><p>Selected execution: <strong>' + selected_execution + '</strong>. Biological interpretations and review holds remain attached to each candidate.</p>'
     deep += '<div class="filters"><label>Search candidates<input id="candidate-search" type="search" placeholder="Protein, annotation, domain…"></label><label>Origin<select id="queue-filter"><option value="">All queues</option>' + ''.join('<option value="' + esc(k) + '">' + esc(QUEUES.get(k,human(k))) + '</option>' for k in sorted(q)) + '</select></label><label>Sample<select id="sample-filter"><option value="">All samples</option>' + ''.join('<option value="' + esc(k) + '">' + esc(k) + '</option>' for k in sids) + '</select></label><label>Interpretation<select id="interpretation-filter"><option value="">All interpretations</option>' + ''.join('<option value="' + esc(k) + '">' + esc(human(k)) + '</option>' for k in sorted({str((c.get('assessment') or {}).get('interpretation', c.get('interpretation','unresolved'))) for _,c in selected})) + '</select></label></div><div class="panel-head"><p id="candidate-count" class="small muted" aria-live="polite">' + str(len(selected)) + ' candidates</p><div><button class="button" data-action="expand-candidates">Expand visible</button> <button class="button" data-action="collapse-candidates">Collapse all</button></div></div></div><p id="candidate-empty" class="empty" hidden>No candidates match these filters.</p>'
     placement_views, placement_links = {}, {}
     for sid, c in selected:

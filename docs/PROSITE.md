@@ -34,6 +34,16 @@ map profile positions to query residues: uppercase match, lowercase insertion,
 and dash deletion. Full profile-coordinate length and exact query sequence
 are checked before residue mapping. Unmappable sites remain not assessable.
 
+Automatic full-preset runs prepare this snapshot as part of the Snakemake DAG.
+The original files, release checks and checksums are preserved. A profile may
+reference a rule absent from the same-release bulk ProRule file; this occurs in
+the official 2026_03 release. The preparation step writes `rule-coverage.json`
+and records these gaps in provenance. Profile scanning continues, while a hit
+with an unavailable rule carries its accession and an explicit `not_assessed`
+or `partial` residue-mapping status. Valid profile coordinates remain available
+separately. BaSIS never fills these gaps using unversioned web rules or counts
+an absent rule as a negative residue observation.
+
 Only explicit single-position residue conditions (one canonical amino acid or
 an allowed residue set) are evaluated. Source features, groups and unsupported
 conditions are retained. This is not a complete ProRule interpreter: case logic,

@@ -79,6 +79,44 @@ class SchedulerLauncherTests(unittest.TestCase):
             self.assertEqual(completed, [("DEMO_A", "amrfinder")])
             self.assertEqual(sum(r["execution_status"] == "failed" for r in requested), len(requested) - 1)
 
+    def test_bootstrap_failure_fallback_reports_roots_and_blocked_resources(self):
+        from basis.bootstrap import receipt_path
+        from basis.workflow_runtime import _write
+        with tempfile.TemporaryDirectory() as directory:
+            plan = make_plan(load_config(create_demo(directory)), True, False)
+            plan["bootstrap_resources"] = [
+                {"id": "card", "targets": ["rgi", "deepsafe"], "dependencies": [], "cache_key": "card-test"},
+                {"id": "deep_catalogue", "targets": ["deepsafe"], "dependencies": ["card"], "cache_key": "catalogue-test"},
+            ]
+
+            def scheduler(command, **kwargs):
+                run_id = kwargs["env"]["BASIS_SCHEDULER_RUN_ID"]
+                root = Path(plan["outdir"]) / "provenance/scheduler" / run_id
+                _write(receipt_path(root, "card"), {"schema": "basis-bootstrap-receipt-v1",
+                    "run_id": run_id, "plan_hash": plan["plan_hash"], "source_hash": plan["source_hash"],
+                    "resource_id": "card", "cache_key": "card-test", "status": "failed",
+                    "error": "fixture database download interrupted"})
+                run_worker(plan["plan_path"], "DEMO_A", "amrfinder", receipt=str(root / "DEMO_A/amrfinder.json"))
+                return subprocess.CompletedProcess(command, 1)
+
+            with patch("basis.pipeline.subprocess.run", side_effect=scheduler), \
+                    patch("basis.bootstrap.bootstrap_uses_conda", return_value=False):
+                result, code = run_pipeline(plan, engine="snakemake")
+            self.assertEqual(code, 2)
+            evidence = json.loads(Path(result["artifacts"]["evidence_json"]).read_text())
+            records = {r["module"]: r for r in evidence["records"] if r["sample_id"] == "DEMO_A"}
+            self.assertEqual(records["amrfinder"]["execution_status"], "completed")
+            self.assertIn("fixture database download interrupted", records["rgi"]["error"])
+            self.assertEqual(records["rgi"]["reason"], "resource_preparation_failed")
+            deep = next(r for r in evidence["deep_records"] if r["sample_id"] == "DEMO_A")
+            self.assertEqual(deep["candidates"], [])
+            self.assertIn("rgi", deep["upstream_incomplete"])
+            self.assertNotIn("amrfinder", deep["upstream_incomplete"])
+            self.assertEqual({r["resource_id"] for r in deep["blocked_resources"]}, {"card", "deep_catalogue"})
+            self.assertIn("fixture database download interrupted", Path(result["artifacts"]["html"]).read_text())
+            audit = {r["resource_id"]: r for r in result["run"]["resource_preparation"]}
+            self.assertEqual(audit["deep_catalogue"]["status"], "blocked")
+
     def test_deep_refuses_upstream_changed_after_receipt(self):
         with tempfile.TemporaryDirectory() as directory:
             plan = make_plan(load_config(create_demo(directory)), True, True)

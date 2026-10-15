@@ -1,3 +1,17 @@
+# 0.3.0rc3 — native setup recovery
+
+Fixes failures found during the first automatic isolate2 run:
+
+- Correct MLST/CRISPRCasFinder resource dispatch and locate bundled antiSMASH/IntegronFinder data through the selected native Python interpreter.
+- Retain the HMMER 3.3.2 correction required by MacSyFinder 2.0.
+- Preserve valid PROSITE profile scans when the release's bulk ProRule file lacks referenced rules. Record unavailable rule IDs and incomplete residue mapping explicitly.
+- Download the pinned ProtT5 revision through ordinary verified HTTPS, with bounded retries and persistent partial-download storage.
+- Make failed resource preparation fail its Snakemake job; preserve failure receipts and report blocked dependencies while independent jobs continue.
+- Provide an explicit, checksum-verified recovery configuration for completed rc2 resource snapshots and an optional previously recorded local VFDB snapshot.
+- Explain certificate verification failures without disabling TLS or substituting unverified database mirrors.
+
+VFDB's official HTTPS download failed certificate validation on the reported machine. This release does not establish that the upstream certificate issue is resolved. Full native acceptance and independent biological validation remain pending.
+
 # 0.3.0rc2 — automatic first native run
 
 - Make new `basis init` studies and fresh sample imports use the full native preset with automatic resource preparation. `basis run -d -e` schedules missing environment, database and model preparation inside the normal Snakemake DAG.

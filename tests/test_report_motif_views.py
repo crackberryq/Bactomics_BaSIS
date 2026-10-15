@@ -49,6 +49,17 @@ class MotifViewTests(unittest.TestCase):
                       'another-alias', 'ps00001']:
             self.assertIn(token, terms)
 
+    def test_unavailable_residue_rules_visible_without_hiding_valid_profile(self):
+        c = protein()
+        hit = c['analyses']['prosite_profiles']['hits'][0]
+        hit['unavailable_rule_ids'] = ['PRU99999']
+        hit['residue_rules'] = [{'rule_id': 'PRU99999', 'status': 'rule_unavailable', 'sites': []}]
+        before = copy.deepcopy(c)
+        text = Text(candidate_motif_details(c)).value
+        self.assertIn('PS00001 FAMILY_PROFILE', text)
+        self.assertIn('Residue annotations not assessed for unavailable release rules: PRU99999', text)
+        self.assertEqual(c, before)
+
     def test_no_applicable_rule_is_not_a_negative_scan(self):
         c = protein()
         c['analyses']['motifs'] = {'status': 'no_applicable_rule', 'rules': []}

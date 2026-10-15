@@ -1,13 +1,13 @@
-# Start with BaSIS 0.3.0rc2
+# Start with BaSIS 0.3.0rc3
 
 Install the application, initialize a fresh study, and run it. Snakemake prepares missing tools and requested resources as part of the first native run.
 
 Use Linux x86-64 or WSL2 with Python 3.11+, Git and Conda available on PATH:
 
 ```bash
-python3 -m venv basis-0.3.0rc2
-source basis-0.3.0rc2/bin/activate
-python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc2'
+python3 -m venv basis-0.3.0rc3
+source basis-0.3.0rc3/bin/activate
+python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc3'
 basis verify-install
 basis init --directory study --hybas-dir /absolute/path/to/isolate/annotation
 basis run -c study/config.yaml -d -e -v --cores 4 --output summary

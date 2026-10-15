@@ -1,15 +1,15 @@
 # Included by analysis.smk after PLAN, PLAN_PATH, RECEIPTS, PYTHON and
 # CONTROLLER_SOURCE are established. Resource preparation is part of that DAG.
-from basis.bootstrap import bootstrap_environment, receipt_path
+from basis.bootstrap import bootstrap_environment, ready_path
 
 BOOTSTRAP_SPECS = {entry["id"]: entry for entry in PLAN.get("bootstrap_resources", [])}
 
 rule bootstrap_resource:
     input:
         plan=PLAN_PATH,
-        dependencies=lambda wc: [str(receipt_path(RECEIPTS, name)) for name in BOOTSTRAP_SPECS[wc.resource].get("dependencies", [])]
+        dependencies=lambda wc: [str(ready_path(RECEIPTS, name)) for name in BOOTSTRAP_SPECS[wc.resource].get("dependencies", [])]
     output:
-        RECEIPTS + "/bootstrap/{resource}.json"
+        RECEIPTS + "/bootstrap/{resource}.ready.json"
     wildcard_constraints:
         resource="|".join(BOOTSTRAP_SPECS) if BOOTSTRAP_SPECS else "__no_bootstrap_resources__"
     conda:

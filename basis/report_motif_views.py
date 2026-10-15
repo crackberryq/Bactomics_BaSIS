@@ -140,7 +140,14 @@ def candidate_motif_details(candidate, parent_status="completed"):
                 if not isinstance(hit, dict):
                     continue
                 name = ' '.join(str(v) for v in [hit.get("accession"), hit.get("name") or hit.get("profile_name")] if v)
-                matches.append(_esc(name or 'Unnamed match') + ' · ' + _esc(_span(hit)) + ' aa')
+                match_text = _esc(name or 'Unnamed match') + ' · ' + _esc(_span(hit)) + ' aa'
+                missing = sorted({str(v) for v in _list(hit.get('unavailable_rule_ids')) if v}
+                    | {str(rule.get('rule_id')) for rule in _list(hit.get('residue_rules'))
+                       if isinstance(rule, dict) and rule.get('status') == 'rule_unavailable' and rule.get('rule_id')})
+                if missing:
+                    match_text += ('<br><span class="mv-note">Residue annotations not assessed for unavailable '
+                                   'release rules: ' + _esc(', '.join(missing)) + '.</span>')
+                matches.append(match_text)
             rows.append((_esc(label), 'Completed', _esc(description), '<br>'.join(matches) or '—'))
         else:
             rows.append((_esc(label), _esc(_human(layer.get("status") or "not_assessed")),

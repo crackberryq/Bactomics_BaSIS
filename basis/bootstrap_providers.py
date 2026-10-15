@@ -109,6 +109,16 @@ def _download(url, path, maximum=250_000_000):
                 raise
             error = exc
         except (OSError, urllib.error.URLError, ssl.SSLError, http.client.IncompleteRead) as exc:
+            cause = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+            if isinstance(cause, ssl.SSLCertVerificationError):
+                host = urllib.parse.urlsplit(url).hostname
+                raise RuntimeError(
+                    f"TLS certificate verification failed for official source {host}: {cause}. "
+                    "Check the machine clock and certificate trust chain; the server certificate may also be expired. "
+                    "Certificate verification remains enabled. Retry after the certificate issue is resolved, "
+                    "or explicitly configure a previously downloaded, provenance-verified local database. "
+                    "No unverified mirror was substituted."
+                ) from exc
             error = exc
         if attempt == 3:
             raise RuntimeError(f"Official download failed after 3 attempts: {error}") from error
@@ -254,24 +264,82 @@ def _diamond(runner, fasta, prefix, threads, root):
     return version
 
 
+_PYTHON_RESOURCE_LOCATION = """import importlib.util, json, sys
+from pathlib import Path
+name = sys.argv[1]
+locations = []
+if name:
+    spec = importlib.util.find_spec(name)
+    if spec is None or spec.submodule_search_locations is None:
+        raise RuntimeError('Installed native Python package was not found: ' + name)
+    locations = [str(Path(path).resolve()) for path in spec.submodule_search_locations]
+print(json.dumps({'schema': 'basis-native-python-location-v1',
+                  'prefix': str(Path(sys.prefix).resolve()),
+                  'executable': str(Path(sys.executable).resolve()),
+                  'package': name, 'locations': locations}))
+"""
+
+
+def _native_python_location(runner, package=""):
+    """Ask the selected tool interpreter, including .pth/egg package layouts.
+
+    The controller's Python version and ambient Conda prefix are not evidence of
+    where a separately routed native tool is installed. Paths must be returned
+    by that interpreter and remain inside its completed Conda environment.
+    """
+    response = runner.run(["python", "-I", "-c", _PYTHON_RESOURCE_LOCATION, package])
+    try:
+        record = json.loads(response.stdout)
+        if record.get("schema") != "basis-native-python-location-v1" or record.get("package") != package:
+            raise ValueError("Unexpected native Python resource-location schema")
+        prefix = Path(record["prefix"])
+        executable = Path(record["executable"])
+        if not prefix.is_absolute() or not executable.is_absolute():
+            raise ValueError("Native Python resource paths must be absolute")
+        prefix, executable = prefix.resolve(strict=True), executable.resolve(strict=True)
+        if not executable.is_relative_to(prefix):
+            raise ValueError("Native Python executable is outside its environment")
+        if not (prefix / "conda-meta/history").is_file():
+            raise ValueError("Bundled resource environment lacks Conda transaction history")
+        argv = list(getattr(runner, "prefix", []))
+        from .native_environment import is_explicit_conda_run_prefix
+        if is_explicit_conda_run_prefix(argv):
+            for index, argument in enumerate(argv):
+                if argument in {"--prefix", "-p"}:
+                    expected = argv[index + 1]
+                    break
+                if argument.startswith("--prefix="):
+                    expected = argument.split("=", 1)[1]
+                    break
+            else:
+                expected = None  # A named environment is resolved by its Python.
+            if expected and prefix != Path(expected).expanduser().resolve(strict=True):
+                raise ValueError("Native Python prefix differs from the selected Conda environment")
+        locations = record["locations"]
+        if not isinstance(locations, list) or (package and len(locations) != 1) or (not package and locations):
+            raise ValueError("Native Python package location is missing or ambiguous")
+        location = None
+        if package:
+            location = Path(locations[0])
+            if not location.is_absolute():
+                raise ValueError("Native Python package path must be absolute")
+            location = location.resolve(strict=True)
+            if not location.is_dir() or not location.is_relative_to(prefix):
+                raise ValueError("Native Python package is outside its environment")
+        return prefix, location
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Invalid native Python resource-location response") from exc
+
+
 def _active_prefix(runner):
-    argv = list(getattr(runner, "prefix", []))
-    for flag in ("--prefix", "-p"):
-        if flag in argv:
-            prefix = Path(argv[argv.index(flag) + 1]).resolve()
-            break
-    else:
-        value = os.environ.get("CONDA_PREFIX")
-        if not value:
-            raise ValueError("Bundled resources require an explicitly activated Conda environment")
-        prefix = Path(value).resolve()
-    if not (prefix / "conda-meta/history").is_file():
-        raise ValueError("Bundled resource environment lacks Conda transaction history")
-    return prefix
+    return _native_python_location(runner)[0]
 
 
 def _copy_bundled(provider, root, runner):
-    prefix = _active_prefix(runner)
+    if provider == "integronfinder":
+        prefix, package = _native_python_location(runner, "integron_finder")
+    else:
+        prefix, package = _active_prefix(runner), None
     if provider == "isescan":
         source = prefix / "bin/pHMMs"
         required = ["clusters.single.faa", "clusters.faa.hmm"]
@@ -281,10 +349,7 @@ def _copy_bundled(provider, root, runner):
         if not (source / "blastdb").is_dir() or not (source / "hmmdb").is_dir():
             raise ValueError("ICEscreen bundled BLAST/HMM databases missing")
     else:
-        matches = list((prefix / "lib").glob("python*/site-packages/integron_finder/data/Models"))
-        if len(matches) != 1:
-            raise ValueError("IntegronFinder bundled model directory is missing or ambiguous")
-        source, required = matches[0], []
+        source, required = package / "data/Models", []
     if not source.is_dir() or not source.resolve().is_relative_to(prefix):
         raise ValueError("Bundled resource directory is absent or outside its environment")
     for name in required:
@@ -313,11 +378,7 @@ def _copy_bundled(provider, root, runner):
 
 def _antismash_environment_assets(runner):
     """Fingerprint package model assets prepared by the upstream installer."""
-    prefix = _active_prefix(runner)
-    packages = list((prefix / "lib").glob("python*/site-packages/antismash"))
-    if len(packages) != 1:
-        raise ValueError("antiSMASH installed package directory is missing or ambiguous")
-    package = packages[0]
+    prefix, package = _native_python_location(runner, "antismash")
     hashes = {}
     for path in sorted(package.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix in {".py", ".pyc", ".pyo"}:
