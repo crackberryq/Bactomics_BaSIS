@@ -94,11 +94,15 @@ from pathlib import Path
 selection=json.loads(sys.argv[2])
 if selection['explicit_conda']:
     activated=os.environ.get('CONDA_PREFIX')
-    if not activated: raise RuntimeError('Selected Conda environment was not activated')
-    root=Path(activated).resolve()
     expected=selection.get('expected_prefix')
-    if expected and root != Path(expected).expanduser().resolve():
-        raise RuntimeError('Activated Conda prefix differs from selected environment')
+    expected_root=Path(expected).expanduser().resolve() if expected else None
+    if not activated:
+        detail=f' (expected prefix: {str(expected_root)!r}; observed activated prefix: unset)' if expected_root else ''
+        raise RuntimeError('Selected Conda environment was not activated'+detail)
+    root=Path(activated).resolve()
+    if expected_root and root != expected_root:
+        raise RuntimeError('Activated Conda prefix differs from selected environment'
+                           +f' (expected prefix: {str(expected_root)!r}; observed activated prefix: {str(root)!r})')
 else:
     root=Path(sys.prefix).resolve()
 names=json.loads(sys.argv[1]); binaries={}

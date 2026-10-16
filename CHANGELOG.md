@@ -1,3 +1,11 @@
+# 0.3.0rc8 — preserve native Conda activation
+
+- Prevent Conda 26.1.1's automatic base activation from changing the active prefix during a nested native-tool invocation. This applies only to explicitly targeted BaSIS child processes; the parent shell and user Conda configuration remain unchanged.
+- Preserve Conda activation hooks, the selected tool environment, native argument boundaries, and strict executable/environment identity checks.
+- Include expected and observed prefixes in identity errors so a failed handoff can be diagnosed from its log.
+- Add an integration check using real Conda 25.9.1 and 26.1.1, an offline empty tool environment, and a synthetic executable. These checks do not perform biological analysis.
+- Existing studies, tool environments, downloaded resources, and recorded outputs are preserved. Source changes are reflected in provenance and cache validation.
+
 # 0.3.0rc7 — native startup checks and interrupted-run recovery
 
 - Preserve tool arguments such as `-version` across Conda invocation on supported Conda releases.

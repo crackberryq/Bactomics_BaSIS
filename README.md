@@ -5,7 +5,7 @@ A reproducible workflow for bacterial genomic safety investigation, with a local
 
 BaSIS combines screening tools, genomic context, selected-protein follow-up and optional machine-learning evidence. It accepts matching assembly and annotation files from HybAs or external workflows, and supports Excel, CSV and TSV sample sheets.
 
-**Current candidate: 0.3.0rc7.** A new full study prepares its required tool environments, databases and models through the normal Snakemake analysis workflow. The first verified resource snapshots are recorded and reused without an automatic refresh. Independent biological validation and full native acceptance on a clean collaborator computer remain pending.
+**Current candidate: 0.3.0rc8.** A new full study prepares its required tool environments, databases and models through the normal Snakemake analysis workflow. The first verified resource snapshots are recorded and reused without an automatic refresh. Independent biological validation and full native acceptance on a clean collaborator computer remain pending.
 
 Snakemake owns setup, execution and restart. A readiness barrier holds sample analyses until all required setup checks pass. Repeating an unchanged study resumes verified completed tasks, including individual DeepSafe candidate tasks; launch logs and reports retain separate histories. The Streamlit interface is a study control panel using the same workflow.
 
@@ -14,9 +14,9 @@ Snakemake owns setup, execution and restart. A readiness barrier holds sample an
 Use Linux x86-64 or WSL2 with Python 3.11+, Git and Conda available on PATH. Create a fresh application environment:
 
 ```bash
-python3 -m venv basis-0.3.0rc7
-source basis-0.3.0rc7/bin/activate
-python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc7'
+python3 -m venv basis-0.3.0rc8
+source basis-0.3.0rc8/bin/activate
+python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc8'
 basis verify-install
 basis init --directory study --hybas-dir /absolute/path/to/isolate/annotation
 basis run -c study/config.yaml -d -e -v --cores 4 --output summary

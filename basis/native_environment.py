@@ -90,8 +90,9 @@ def native_child_environment(env, command_prefix, *, launcher_prefix=None, base_
 
     The cleanup policy matches the tested native-recovery helper: remove only
     launcher virtualenv bin directories and Python overrides, retain Conda
-    activation, resource and offline settings, and disable Python user-site
-    packages for explicitly targeted Conda children. Audit values contain no
+    activation, resource and offline settings, disable automatic default-env
+    activation during the Conda child's shell initialization, and disable Python
+    user-site packages for explicitly targeted Conda children. Audit values contain no
     environment override contents; removed PATH directories are recorded.
     """
     clean = dict(env)
@@ -126,8 +127,20 @@ def native_child_environment(env, command_prefix, *, launcher_prefix=None, base_
         if name in clean:
             audit["removed_variable_names"].append(name)
             del clean[name]
+    # Conda 26.1.1 computes its run activation before evaluating the shell hook.
+    # If this target is already active, the computed reactivation omits
+    # CONDA_PREFIX; the hook's automatic base activation then leaves base's
+    # identity alongside the target's PATH. Suppress only that automatic step,
+    # retaining the inherited activation state and the target's activation hooks.
+    # Use the legacy spelling supported by both old Conda and current aliases.
+    # Defining both spellings causes Conda's MultipleKeysError, even if equal.
+    if "CONDA_AUTO_ACTIVATE" in clean:
+        audit["removed_variable_names"].append("CONDA_AUTO_ACTIVATE")
+        del clean["CONDA_AUTO_ACTIVATE"]
+    clean["CONDA_AUTO_ACTIVATE_BASE"] = "false"
     clean["PYTHONNOUSERSITE"] = "1"
-    audit["set_variable_names"] = ["PYTHONNOUSERSITE"]
+    audit["set_variable_names"] = ["PYTHONNOUSERSITE", "CONDA_AUTO_ACTIVATE_BASE"]
     audit["applied"] = True
-    audit["policy"] = "Remove launcher virtualenv routing; retain Conda activation and unrelated settings."
+    audit["policy"] = ("Remove launcher virtualenv routing and suppress child shell default-env "
+                       "auto-activation; retain Conda activation and unrelated settings.")
     return clean, audit

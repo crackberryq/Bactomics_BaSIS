@@ -1,6 +1,6 @@
 # Explicit resource preparation
 
-BaSIS 0.3.0rc7 uses the same packaged Snakefile for analysis, environment setup,
+BaSIS 0.3.0rc8 uses the same packaged Snakefile for analysis, environment setup,
 and resource preparation. Fresh full-preset studies prepare missing requested
 resources automatically during `basis run`; a separate recipe is not required.
 The first successful preparation records the source, resolved version and file

@@ -2,7 +2,7 @@
   "schema": "basis-package-manifest-v1",
   "scope": "Python source and bundled runtime assets; external dependencies and data excluded",
   "sha256": {
-    "__init__.py": "081f71c269605ca858873274a98f2f0c61df829c199c9b40bb42e05a80ffc4de",
+    "__init__.py": "802a4f40afa5b6aac9e27423ab35ddb63091ad80dffb1afd283eeb496c46ed64",
     "__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
     "adapters/__init__.py": "8297e8e6cc29d4f7555b784097fb041bbdc6d332344921c235c3bbb81b4e3e3e",
     "adapters/amr.py": "91853a6cbde28f6c524168a0ce0dd8951817ef5d92e8a23bdfdb000866625630",
@@ -46,7 +46,7 @@
     "linux_pidfd.py": "9f13c39ae5a9804293154a1c557b970556d2e3c39cdf1c7a8d2fb575fb95d31e",
     "mlst_database.py": "4c237e2de90174d09239ac1db37cdb2a9b1697c7e0a5d15f9dd2e575a73e4d4d",
     "motifs.py": "44aecf620d1cdf60453e07b82815e57de66a98ad3143db03f118c3ef971521b5",
-    "native_environment.py": "d8b9b5b907330bac5d5ce94b2510134cdf2e0e69d27b16c5014b6135ce8c8801",
+    "native_environment.py": "fb9083c977a32dd71bec4a2c491001899b0a0701a79db142cc4f16a06b4ae4c8",
     "normalize.py": "c5a2274f59b24f44ffa4f64144312854f3e0a9fba6ce2d19281a61bdb60200d9",
     "optional_bacmet.py": "a8061565784f38445910acc66642f2599ae89c7e38a59415e6f7e58ed5a0d437",
     "optional_setup.py": "16c513c6458e06fbfdc1a30fbbb2ddca06008a7570044cde053ec9efb635c7e8",
@@ -147,7 +147,7 @@
     "run_summary.py": "894132450d5adf72f94b96e3ee73ce352902f162b02431698604731f2d47fca1",
     "sample_import.py": "6aba91b2366fee00849cc61693c10830bbdf01098d31edbf5229b02c00c7e2d6",
     "sample_policy.py": "62cea882313fe4a9638cef4de7ba56d7abae8a065fb58fc85b50278ae1c8933b",
-    "scheduler_persistence.py": "6d8227126355e93a5d89e099a4e4155917d9230ad1030aa3ba6771edb06cfe23",
+    "scheduler_persistence.py": "8c4d3a17be1910d9175c19abfc84cfe0df7bb580e324ba52f1d440714e4d33a5",
     "scheduler_state.py": "b1223e0fd791f8e15d6f29b509097f3db44c803d1a6ee7b9bbf20152d67ebd16",
     "sequence_validation.py": "876b0b7d64a4f792d3c9ad59ad8750dc50846b81df610d2966666b4321dcbbad",
     "util.py": "ba266b47054e9c9df3f5db937aee00cdcbb0e53133160d9e751e894ba2acb260",
@@ -156,5 +156,5 @@
     "workflow_runtime.py": "af76c929f6cd66db337c409e15be1f830ddce60bd6925349743a3eeb01128e67",
     "workflow_unlock.py": "fb3a1d0b5f3a28a7b4566e813abee333043ea30932f2f15e6e77b431335dcb0a"
   },
-  "version": "0.3.0rc7"
+  "version": "0.3.0rc8"
 }

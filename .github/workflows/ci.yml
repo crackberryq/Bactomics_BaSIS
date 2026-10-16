@@ -37,3 +37,32 @@ jobs:
         with:
           name: distributions-python-${{ matrix.python }}
           path: dist/
+
+  real-conda-routing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        conda: ["25.9.1", "26.1.1"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: controller
+        with:
+          python-version: "3.11"
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          conda-version: ${{ matrix.conda }}
+          channels: conda-forge
+          activate-environment: ""
+          auto-activate: false
+      - name: Verify real Conda activation, native arguments, and target identity
+        shell: bash -el {0}
+        env:
+          CONTROLLER_PYTHON: ${{ steps.controller.outputs.python-path }}
+          EXPECTED_CONDA_VERSION: ${{ matrix.conda }}
+        run: |
+          "$CONTROLLER_PYTHON" scripts/check_conda_routing.py \
+            --conda "$CONDA_EXE" --expected-conda-version "$EXPECTED_CONDA_VERSION"

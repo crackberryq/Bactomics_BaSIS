@@ -117,10 +117,24 @@ os.execvpe(args[0],args,os.environ)
 
     def test_incorrect_activation_cannot_claim_selected_environment(self):
         self.executable("diamond")
-        with patch.dict(os.environ, {"BASIS_TEST_WRONG_PREFIX": str(self.root / "other-env")}):
+        observed = self.root / "other-env"
+        with patch.dict(os.environ, {"BASIS_TEST_WRONG_PREFIX": str(observed)}):
             with self.assertRaisesRegex(RuntimeError, "exit code 1"):
                 self.probe("diamond")
-        self.assertIn("Activated Conda prefix differs", (self.root / "probe.log").read_text())
+        log = (self.root / "probe.log").read_text()
+        self.assertIn("Activated Conda prefix differs from selected environment", log)
+        self.assertIn(f"expected prefix: {str(self.target.resolve())!r}", log)
+        self.assertIn(f"observed activated prefix: {str(observed.resolve())!r}", log)
+
+    def test_missing_activation_identifies_selected_environment(self):
+        self.executable("diamond")
+        with patch.dict(os.environ, {"BASIS_TEST_WRONG_PREFIX": ""}):
+            with self.assertRaisesRegex(RuntimeError, "exit code 1"):
+                self.probe("diamond")
+        log = (self.root / "probe.log").read_text()
+        self.assertIn("Selected Conda environment was not activated", log)
+        self.assertIn(f"expected prefix: {str(self.target.resolve())!r}", log)
+        self.assertIn("observed activated prefix: unset", log)
 
 
 if __name__ == "__main__":
