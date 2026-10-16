@@ -53,7 +53,8 @@ jobs:
           python-version: "3.11"
       - uses: conda-incubator/setup-miniconda@v3
         with:
-          miniforge-version: latest
+          # This installer pins Python 3.12, supported by both Conda versions.
+          miniforge-version: "25.9.1-0"
           conda-version: ${{ matrix.conda }}
           channels: conda-forge
           activate-environment: ""

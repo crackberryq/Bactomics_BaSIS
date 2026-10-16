@@ -134,8 +134,10 @@ def main():
             f"Expected Conda {args.expected_conda_version}, got {version!r}")
     base_prefix = run([args.conda, "info", "--base"], env=child_env).stdout.strip()
 
-    with tempfile.TemporaryDirectory(prefix="basis real conda ") as directory:
-        target = Path(directory) / "native target"
+    # Conda 26.1 rejects spaces in environment prefixes. Argument quoting is
+    # exercised separately by the native fixture's literal argument above.
+    with tempfile.TemporaryDirectory(prefix="basis-real-conda-") as directory:
+        target = Path(directory) / "native-target"
         run([args.conda, "create", "--yes", "--offline", "--no-default-packages",
              "--prefix", str(target)], env=child_env, timeout=120)
         (target / "bin").mkdir(exist_ok=True)
