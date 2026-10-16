@@ -119,8 +119,13 @@ class NativeBootstrapContractTests(unittest.TestCase):
             'args=sys.argv[1:]\n'
             'prefix=args[args.index("--prefix")+1]\n'
             'command=args[args.index("--prefix")+2:]\n'
-            'if not command or command[0] != "python": raise SystemExit("Unexpected fixture command")\n'
-            'os.execv(prefix+"/bin/python", [prefix+"/bin/python"]+command[1:])\n')
+            # Conda activates the selected prefix before executing arbitrary
+            # argv. The controller bridge must then resolve native Python
+            # through that PATH, exactly as the real manager does.
+            'if not command: raise SystemExit("Missing fixture command")\n'
+            'os.environ["CONDA_PREFIX"]=prefix\n'
+            'os.environ["PATH"]=prefix+"/bin"+os.pathsep+os.environ.get("PATH", "")\n'
+            'os.execvpe(command[0], command, os.environ)\n')
         conda.chmod(0o755)
         return prefix, package_root, conda
 
