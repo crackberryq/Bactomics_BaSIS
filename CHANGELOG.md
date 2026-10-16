@@ -1,3 +1,13 @@
+# 0.3.0rc7 — native startup checks and interrupted-run recovery
+
+- Preserve tool arguments such as `-version` across Conda invocation on supported Conda releases.
+- Run environment identity bookkeeping with the BaSIS interpreter while checking the selected native environment. Native tools no longer need a Python interpreter or Python 3.11 hashing APIs for this check.
+- Verify the packaged MLST database using its compiled nucleotide indices, scheme profiles and a native `blastdbcmd` readability check; a missing original FASTA is not a failure.
+- Add `basis unlock -c CONFIG` for interrupted studies. It checks the saved scheduler context and refuses active study processes before asking Snakemake to unlock; it does not delete results or run analyses.
+- Keep verbose native progress and command logs without Snakemake's repetitive scheduler debug polling.
+
+Environment recipes, scientific thresholds and interpretation policies are unchanged. Existing verified resource snapshots are retained; source changes may require analysis recomputation. Software tests do not replace clean-machine native acceptance or independent biological validation.
+
 # 0.3.0rc6 — persistent Snakemake tasks and study control panel
 
 - Use Snakemake exclusively for public analysis, demonstration and environment-setup commands; Streamlit delegates to the same installed CLI.

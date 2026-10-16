@@ -671,8 +671,9 @@ def _run_pipeline_unlocked(plan: dict, engine="local", dry_run=False, force=Fals
                    ]
         if force:
             command.append("--forceall")
-        if enabled():
-            command.append("--verbose")
+        # BaSIS verbosity keeps native progress and stage heartbeats. Snakemake's
+        # debug verbosity floods a waiting scheduler with resource-selection
+        # messages, obscuring the actual running command and download progress.
         from .workflow_environments import has_managed_environments, conda_storage
         from .bootstrap import bootstrap_uses_conda
         managed = has_managed_environments(plan) or bootstrap_uses_conda(plan)

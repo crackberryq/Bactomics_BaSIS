@@ -1,4 +1,4 @@
-# Snakemake orchestration in BaSIS 0.3.0rc6
+# Snakemake orchestration in BaSIS 0.3.0rc7
 
 BaSIS uses one packaged `basis/resources/Snakefile` entry point. The CLI and local interface launch the same analysis workflow. Snakemake owns dependencies, environment deployment and CPU/memory/GPU scheduling. Python workers implement scientific analyses, parsing, evidence checks and report rendering within its rules.
 
@@ -99,11 +99,20 @@ Do not copy sample-specific imports, exclusions, embedding caches, reviewed quer
 
 ## Scheduling, recovery and evidence
 
-The GUI allows one job per workspace; that job can contain many Snakemake tasks. The normal analysis path launches one Snakemake process. Native Snakemake output is forwarded to stderr and saved to `snakemake.log`. The `-v` flag also enables Snakemake's `--verbose`, `--printshellcmds` and `--show-failed-logs`, with live native-tool diagnostics. JSON stdout remains machine-readable. Output explicitly captured for FASTA, JSON or other data files stays separate from terminal diagnostics. The duplicate parent scheduler/launcher heartbeat timers are removed.
+The GUI allows one job per workspace; that job can contain many Snakemake tasks. The normal analysis path launches one Snakemake process. Native Snakemake output is forwarded to stderr and saved to `snakemake.log`. Snakemake command lines and failed-job logs remain visible. The `-v` flag adds live native-tool diagnostics and BaSIS progress messages without enabling Snakemake's repetitive scheduler debug polling. JSON stdout remains machine-readable. Output explicitly captured for FASTA, JSON or other data files stays separate from terminal diagnostics. The duplicate parent scheduler/launcher heartbeat timers are removed.
 
 Completion receipts use a stable `provenance/scheduler/state-<plan-hash>` directory for an unchanged plan. Every launch also retains its own logs, context and reporting history. Scientific result files remain evidence and are verified before reuse. Inputs, resources, source/tool identities and required artifacts must match. `--force` explicitly requests recomputation; it is not a database refresh operation.
 
 Repeating the same study configuration resumes valid completed Snakemake tasks, including candidate tasks. Missing or invalid completion evidence is invalidated for Snakemake to rerun with its dependants. A changed source release or execution plan creates a new state namespace and can require recomputation; this is deliberately conservative. Run history is retained separately from reusable work.
+
+After a power loss, Snakemake may retain a lock. Once the interrupted run is no longer active, unlock and resume the same study:
+
+```bash
+basis unlock -c study/config.yaml
+basis run -c study/config.yaml -d -e -v --cores 4 --output summary
+```
+
+Unlock uses the saved scheduler plan and Snakemake's own unlock operation. It refuses active study processes and holds the BaSIS study lock during recovery. It performs no environment installation, resource download or sample analysis. It preserves successful outputs; the following run verifies reusable work and schedules missing or invalid tasks. A lock is separate from an earlier setup failure: failed tool or database checks still need to pass before sample analyses can begin.
 
 Stable native reuse requires a fully fingerprinted Conda environment and supported resource dependencies. Tools outside that boundary, unrecognized custom resource structures, or relative paths to reviewed tree artifacts receive fresh checks and disabled native cache reuse on each launch. This avoids reusing results when BaSIS cannot verify their full dependency identity.
 

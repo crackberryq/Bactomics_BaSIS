@@ -51,6 +51,11 @@ def _provider_module(provider):
 
 def _implementation(provider):
     path = Path(__file__).with_name(_provider_module(provider) + ".py")
+    if provider == "mlst":
+        # The shared database validator is part of MLST snapshot preparation.
+        paths = (path, path.with_name("mlst_database.py"))
+        return hash_object({item.name: sha256_file(item) if item.is_file() else "provider-not-installed"
+                            for item in paths})
     return sha256_file(path) if path.is_file() else "provider-not-installed"
 
 

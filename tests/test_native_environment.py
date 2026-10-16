@@ -21,6 +21,7 @@ class EnvironmentPolicyTests(unittest.TestCase):
             CONDA, ["/opt/conda/bin/conda", "run", "--prefix=/native/tool"],
             ["conda", "run", "-n", "tool"], ["conda.exe", "run", "--name=tool"],
             ["conda", "run", "--cwd", "/work", "-vv", "-p", "/native/tool"],
+            ["conda", "run", "--prefix", "/native/tool", "--"],
         ):
             with self.subTest(prefix=prefix):
                 self.assertTrue(is_explicit_conda_run_prefix(prefix))
@@ -32,6 +33,8 @@ class EnvironmentPolicyTests(unittest.TestCase):
             ["conda", "run", "--prefix="], ["conda", "run", "-p"],
             ["conda", "run", "-p", "/one", "-n", "two"],
             ["conda", "run", "-p", "/one", "python"],
+            ["conda", "run", "-p", "/one", "--", "python"],
+            ["conda", "run", "--"],
         ):
             with self.subTest(prefix=prefix):
                 self.assertFalse(is_explicit_conda_run_prefix(prefix))
@@ -182,7 +185,9 @@ class CommandRunnerEnvironmentTests(unittest.TestCase):
                 "os.environ['PATH'] = os.pathsep.join(target + '/bin' if p == old else p "
                 "for p in os.environ['PATH'].split(os.pathsep))\n"
                 "os.environ['CONDA_PREFIX'] = target\n"
-                "os.execvpe(sys.argv[4], sys.argv[4:], os.environ)\n")
+                "args=sys.argv[4:]\n"
+                "if args and args[0]=='--': args=args[1:]\n"
+                "os.execvpe(args[0], args, os.environ)\n")
             prefix = [str(conda), "run", "-p", str(target)]
             env = dict(os.environ)
             for key in ("PYTHONHOME", "PYTHONPATH", "PYTHONEXECUTABLE", "__PYVENV_LAUNCHER__"):

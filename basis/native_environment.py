@@ -38,6 +38,10 @@ def is_explicit_conda_run_prefix(command_prefix):
     index = 2
     while index < len(prefix):
         option = prefix[index]
+        if option == "--":
+            # A boundary is permitted only at the end of a routing prefix.
+            # Embedded commands remain unsupported and must not be interpreted.
+            return index == len(prefix) - 1 and target_count == 1
         if option in _TARGET_OPTIONS or option == "--cwd":
             index += 1
             if index >= len(prefix) or not prefix[index] or prefix[index].startswith("-"):
@@ -55,6 +59,26 @@ def is_explicit_conda_run_prefix(command_prefix):
             return False
         index += 1
     return target_count == 1
+
+
+def native_command(command_prefix, arguments):
+    """Separate explicit Conda options from the executable and its options.
+
+    Conda's global pre-parser can otherwise consume native flags such as
+    ``-version`` as its own ``-v`` option. Older Conda releases do not remove a
+    leading ``--`` from their executable vector. An isolated controller-Python
+    exec bridge consumes the boundary instead, working with both old and new
+    Conda while requiring no Python in the target environment. It immediately
+    replaces itself with the native process; no shell command is constructed.
+    Unknown wrappers are preserved exactly.
+    """
+    prefix = list(command_prefix)
+    if is_explicit_conda_run_prefix(prefix):
+        if prefix[-1] == "--":
+            prefix.pop()
+        prefix.extend([sys.executable, "-I", "-c",
+                       "import os,sys; os.execvpe(sys.argv[2],sys.argv[2:],os.environ)", "--"])
+    return prefix + list(arguments)
 
 
 def _normalized(path):

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .util import now
 from .progress import enabled, emit
-from .native_environment import native_child_environment
+from .native_environment import native_child_environment, native_command
 
 
 class CommandRunner:
@@ -51,7 +51,7 @@ class CommandRunner:
         return result
 
     def _run_impl(self, argv, stdout_path=None, cwd=None, *, stream_stdout=False):
-        command = self.prefix + [str(x) for x in argv]
+        command = native_command(self.prefix, [str(x) for x in argv])
         if not command or any("\x00" in x for x in command):
             raise ValueError("Invalid executable arguments")
         if self.timeout <= 0:

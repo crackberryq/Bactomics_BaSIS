@@ -35,7 +35,9 @@ if args and args[0] == 'clean':
  print('fake package cleanup');raise SystemExit(0)
 prefix=Path(args[args.index('--prefix')+1])
 if args[0]=='run':
- raise SystemExit(subprocess.run(args[args.index('--prefix')+2:]).returncode)
+ command=args[args.index('--prefix')+2:]
+ if command and command[0]=='--': command=command[1:]
+ raise SystemExit(subprocess.run(command).returncode)
 prefix.mkdir(parents=True,exist_ok=True)
 if os.environ.get('BASIS_FAKE_FAIL')=='1':
  (prefix/'partial-download').write_text('kept')

@@ -96,8 +96,11 @@ def verify_environment(project, module, prefix, packages, threads):
     project = workspace_path(project)
     executable = {"isescan": "isescan.py", "icescreen": "icescreen", "minced": "minced"}[module]
     command_prefix = ["conda", "run", "--no-capture-output", "-p", str(prefix)]
+    from .native_environment import native_command
+    def native_run(arguments):
+        return run(native_command(command_prefix, arguments), capture=True)
     version_args = ["--version"]
-    version = run(command_prefix + [executable] + version_args, capture=True).stdout.strip()
+    version = native_run([executable] + version_args).stdout.strip()
     if PINS[module][module] not in version:
         raise ValueError(f"Unexpected {module} version output: {version}")
     say(version)
@@ -112,10 +115,10 @@ def verify_environment(project, module, prefix, packages, threads):
         config["database"] = str(database.resolve())
         for tool, args in ((executable, ["--help"]), ("hmmsearch", ["-h"]), ("phmmer", ["-h"]),
                            ("blastn", ["-version"])):
-            run(command_prefix + [tool] + args, capture=True)
-        run(command_prefix + ["python", "-c", "import numpy, scipy, fastcluster; from Bio import SeqIO"], capture=True)
-        run(command_prefix + ["python", "-c", "import ctypes,sys; ctypes.CDLL(sys.argv[1])",
-                              str(prefix / "lib/libssw.so")], capture=True)
+            native_run([tool] + args)
+        native_run(["python", "-c", "import numpy, scipy, fastcluster; from Bio import SeqIO"])
+        native_run(["python", "-c", "import ctypes,sys; ctypes.CDLL(sys.argv[1])",
+                    str(prefix / "lib/libssw.so")])
     elif module == "icescreen":
         database = prefix / "bin/icescreen_detection_SP/database"
         if not (database / "blastdb").is_dir() or not (database / "hmmdb").is_dir():
@@ -125,9 +128,9 @@ def verify_environment(project, module, prefix, packages, threads):
         config.update(database=str(database.resolve()), phylum="bacillota")
         for tool, args in ((executable, ["--help"]), ("snakemake", ["--version"]),
                            ("blastp", ["-version"]), ("hmmsearch", ["-h"])):
-            run(command_prefix + [tool] + args, capture=True)
+            native_run([tool] + args)
     else:
-        run(command_prefix + ["java", "-version"], capture=True)
+        native_run(["java", "-version"])
         # MinCED has no database; fingerprint its installed executable/JAR files explicitly.
         jar_files = sorted((prefix / "share").rglob("minced*.jar"))
         if not jar_files:

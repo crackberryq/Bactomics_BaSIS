@@ -12,6 +12,7 @@ import shutil
 import tarfile
 
 from .util import atomic_json, now, sha256_file
+from .mlst_database import verify_mlst_database
 
 SOURCES = {
     "crisprcasfinder": {"repository": "https://github.com/dcouvin/CRISPRCasFinder",
@@ -101,17 +102,15 @@ def prepare_resource(spec, destination, runner):
         response = runner.run(["perl", "-MFile::Which=which", "-MCwd=abs_path", "-MFile::Basename=dirname",
                                "-e", locate], cwd=destination)
         source = Path(response.stdout.strip()).resolve(strict=True)
-        if not (source / "pubmlst").is_dir() or not (source / "blast/mlst.fa").is_file():
-            raise ValueError("Installed MLST bundled database could not be verified")
-        if not list((source / "pubmlst").glob("*/*.txt")):
-            raise ValueError("Installed MLST database has no scheme definitions")
         database = destination / "db"
         shutil.copytree(source, database, symlinks=False)
+        verify_mlst_database(database, runner, cwd=destination)
         provenance = {"schema": "basis-bundled-typing-resource-v1", "backend": backend,
                       "version": "2.35.0", "source_path": str(source),
                       "source_url": "https://github.com/tseemann/mlst/tree/v2.35.0/db",
                       "software_license": "GPL-2.0", "database_source": "PubMLST snapshot bundled with mlst",
                       "created_at": now(), "sha256": _inventory(database),
+                      "runtime_checks": {"blast_database": "blastdbcmd_info", "database_type": "nucl"},
                       "limitations": ["A bundled snapshot is not a current live PubMLST update.",
                                       "PubMLST scheme attribution and data terms remain applicable."]}
         updates = {"mlst": {"database": str(database), "metadata": str(manifest), "version": "2.35.0",

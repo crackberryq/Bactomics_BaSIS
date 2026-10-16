@@ -52,11 +52,13 @@ class NativeBootstrapContractTests(unittest.TestCase):
         (database / 'pubmlst/test').mkdir(parents=True)
         (database / 'pubmlst/test/test.txt').write_text('ST\tx\n1\t1\n')
         (database / 'blast').mkdir()
-        (database / 'blast/mlst.fa').write_text('>test.x_1\nACGT\n')
+        for suffix in ('nhr', 'nin', 'nsq'):
+            (database / ('blast/mlst.fa.' + suffix)).write_bytes(b'native index fixture')
         prefix = self.write_wrapper(
             'import sys\n'
             'if sys.argv[1:] == ["mlst", "--version"]: print("mlst 2.35.0")\n'
             'elif sys.argv[1] == "perl": print(' + repr(str(database)) + ')\n'
+            'elif sys.argv[1] == "blastdbcmd": print("Database: PubMLST\\n1 sequences; 4 total bases")\n'
             'else: raise SystemExit("Unexpected fixture command")\n')
         plan = self.plan('mlst', prefix)
         spec = plan['bootstrap_resources'][0]
@@ -66,7 +68,10 @@ class NativeBootstrapContractTests(unittest.TestCase):
         self.assertEqual(receipt['status'], 'ready', receipt)
         manifest = bootstrap.verify_snapshot(spec)
         prepared = Path(manifest['result']['module_updates']['mlst']['database'])
-        self.assertEqual((prepared / 'blast/mlst.fa').read_bytes(), (database / 'blast/mlst.fa').read_bytes())
+        self.assertFalse((prepared / 'blast/mlst.fa').exists())
+        for suffix in ('nhr', 'nin', 'nsq'):
+            self.assertEqual((prepared / ('blast/mlst.fa.' + suffix)).read_bytes(),
+                             (database / ('blast/mlst.fa.' + suffix)).read_bytes())
         self.assertTrue(manifest['commands'])
 
     def archive(self, name, entries):

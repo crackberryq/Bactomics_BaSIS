@@ -1,13 +1,13 @@
-# Install and run BaSIS 0.3.0rc6
+# Install and run BaSIS 0.3.0rc7
 
 Use Linux x86-64 or Ubuntu inside WSL2, Python 3.11+, Git and Conda on PATH. The GitHub source release is pip-installable; no public PyPI release is claimed. NVIDIA hardware and drivers are optional for Extend acceleration.
 
 ## 1. Install the application
 
 ```bash
-python3 -m venv basis-0.3.0rc6
-source basis-0.3.0rc6/bin/activate
-python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc6'
+python3 -m venv basis-0.3.0rc7
+source basis-0.3.0rc7/bin/activate
+python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc7'
 python -m pip check
 basis verify-install
 ```
@@ -101,6 +101,15 @@ conda env export --prefix /absolute/path/recorded-prefix > tool-resolved.yml
 ```
 
 Optional environment preinstallation and custom resource-administration commands remain available; see [orchestration](ORCHESTRATION.md) and [resource administration](RESOURCE_SETUP.md). They are not required preparatory commands for the normal automatic study.
+
+If a power loss leaves a Snakemake lock, use the explicit recovery command after the old run has stopped:
+
+```bash
+basis unlock -c study/config.yaml
+basis run -c study/config.yaml -d -e -v --cores 4 --output summary
+```
+
+The command verifies the saved invocation and refuses active study workers. It leaves environments, resources and results in place. See [recovery details](ORCHESTRATION.md#scheduling-recovery-and-evidence).
 
 ## 6. Reproduce and validate
 

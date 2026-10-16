@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 
 from ..inputs import read_fasta
+from ..mlst_database import verify_mlst_database
 
 MLST_VERSION = "2.35.0"
 _ALLELE = re.compile(r"(?:-|~?\d+(?:\.\d+)?\??(?:,~?\d+(?:\.\d+)?\??)*)")
@@ -113,8 +114,9 @@ def run(module, sample, config, outdir, runner):
     assembly = Path(sample["assembly"]).resolve()
     read_fasta(assembly)
     database = Path(config.get("database") or "")
-    if not config.get("database") or not (database / "pubmlst").is_dir() or not (database / "blast/mlst.fa").is_file():
-        raise ValueError("MLST requires a prepared database with pubmlst/ and blast/mlst.fa")
+    if not config.get("database"):
+        raise ValueError("MLST requires a prepared database")
+    blast_prefix = verify_mlst_database(database, runner, cwd=outdir)
     executable = config.get("executable") or "mlst"
     version = runner.run([executable, "--version"], cwd=outdir)
     if not re.search(r"(?m)^mlst 2\.35\.0\s*$", version.stdout):
@@ -129,7 +131,7 @@ def run(module, sample, config, outdir, runner):
     native.mkdir(exist_ok=False)
     output, table = native / "mlst.json", native / "mlst.tsv"
     argv = [executable, "--threads", str(threads), "--datadir", str((database / "pubmlst").resolve()),
-            "--blastdb", str((database / "blast/mlst.fa").resolve()), "--label", sample["sample_id"],
+            "--blastdb", str(blast_prefix), "--label", sample["sample_id"],
             "--json", str(output), "--full", "--outfile", str(table)]
     if scheme:
         argv += ["--scheme", scheme]

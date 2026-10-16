@@ -5,7 +5,7 @@
 - Author: Jimi Goldstein; ORCID: https://orcid.org/0000-0002-7829-0090
 - License: MIT for BaSIS; third-party tools, data and model weights retain their own terms
 
-The source supports installation directly from GitHub. **PyPI and TestPyPI publication are separate actions and remain pending until their uploads and installation checks succeed.** The prepared candidate is `0.3.0rc6`.
+The source supports installation directly from GitHub. **PyPI and TestPyPI publication are separate actions and remain pending until their uploads and installation checks succeed.** The prepared candidate is `0.3.0rc7`.
 
 ## Build and verify
 
@@ -32,7 +32,7 @@ https://packaging.python.org/en/latest/guides/publishing-package-distribution-re
 After an actual upload, install the exact published version in a new environment, verify the package and run the synthetic interface/CLI checks. Record which index supplied the package and preserve the installation artifacts. A future PyPI installation would use:
 
 ```bash
-python -m pip install 'bactromics-basis[ui,excel]==0.3.0rc6'
+python -m pip install 'bactromics-basis[ui,excel]==0.3.0rc7'
 ```
 
 That is a publication target, not evidence that this version is already on PyPI.

@@ -79,7 +79,7 @@ class SchedulerLauncherTests(unittest.TestCase):
             finally:
                 release.set()
 
-    def test_scheduler_flags_follow_verbose_setting(self):
+    def test_verbose_keeps_native_progress_without_scheduler_debug_polling(self):
         with tempfile.TemporaryDirectory() as directory:
             plan = make_plan(load_config(create_demo(directory)), False, False)
             for verbose in ("0", "1"):
@@ -94,7 +94,7 @@ class SchedulerLauncherTests(unittest.TestCase):
                 self.assertIn("--printshellcmds", command)
                 self.assertIn("--show-failed-logs", command)
                 self.assertIn("--keep-going", command)
-                self.assertEqual("--verbose" in command, verbose == "1")
+                self.assertNotIn("--verbose", command)
                 self.assertEqual(env["PYTHONUNBUFFERED"], "1")
                 self.assertEqual(env["BASIS_VERBOSE"], verbose)
 

@@ -215,7 +215,9 @@ def _binary(prefix, alternatives):
 
 
 def _run_prefix(plan, prefix, arguments, logfile):
-    return _command([plan["manager_executable"], "run", "--prefix", str(prefix), *arguments], logfile)
+    from .native_environment import native_command
+    return _command(native_command([plan["manager_executable"], "run", "--prefix", str(prefix)],
+                                   arguments), logfile)
 
 
 def verify(prefix, recipe, name, plan, logfile):

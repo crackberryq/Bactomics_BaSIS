@@ -89,9 +89,18 @@ def file_inventory(root):
 
 
 TOOL_PROBE = r'''
-import hashlib,json,shutil,sys
+import hashlib,json,os,shutil,sys
 from pathlib import Path
-root=Path(sys.prefix).resolve()
+selection=json.loads(sys.argv[2])
+if selection['explicit_conda']:
+    activated=os.environ.get('CONDA_PREFIX')
+    if not activated: raise RuntimeError('Selected Conda environment was not activated')
+    root=Path(activated).resolve()
+    expected=selection.get('expected_prefix')
+    if expected and root != Path(expected).expanduser().resolve():
+        raise RuntimeError('Activated Conda prefix differs from selected environment')
+else:
+    root=Path(sys.prefix).resolve()
 names=json.loads(sys.argv[1]); binaries={}
 for name in names:
     raw=shutil.which(name)
@@ -103,10 +112,32 @@ print(json.dumps({'prefix':str(root),'executables':binaries,'conda':(root/'conda
 '''
 
 
+def _identity_environment(command_prefix):
+    """Describe explicit Conda routing without interpreting arbitrary wrappers."""
+    from .native_environment import is_explicit_conda_run_prefix
+    selection = {"explicit_conda": is_explicit_conda_run_prefix(command_prefix)}
+    if selection["explicit_conda"]:
+        for index, value in enumerate(command_prefix):
+            if value in {"-p", "--prefix"}:
+                selection["expected_prefix"] = command_prefix[index + 1]
+                break
+            if value.startswith("--prefix="):
+                selection["expected_prefix"] = value.split("=", 1)[1]
+                break
+    return selection
+
+
 def capture_tool_identity(module, config, runner):
-    """Verify startup plus tool/environment bytes before the setup barrier."""
+    """Fingerprint tools in their selected environment using the controller Python.
+
+    DIAMOND and other native-only environments need no Python, while some tools
+    require Python 3.10. This bookkeeping command therefore uses BaSIS's known
+    interpreter in isolation. Conda still supplies the tool PATH; its activated
+    prefix, rather than the bookkeeping interpreter's prefix, identifies the
+    environment to hash. Native execution settings are unchanged.
+    """
     import json
-    from .pipeline import path_fingerprint
+    import sys
     if module == "deepsafe":
         names = ["hmmscan", "mafft", "iqtree"]
         mode = config.get("reference_search_tool", "blastp")
@@ -121,8 +152,9 @@ def capture_tool_identity(module, config, runner):
             names.append(config.get("executables", {}).get("pfscan", "pfscanV3"))
     else:
         names = [config["executable"]]
-    identity = json.loads(runner.run([config.get("python_executable", "python"), "-c", TOOL_PROBE,
-                                      json.dumps(names)]).stdout)
+    selection = _identity_environment(runner.prefix)
+    identity = json.loads(runner.run([sys.executable, "-I", "-c", TOOL_PROBE,
+                                      json.dumps(names), json.dumps(selection)]).stdout)
     if not identity.get("executables"):
         raise ValueError("Tool identity probe returned no verified executables")
     if identity.get("conda"):

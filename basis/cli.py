@@ -61,6 +61,8 @@ def parser():
     audit.add_argument("--outdir", required=True, help="New audit directory")
     audit.add_argument("-v", "--verbose", action="store_true", help="Show audit stages and heartbeats")
     _run_args(sub.add_parser("run", help="Run the unified workflow"))
+    unlock = sub.add_parser("unlock", help="Remove stale Snakemake locks for one stopped study; no analyses run")
+    unlock.add_argument("-c", "--config", required=True, help="Existing study YAML configuration")
     init = sub.add_parser("init", help="Create configuration and sample-sheet templates")
     init.add_argument("--directory", required=True)
     init.add_argument("--hybas-dir", help="Discover matching Prokka fna/faa/gff sets under an existing HybAs project")
@@ -553,6 +555,9 @@ def _main_parsed(args):
             from .release import verify_install
             result = verify_install()
             code = 0 if result["status"] == "passed" else 2
+        elif args.command == "unlock":
+            from .workflow_unlock import unlock_workflow
+            result = unlock_workflow(args.config)
         elif args.command == "report":
             if args.sources:
                 if args.expected_sha256:

@@ -88,8 +88,10 @@ class MlstTests(unittest.TestCase):
     def test_native_argv_explicit_snapshot_and_source_identity(self):
         database = self.root / "database with spaces"
         (database / "blast").mkdir(parents=True)
-        (database / "pubmlst").mkdir()
-        (database / "blast/mlst.fa").write_text(">allele\nACGT\n")
+        (database / "pubmlst/test").mkdir(parents=True)
+        (database / "pubmlst/test/test.txt").write_text("ST\tx\n1\t1\n")
+        for suffix in ("nhr", "nin", "nsq"):
+            (database / ("blast/mlst.fa." + suffix)).write_bytes(b"native index fixture")
         outer = self
         class Runner:
             def __init__(self): self.commands = []
@@ -97,6 +99,8 @@ class MlstTests(unittest.TestCase):
                 self.commands.append(argv)
                 if argv[-1] == "--version":
                     return subprocess.CompletedProcess(argv, 0, "mlst 2.35.0\n")
+                if argv[0] == "blastdbcmd":
+                    return subprocess.CompletedProcess(argv, 0, "Database: PubMLST\n1 sequences; 4 total bases\n")
                 outer.output()
                 Path(argv[argv.index("--json") + 1]).write_bytes(outer.json.read_bytes())
                 Path(argv[argv.index("--outfile") + 1]).write_bytes(outer.tsv.read_bytes())
@@ -105,6 +109,9 @@ class MlstTests(unittest.TestCase):
         result = run("mlst", {"assembly": str(self.assembly), "sample_id": "sample1"},
                      {"database": str(database), "threads": 3}, self.root, runner)
         self.assertEqual(result["metrics"]["sequence_type"], "239")
+        self.assertIn(["blastdbcmd", "-db", str(database / "blast/mlst.fa"), "-dbtype", "nucl", "-info"],
+                      runner.commands)
+        self.assertFalse((database / "blast/mlst.fa").exists())
         self.assertIn(str(database / "pubmlst"), runner.commands[-1])
         self.assertIn(str(database / "blast/mlst.fa"), runner.commands[-1])
         self.assertEqual(runner.commands[-1][-1], str(self.assembly))

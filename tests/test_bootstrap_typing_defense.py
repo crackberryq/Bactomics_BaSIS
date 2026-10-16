@@ -47,7 +47,8 @@ class TypingDefenseResourceTests(unittest.TestCase):
         (source / "pubmlst/test").mkdir(parents=True)
         (source / "pubmlst/test/test.txt").write_text("ST\tx\n1\t1\n")
         (source / "blast").mkdir()
-        (source / "blast/mlst.fa").write_text(">test.x_1\nACGT\n")
+        for suffix in ("nhr", "nin", "nsq"):
+            (source / ("blast/mlst.fa." + suffix)).write_bytes(b"native index fixture")
         commands = []
         class Runner:
             def run(self, argv, cwd):
@@ -55,7 +56,11 @@ class TypingDefenseResourceTests(unittest.TestCase):
                 return subprocess.CompletedProcess(argv, 0, "mlst 2.35.0\n" if argv[0] == "mlst" else str(source) + "\n")
         dest = self.root / "prepared"
         result = resources.prepare_resource({"backend": "mlst"}, dest, Runner())
-        self.assertEqual((dest / "db/blast/mlst.fa").read_bytes(), (source / "blast/mlst.fa").read_bytes())
+        for suffix in ("nhr", "nin", "nsq"):
+            self.assertEqual((dest / ("db/blast/mlst.fa." + suffix)).read_bytes(),
+                             (source / ("blast/mlst.fa." + suffix)).read_bytes())
+        self.assertFalse((dest / "db/blast/mlst.fa").exists())
+        self.assertIn(["blastdbcmd", "-db", str(dest / "db/blast/mlst.fa"), "-dbtype", "nucl", "-info"], commands)
         self.assertEqual(result["module_updates"]["mlst"]["database"], str(dest / "db"))
         self.assertFalse(any("curl" in cmd for cmd in commands))
         self.assertTrue(result["provenance"]["sha256"])
