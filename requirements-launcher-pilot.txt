@@ -1,5 +1,0 @@
-# Exact launcher dependency versions recorded on the pilot and build hosts.
-# Not an artifact-hashed lock or offline wheel archive. Native tools/models separate.
-PyYAML==6.0.3
-openpyxl==3.1.5
-et-xmlfile==2.0.0

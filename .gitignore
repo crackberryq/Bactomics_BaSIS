@@ -1,36 +1,9 @@
-# Python and build products
 __pycache__/
-*.py[cod]
-*.egg-info/
-/build/
-/dist/
-/bactromics_basis-*/
-.venv/
-.venv-*/
-.pytest_cache/
-.coverage
-htmlcov/
-# Local studies, tool environments, caches and data
-.basis-envs/
-.basis-hotfix-backups/
+*.pyc
 .snakemake/
-study-*/
-basis-workspace/
-interface-checks*/
-installation-checks/
-acceptance-tools*/
-native-acceptance-*/
-preflight-*/
-/reproducibility/
-/validation/
-/resources/optional-runtime/
-/RELEASE_MANIFEST.json
-/BUNDLE_MANIFEST.json
-/db/
-# Credentials and local configuration
-.env
-.env.*
-.pypirc
-*.pem
-*.key
-.DS_Store
+.pytest_cache/
+tests/work/
+*.log
+resources/
+!workflow/vendor/basis/resources/
+!workflow/vendor/basis/resources/**

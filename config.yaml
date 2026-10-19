@@ -1,0 +1,16 @@
+# Paths in this configuration are relative to the folder containing BaSIS.smk.
+# Annotation files are discovered as <isolate>/annotation/<sample_id>.{fna,faa,gff,gbk}.
+bactomics_root: ..
+isolates: [isolate2]
+project: BaSIS standalone study
+threads: 4
+memory_mb: 20000
+extend: true
+deep:
+  enabled: true
+resources:
+  policy: auto
+  directory: resources
+# Optional module overrides, e.g. modules: {pathogenfinder2: {enabled: false}}
+# For another annotation layout use samples: config/samples.tsv instead of isolates.
+# Taxonomy is imported from HybAs when available, otherwise remains unconfirmed.

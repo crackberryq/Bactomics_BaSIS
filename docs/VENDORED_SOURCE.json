@@ -1,0 +1,294 @@
+{
+  "schema": "basis-standalone-vendored-source-v1",
+  "source_repository": "https://github.com/crackberryq/Bactomics_BaSIS",
+  "source_tag": "v0.3.0rc8",
+  "source_commit": "bedf903300e2450b1ced5f5585e8dd6b56db58c9",
+  "source_version": "0.3.0rc8",
+  "standalone_version": "0.4.0a1",
+  "scope": "Selected scientific parsers, analysis and report functions plus their original scientific resources. Snakemake owns the standalone workflow; the previous CLI, GUI, environment managers and scheduler are not included.",
+  "changed_files": [
+    {
+      "path": "workflow/vendor/basis/bootstrap_deep.py",
+      "source_sha256": "aa4cd7660eaffb8e036ca67c400956e7755aa16ecef0b06b70277606eb14b730",
+      "standalone_sha256": "a5ac190de09940c123ab64fc05371cb5c50651401aed9d316d6d82d78d98df6c",
+      "reason": "Remove runtime dependency used only for a legacy runner type annotation; caller supplies DirectRunner."
+    },
+    {
+      "path": "workflow/vendor/basis/optional_bacmet.py",
+      "source_sha256": "a8061565784f38445910acc66642f2599ae89c7e38a59415e6f7e58ed5a0d437",
+      "standalone_sha256": "a1e845869be6bcef14dc5eaa4e144af24f0963bad30ca8db754d5ca2481cd09e",
+      "reason": "Keep unchanged pinned source download/header/FASTA checks; remove unused legacy installer, snapshot reuse and CommandRunner dependency."
+    },
+    {
+      "path": "workflow/vendor/basis/bootstrap_providers.py",
+      "source_sha256": "d40732bd315798041b47776174225da6cb13d1895cdc7ddc7f2232e32833ecea",
+      "standalone_sha256": "cf66e06fc3d48350857ab8906333d66d570eea60325198e3554c0b403d83d765",
+      "reason": "Remove unused legacy nested-Conda prefix compatibility branch; DirectRunner executes the already-selected environment and preserves native interpreter/resource integrity checks."
+    }
+  ],
+  "removed_files": [
+    {
+      "path": "workflow/vendor/basis/__main__.py",
+      "source_sha256": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d"
+    },
+    {
+      "path": "workflow/vendor/basis/bootstrap.py",
+      "source_sha256": "94f71a568f935b381d08c21232f236504a4e721ab9aa0e29c7ec6b7a39b59606"
+    },
+    {
+      "path": "workflow/vendor/basis/catalog.py",
+      "source_sha256": "30920f93823bf0f3e15139eaa2f982fa3856e8428c9d3e6d8aa3bd87ec21af9a"
+    },
+    {
+      "path": "workflow/vendor/basis/cli.py",
+      "source_sha256": "9dadb735856e59d7037a3cfcabd4942afaa54f70a14457c2971d646b3e6f6eca"
+    },
+    {
+      "path": "workflow/vendor/basis/control_panel.py",
+      "source_sha256": "5d7e8680055edb7120b1d63b7e854fbabd86ab98179e6d404cd05bd9c7068628"
+    },
+    {
+      "path": "workflow/vendor/basis/deep_cache.py",
+      "source_sha256": "fd1ebddcdc5137bafded5f8feb2b731facc18b7edc13677a0ef67cbe51ddc1c8"
+    },
+    {
+      "path": "workflow/vendor/basis/deep_candidates.py",
+      "source_sha256": "d57a924d1a41d256c0f440c5ef1a5c5b13f7012d902c060fabd502716bafc6ac"
+    },
+    {
+      "path": "workflow/vendor/basis/demo.py",
+      "source_sha256": "c83df26db34ec8c64e440ef689cffce7ffb78871c62c1315485ec0caac53aa60"
+    },
+    {
+      "path": "workflow/vendor/basis/environment_setup.py",
+      "source_sha256": "be946d2b0e9e5f0c8ac41a2e2a6477b8b9d2c3d8e0ce6d5e0361ffbbb7bb6c68"
+    },
+    {
+      "path": "workflow/vendor/basis/environment_workflow.py",
+      "source_sha256": "eb1fd8caf9a76ec238b42d66a8d5fae0b05a10335bf5e83acc2486c87f06b318"
+    },
+    {
+      "path": "workflow/vendor/basis/execution.py",
+      "source_sha256": "16e8eb22401d987c2518b74f0c493179e4f240d5f7e4abb38139f92325261a20"
+    },
+    {
+      "path": "workflow/vendor/basis/gui.py",
+      "source_sha256": "849d42e2b043db685d32c43d3bd4ea024f3160afe19507f4c6fd7528bb13b3b5"
+    },
+    {
+      "path": "workflow/vendor/basis/gui_app.py",
+      "source_sha256": "094d52197026e6016e1065f719dded1ba58e99248510bb1824cc6b012a056791"
+    },
+    {
+      "path": "workflow/vendor/basis/gui_artifacts.py",
+      "source_sha256": "1f5c34867c439d30ce4c70ea40df201139f94ad741bce4d510c142093f83d5a0"
+    },
+    {
+      "path": "workflow/vendor/basis/gui_theme.py",
+      "source_sha256": "08d09162e51e7db76381ccf3c5d82644d72f31154c7f87b16aaf5a3ff3ed4dbd"
+    },
+    {
+      "path": "workflow/vendor/basis/jobs.py",
+      "source_sha256": "073bc30f1f8ff0c166613e857078feaf6191338ef9853cf8f710b2606383c83e"
+    },
+    {
+      "path": "workflow/vendor/basis/linux_pidfd.py",
+      "source_sha256": "9f13c39ae5a9804293154a1c557b970556d2e3c39cdf1c7a8d2fb575fb95d31e"
+    },
+    {
+      "path": "workflow/vendor/basis/native_environment.py",
+      "source_sha256": "fb9083c977a32dd71bec4a2c491001899b0a0701a79db142cc4f16a06b4ae4c8"
+    },
+    {
+      "path": "workflow/vendor/basis/optional_setup.py",
+      "source_sha256": "16c513c6458e06fbfdc1a30fbbb2ddca06008a7570044cde053ec9efb635c7e8"
+    },
+    {
+      "path": "workflow/vendor/basis/pipeline.py",
+      "source_sha256": "e56890685503101e2be3748275c65e53a8f18160f85148b449e5a32faeff60f2"
+    },
+    {
+      "path": "workflow/vendor/basis/placement_benchmark.py",
+      "source_sha256": "9dc415996e8154c56122ef71e0483b33c3b7463a81087cd7f169f398c54e6ee4"
+    },
+    {
+      "path": "workflow/vendor/basis/placement_benchmark_native.py",
+      "source_sha256": "bb70ab2956d95c6caab5e6483ed27cd2ba3c391cf6eccaac550d8d653a842724"
+    },
+    {
+      "path": "workflow/vendor/basis/placement_benchmark_protocol.py",
+      "source_sha256": "c27e8a145a0cfcca410cd64f07c0b515c3abbec86ec3a3140e764e494fad1b1e"
+    },
+    {
+      "path": "workflow/vendor/basis/placement_benchmark_recovery.py",
+      "source_sha256": "ad7d76ac3cdd2e80a1815bec6298a2a44348fe8a883e54c909493e81d299e690"
+    },
+    {
+      "path": "workflow/vendor/basis/placement_review.py",
+      "source_sha256": "458b5b8aac434016226becedaf1ad6cf86b8b3a15a77efd620a64de760608100"
+    },
+    {
+      "path": "workflow/vendor/basis/reconcile.py",
+      "source_sha256": "7652c2ed029ab376f2a64b1e846127f8ca01387a270523ce86f2c913cd97fa7a"
+    },
+    {
+      "path": "workflow/vendor/basis/release.py",
+      "source_sha256": "a6a69cd618794bdf9cbe40dd3f640fffb3d01181f6a3299e64d836cd1baec83f"
+    },
+    {
+      "path": "workflow/vendor/basis/report_artifacts.py",
+      "source_sha256": "3aa7587bc8438c2d830c5fc199fd50997f781d75280f3c3e7ee45fa55567d3b9"
+    },
+    {
+      "path": "workflow/vendor/basis/report_batch.py",
+      "source_sha256": "0b3ced317c3a92a380e6f6b42cde7aecc915329fc7286f258e4c7374195b0ad3"
+    },
+    {
+      "path": "workflow/vendor/basis/report_placement_benchmark.py",
+      "source_sha256": "7e5cca1f6ac5aa3739db5c8f8f235ed7bdfe429ea9bf549a3e1511c6b2911407"
+    },
+    {
+      "path": "workflow/vendor/basis/report_preflight.py",
+      "source_sha256": "f3dcceb8deed3d32bca4a272016edadf18207edee0918062f2be4a0dc9fe548b"
+    },
+    {
+      "path": "workflow/vendor/basis/report_refresh.py",
+      "source_sha256": "e9c261c8e52220220235779a7bb2d716ee475ad9769f7fdd7124746431e19aed"
+    },
+    {
+      "path": "workflow/vendor/basis/reproducibility_audit.py",
+      "source_sha256": "3fbcf63118b03029f31c51b725c0c5dd40d73ad0eb6451489085ad6d834d1ffb"
+    },
+    {
+      "path": "workflow/vendor/basis/resource_recovery.py",
+      "source_sha256": "6055dc5049b23aeb7660bb747a88b12c2d1d870b187a37a3670ac2c704a261b0"
+    },
+    {
+      "path": "workflow/vendor/basis/resource_setup.py",
+      "source_sha256": "3e3d7938d7d2ccc327ed6bbfdc5a592fc7dcf9fdee8028e29d4843ae6e5844fe"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/SetupSnakefile",
+      "source_sha256": "5a7fa86d7da939f670ad4110d3924fe97a60e17e74dd0895bf3464bb6d9932aa"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/Snakefile",
+      "source_sha256": "9b12cbdb32b45bde0d56b370466223ff57dbb95d2a874b942a5f18f6929e25e8"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/antismash.yml",
+      "source_sha256": "42575cfc68195eaff99a65577734da909f1cf53851945b75f7897c1501dafd6d"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/context.yml",
+      "source_sha256": "257172dfb82dcf89fc9e7cc236aefd7abfb120935a866ed625730ee9c9a72089"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/core-amr.yml",
+      "source_sha256": "1125bbcac84bceefacd762847f98242e42e242c647b4b44b2ac63e4221293817"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/crisprcasfinder.yml",
+      "source_sha256": "73d2e7085aeb6d6c52c46beeefa2121617dca8271f1e9931d7ebe9154447f827"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/deepsafe.yml",
+      "source_sha256": "8f7eafb10f8de3a9fe98a860c2e34fed417796311e7a860ecfad68521144b2b4"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/diamond.yml",
+      "source_sha256": "be6b1f4d1472dfbf34f6980eaabb9199f3fb56a6d2ad6d64d92f49315bf12a40"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/icescreen.yml",
+      "source_sha256": "0f81413ae9625ef22ebab4104234a5bf875079f20c0d4e42b08450bc1aacff02"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/isescan.yml",
+      "source_sha256": "4ad66476f83768423a12a9123745818f55355cbc48c33c93d6d401b206d3a70e"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/minced.yml",
+      "source_sha256": "eb70a53b2001889e2e7db9a886026a78f578094912a6b05b7162108aa1b39aac"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/mlst.yml",
+      "source_sha256": "8e7a00d494020a1e223a07fd7740778a07a7f6c09069759c22ade2e8492da3d2"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/mobsuite.yml",
+      "source_sha256": "67d3e51191f964a85c5e4970ebbdb67125a6c528ccfc1fec47a10d5315816855"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/pathogenfinder2.yml",
+      "source_sha256": "dd61e4b4a1ba3f7c5c6a550265fefe23ae2e71da33d7679bb448813c6554ebc8"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/envs/rgi.yml",
+      "source_sha256": "f1d4b7bb8a45def58fe8e0eeae8152a2e51caa4b33d20affdd7b1b4b2aa774f8"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/release-manifest.json",
+      "source_sha256": "55d74c11ac4c4f37185dee72e77baa0953a4b692c855fcbcc3bf9fcafde89412"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/rules/analysis.smk",
+      "source_sha256": "3e221c8ab47b99ac83dbde1eafb6609220a5c24e4346cd529376a7db427997e0"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/rules/bootstrap.smk",
+      "source_sha256": "0ecf1c32ad834dde8144198708c7c96a3820c68cecd5c001c54e718eb24f20c9"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/rules/deep_candidates.smk",
+      "source_sha256": "01a219e02cb99e1867d057e6a25c1b73eb54c3c14678b86a30179f22ee7bc73e"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/rules/resources.smk",
+      "source_sha256": "5f3b7ac3746def2ab4b60ae4dacd2f58436e693ea0912488920a83605b25051a"
+    },
+    {
+      "path": "workflow/vendor/basis/resources/rules/setup.smk",
+      "source_sha256": "a97af40b8d39aad51febf27d492ab639787bafd3b3a79b4117e25d9056c499af"
+    },
+    {
+      "path": "workflow/vendor/basis/run_control.py",
+      "source_sha256": "8ca44085ea673c2ac4063868ff1a734f4d65e54a58601b36d03e8139d1594d74"
+    },
+    {
+      "path": "workflow/vendor/basis/sample_import.py",
+      "source_sha256": "6aba91b2366fee00849cc61693c10830bbdf01098d31edbf5229b02c00c7e2d6"
+    },
+    {
+      "path": "workflow/vendor/basis/scheduler_persistence.py",
+      "source_sha256": "8c4d3a17be1910d9175c19abfc84cfe0df7bb580e324ba52f1d440714e4d33a5"
+    },
+    {
+      "path": "workflow/vendor/basis/scheduler_state.py",
+      "source_sha256": "b1223e0fd791f8e15d6f29b509097f3db44c803d1a6ee7b9bbf20152d67ebd16"
+    },
+    {
+      "path": "workflow/vendor/basis/vfdb_recovery.py",
+      "source_sha256": "9032c3db2e676b1bc48f155905753be081b8dffe3d4149770474e5b27ca18af1"
+    },
+    {
+      "path": "workflow/vendor/basis/workflow_environments.py",
+      "source_sha256": "b8642f57368495c5e95c08ad6cbbed62428cdbe176c3e0bba86d1255f1ed3435"
+    },
+    {
+      "path": "workflow/vendor/basis/workflow_runtime.py",
+      "source_sha256": "af76c929f6cd66db337c409e15be1f830ddce60bd6925349743a3eeb01128e67"
+    },
+    {
+      "path": "workflow/vendor/basis/workflow_unlock.py",
+      "source_sha256": "fb3a1d0b5f3a28a7b4566e813abee333043ea30932f2f15e6e77b431335dcb0a"
+    }
+  ],
+  "scientific_resource_directories_preserved": [
+    "workflow/vendor/basis/resources/comparators",
+    "workflow/vendor/basis/resources/motifs",
+    "workflow/vendor/basis/resources/placement",
+    "workflow/vendor/basis/resources/profiles"
+  ],
+  "scientific_threshold_changes": false
+}

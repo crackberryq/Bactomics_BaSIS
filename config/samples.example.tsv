@@ -1,2 +1,2 @@
-sample_id	assembly	proteins	gff	genbank	taxon	amrfinder_organism	phenotypes
-AFB02	/path/to/AFB02.fna	/path/to/AFB02.faa	/path/to/AFB02.gff				
+sample_id	isolate_dir	assembly	proteins	gff	genbank	taxon	taxon_phylum
+isolate2	../../isolate2	../../isolate2/annotation/isolate2.fna	../../isolate2/annotation/isolate2.faa	../../isolate2/annotation/isolate2.gff	../../isolate2/annotation/isolate2.gbk		

@@ -1,93 +1,151 @@
-# BaSIS
+# BaSIS · standalone Snakemake workflow
 
-**Bacterial Adaptive Safety Investigation System**  
-A reproducible workflow for bacterial genomic safety investigation, with a local browser interface and linked evidence reports.
+**Version 0.4.0a1 — development alpha.** BaSIS collects bacterial genomic screening evidence and focused DeepSafe follow-up in an offline report. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
 
-BaSIS combines screening tools, genomic context, selected-protein follow-up and optional machine-learning evidence. It accepts matching assembly and annotation files from HybAs or external workflows, and supports Excel, CSV and TSV sample sheets.
+This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
 
-**Current candidate: 0.3.0rc8.** A new full study prepares its required tool environments, databases and models through the normal Snakemake analysis workflow. The first verified resource snapshots are recorded and reused without an automatic refresh. Independent biological validation and full native acceptance on a clean collaborator computer remain pending.
+## Install the workflow controller
 
-Snakemake owns setup, execution and restart. A readiness barrier holds sample analyses until all required setup checks pass. Repeating an unchanged study resumes verified completed tasks, including individual DeepSafe candidate tasks; launch logs and reports retain separate histories. The Streamlit interface is a study control panel using the same workflow.
-
-## Install and run
-
-Use Linux x86-64 or WSL2 with Python 3.11+, Git and Conda available on PATH. Create a fresh application environment:
+Use Linux or WSL2 with Conda available. The controller environment runs Snakemake; the Snakefile deploys the selected biological tool environments itself.
 
 ```bash
-python3 -m venv basis-0.3.0rc8
-source basis-0.3.0rc8/bin/activate
-python -m pip install 'bactromics-basis[ui,excel,extend] @ git+https://github.com/crackberryq/Bactomics_BaSIS.git@v0.3.0rc8'
-basis verify-install
-basis init --directory study --hybas-dir /absolute/path/to/isolate/annotation
-basis run -c study/config.yaml -d -e -v --cores 4 --output summary
+mkdir -p ~/bactomics &&
+cd ~/bactomics &&
+git clone --branch snakemake-standalone --single-branch \
+  https://github.com/crackberryq/Bactomics_BaSIS.git BaSIS-snakemake &&
+cd BaSIS-snakemake &&
+conda env create --file environment.yml &&
+conda activate basis-snake
 ```
 
-`pip` installs the application and Snakemake. `basis init` creates the sample manifest and full configuration. `basis run` installs missing native environments, prepares missing requested resources, checks inputs, and runs the analysis. Initialization itself performs no downloads or biological analyses. Existing installations and studies can remain in place; this clean-start route needs no study migration or helper script.
+No `pip install basis` step is required. Initial tool installation and database/model preparation can take substantial time and disk space. Downloads and execution logs remain available for inspection.
 
-The first run needs network access, disk space for substantial databases/models and native environments, and time for downloads and indexing. Later runs verify and reuse those snapshots. CPU execution is supported; new studies automatically check whether an NVIDIA GPU can be used for Extend, with a CPU fallback when it cannot. Drivers are not installed by BaSIS. See [installation details](docs/INSTALL.md).
+## Run isolate2
 
-This installs from the GitHub release tag. **No PyPI publication is claimed.** Record the full installed commit and actual resource snapshots for reproducibility; see [GitHub quickstart](docs/GITHUB_QUICKSTART.md). Optional extras add the interface, Excel import and controller-side Extend dependencies.
+The default annotation layout follows HybAs:
 
-## Local interface
+| Input | Expected file |
+|---|---|
+| Assembly | `~/bactomics/isolate2/annotation/isolate2.fna` |
+| Proteins | `~/bactomics/isolate2/annotation/isolate2.faa` |
+| Annotation | `~/bactomics/isolate2/annotation/isolate2.gff` |
+| GenBank, for modules that need it | `~/bactomics/isolate2/annotation/isolate2.gbk` |
+
+Start from the checkout:
 
 ```bash
-basis gui --workspace ~/bactomics/basis-workspace
+cd ~/bactomics/BaSIS-snakemake &&
+conda activate basis-snake &&
+snakemake --snakefile BaSIS.smk \
+  --config isolate=/home/jimi/bactomics/isolate2 \
+  --use-conda --cores 4 --resources mem_mb=20000 gpu=0 \
+  --rerun-incomplete
 ```
 
-Open **http://localhost:8501**. Select a saved study, create one from a HybAs folder, or import a sample sheet. Choose Safety, DeepSafe and Extend, then run or resume the study. The navy/teal interface links live progress, diagnostics and rich evidence reports; advanced installation controls remain available. Closing the browser does not stop a running job. It is intended for one trusted local user, with one job per workspace. See [the interface guide](docs/LOCAL_INTERFACE.md).
+This command prepares the requested tools and resources before any sample analysis can start. Completed outputs remain reusable on subsequent invocations. The default uses CPU execution, including PathogenFinder2; see GPU configuration below if a compatible NVIDIA GPU is available.
 
-## Analysis layers
+The main report is:
 
-| Layer | What it provides | Interpretation |
-| --- | --- | --- |
-| Base | AMR and homology screening, biosynthetic and mobile-element context, typing and CRISPR/Cas analyses in the full preset | Database matches and predictions are evidence requiring interpretation. |
-| DeepSafe, `-d` | Selected-candidate domains, motifs, PROSITE patterns/profiles, reference comparisons and eligible phylogenetic analyses | Comparator coverage and applicability determine follow-up; unresolved and deferred candidates stay visible. |
-| Extend, `-e` | PathogenFinder2 predictions and an exploratory attention queue | Model outputs describe model evidence, not measured exposure risk. |
+```text
+/home/jimi/bactomics/isolate2/safety/report.html
+```
 
-The full preset enables 14 native adapters: AMRFinderPlus, CARD/RGI, VFDB, BacMet, antiSMASH, geNomad, MOB-suite, IntegronFinder, ISEScan, ICEscreen, MinCED, MLST, CRISPRCasFinder and PathogenFinder2. `-e` requests the Extend module. Sample prerequisites and tool scope still apply: enabling a module does not guarantee an interpretable result for every organism. Native adapter availability is separate from independent biological validation.
+From Windows Explorer on the `Ubuntu-22.04` WSL distribution:
 
-HybAs imports preserve the recorded taxonomy rank. Where available Kraken reports agree on the selected target's phylum ancestry, BaSIS imports that phylum with source hashes for module scope checks. A leading species hit does not become a species identification. Explicit user taxonomy is preserved. ICEscreen requires matching GenBank and supported phylum evidence; unresolved scope remains visible.
+```text
+\\wsl.localhost\Ubuntu-22.04\home\jimi\bactomics\isolate2\safety\report.html
+```
 
-## Inputs and resource policy
+Keep the `safety` folder intact: the main report links to its evidence files, native outputs and exported tree views.
 
-Matching nucleotide FASTA, protein FASTA and GFF are required. An assembly alone is not automatically annotated. For external annotations, use [external input mode](docs/EXTERNAL_INPUTS.md); Kraken is not required. Unknown taxonomy stays unknown and can limit taxon-dependent modules.
+## Prepare first, then run
 
-The default `basis init --preset full` stores managed resources under `~/.cache/bactromics-basis`, or under the user cache directory selected by `XDG_CACHE_HOME`. Choose another shared location with `--resource-dir /absolute/path/basis-resources`. Use `--preset core` when requesting the smaller core screen. New full studies enable automated DeepSafe follow-up, PROSITE profiles and family placement; eligibility gates still apply.
-
-For several isolates, preview and import a [batch sample sheet](docs/BATCH_INPUTS.md):
+The normal run already enforces setup. On a new computer, prepare the selected tools and resources without supplying any samples:
 
 ```bash
-basis import-samples --file samples.xlsx --root /absolute/path/to/samples --dry-run -v
-basis import-samples --file samples.xlsx --root /absolute/path/to/samples --directory study-batch
-basis run -c study-batch/config.yaml -d -e -v --cores 4 --output summary
+snakemake --snakefile BaSIS.smk setup \
+  --config 'isolates=[]' \
+  --use-conda --cores 4 --resources mem_mb=20000 gpu=0 \
+  --rerun-incomplete
 ```
 
-Fresh imports without a base configuration use the automatic full-study defaults. Existing manually configured resource paths and explicit tool prefixes retain their meaning; BaSIS does not replace them just because a newer package is installed. See [orchestration and resource policy](docs/ORCHESTRATION.md).
+The explicit empty isolate list is accepted for setup only. It deploys the configured environments and prepares resources without requiring annotation files or executing sample analyses. A normal analysis run still requires samples. After setup succeeds, run the isolate2 command above. You can also use `setup` with a real sample configuration to prepare only that configured scope.
 
-## Explore saved results
+Inspect the planned jobs without executing them by adding `--dry-run`. Snakemake shows normal job messages and progress by default. Add `--printshellcmds` when debugging; tool output is written under each isolate's `safety/logs/`.
 
-Reports link findings, selected-protein evidence, available trees, native outputs and logs. Build a new report or a control panel without rerunning analyses:
+## Configuration and batches
+
+Edit `config.yaml`, or supply an additional YAML file with `--configfile my-study.yaml`. The configured modules, DeepSafe and Extend determine the requested scope. Missing taxonomy is retained as unresolved; HybAs metadata and Kraken outputs are optional for externally annotated inputs. Taxon-specific modules can be explicitly held when applicability is unconfirmed, and the report keeps those holds visible.
+
+For several HybAs-style isolate folders:
+
+```yaml
+bactomics_root: ..
+isolates: [isolate2, isolate4, isolate5]
+threads: 4
+memory_mb: 20000
+extend: true
+deep:
+  enabled: true
+```
+
+For other layouts, set `samples: config/samples.tsv`. CSV, TSV and `.xlsx` sample sheets are supported; Excel uses the active worksheet. Start with [config/samples.example.tsv](config/samples.example.tsv). `sample_id` and/or `isolate_dir` identify each sample; `assembly`, `proteins`, `gff` and optional `genbank` can override annotation discovery. Unique sample identities and isolate directories are required.
+
+Path rules are explicit:
+
+- YAML resource and sample-sheet paths are relative to the folder containing `BaSIS.smk`.
+- An isolate list is resolved relative to `bactomics_root`.
+- Paths in a sample-sheet row are relative to that sample sheet's folder.
+- Absolute paths and `~` are accepted. Each sample writes into its own `<isolate_dir>/safety/`.
+- A command-line `--config isolate=/absolute/path` selects that single isolate, overriding the saved batch list.
+
+Sample sheets can also provide declared `taxon` and `taxon_phylum` fields. Supply supported metadata rather than assigning taxonomy merely to make a held module run.
+
+### Optional GPU execution
+
+CPU is the default. To request one GPU for PathogenFinder2, add these settings to the study YAML:
+
+```yaml
+execution:
+  device: cuda
+modules:
+  pathogenfinder2:
+    enabled: true
+    gpus: 1
+```
+
+Run that configuration with `--resources mem_mb=20000 gpu=1`. Requesting GPU execution requires a working compatible CUDA runtime and driver; a Snakemake resource reservation alone does not provide GPU compatibility. The model weights and embeddings have separate recorded provenance.
+
+## Files and restart behavior
+
+| Location | Contents |
+|---|---|
+| `<isolate>/safety/report.html` | Main offline report and evidence navigation |
+| `<isolate>/safety/evidence.json` | Consolidated machine-readable evidence |
+| `<isolate>/safety/native/` | Native tool outputs, including reusable embeddings |
+| `<isolate>/safety/deepsafe/` | Selected-candidate stages, native outputs and state |
+| `<isolate>/safety/evidence/` | Normalized module records |
+| `<isolate>/safety/tables/` | Findings, review priorities, scope and run summaries |
+| `<isolate>/safety/metadata/` | Input checks, configuration, provenance and downloadable citations |
+| `<isolate>/safety/logs/` and `benchmarks/` | Per-rule logs and timing/resource measurements |
+| `<checkout>/resources/` | Shared prepared databases/models and environment inventories |
+| `<checkout>/.snakemake/` | Snakemake state, locks and managed Conda environments |
+
+Use one running Snakemake invocation per checkout. All samples in a batch share that invocation and its setup barrier. If separate checkouts are used concurrently, give them separate isolate output folders; the workflow does not coordinate competing writers across different checkouts.
+
+After a failure or shutdown, rerun the **same command** with `--rerun-incomplete`. Snakemake decides which declared outputs are missing, incomplete or outdated; successful unchanged jobs are retained. If it reports a stale lock, first confirm the old workflow has stopped, then unlock using the same checkout and configuration:
 
 ```bash
-basis report --evidence /path/to/results/evidence.json --outdir /path/to/new-report
-basis control-panel --results /path/to/results --outdir /path/to/new-panel
+snakemake --snakefile BaSIS.smk \
+  --config isolate=/home/jimi/bactomics/isolate2 --unlock
 ```
 
-Repeat `--results` to link multiple runs. Keep linked study directories in place; the control panel is not a self-contained copy of every linked artifact. See [report navigation](docs/REPORT_NAVIGATION.md).
+Then repeat the normal run command. Unlocking removes a workflow lock; the subsequent run handles incomplete work. Snakemake can discard and rebuild an interrupted or failed Conda deployment. An arbitrary failure in a tool whose environment was fully deployed does not imply that the environment will be rebuilt. Do not routinely delete environments, result folders or Snakemake metadata, and do not add `--forceall` to a resume command.
 
-Execution, assessment coverage and biological interpretation are reported separately. Completed selected candidates can coexist with deferred candidates and an incomplete overall scope. Failed or unassessed modules are not negative findings. Genomic findings, tree support and model scores do not certify organism safety or establish a calibrated probability of pathogenicity.
+## Interpretation and reproducibility
 
-## Reproduce, validate and cite
+DeepSafe runs configured analyses on selected candidates. It preserves deferred candidates, missing comparison groups and taxonomic review holds. Motifs, domains, similarity and phylogenetic placement are evidence layers; none independently proves a resistance phenotype or organism safety. A completed selected scope can coexist with an incomplete overall scope.
 
-Retain the exact source commit or release artifact, installed-package verification, resolved configuration, input hashes, tool versions, database/model snapshots and native outputs. First-use acquisition may resolve an upstream current release; the recorded snapshot identifies what was actually used. Reproducing that run requires those exact resources, not another unpinned first download on a different date.
+The report exposes citations for **Jimi Goldstein**, ORCID [0000-0002-7829-0090](https://orcid.org/0000-0002-7829-0090), and the run's BaSIS version. Cite the underlying tools and databases as well. BaSIS source is licensed under [MIT](LICENSE); third-party software, models and database terms remain their own.
 
-[Reproducibility capture](docs/REPRODUCIBILITY.md) records identities and gaps; an inventory alone does not prove successful restoration. Development pilots, synthetic checks and parser tests do not constitute independent biological validation. The public repository excludes private study inputs and native run outputs.
-
-- [Run controls](docs/RUN_CONTROLS.md) and [DeepSafe](docs/DEEPSAFE.md)
-- [Collaborator validation](docs/COLLABORATOR_VALIDATION.md)
-- [Publishing and release checks](docs/PUBLISHING.md)
-- [Citation metadata](CITATION.cff)
-
-**Author:** Jimi Goldstein · [ORCID 0000-0002-7829-0090](https://orcid.org/0000-0002-7829-0090). Reports include citation downloads. Please also cite the underlying tools and databases used in your analysis.
-
-BaSIS is distributed under the [MIT license](LICENSE). External tools, datasets and model weights retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+Record the checkout commit, configuration, sample inputs, prepared-resource provenance and resolved environment inventories when sharing a run. Database downloads and dependency solving can change over time; YAML recipes alone do not guarantee identical data or binaries on another computer. Review [architecture](docs/ARCHITECTURE.md) and [acceptance and validation](docs/ACCEPTANCE.md) before independent validation.

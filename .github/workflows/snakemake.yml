@@ -1,0 +1,65 @@
+name: Standalone Snakemake acceptance
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install test controller dependencies (no BaSIS package)
+        run: python -m pip install 'snakemake==9.6.2' 'PyYAML>=6,<7' 'numpy>=1.24,<3' 'biopython>=1.81' 'openpyxl==3.1.5' 'h5py>=3.8,<4'
+      - name: Verify direct workflow, failure recovery, and reporting with synthetic inputs
+        run: python -m unittest discover -s tests -v
+
+  real-conda-deployment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        conda: ["25.9.1", "26.1.1"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: controller
+        with:
+          python-version: "3.11"
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: "25.9.1-0"
+          conda-version: ${{ matrix.conda }}
+          channels: conda-forge
+          activate-environment: ""
+          auto-activate: false
+      - name: Install Snakemake test controller
+        env:
+          CONTROLLER_PYTHON: ${{ steps.controller.outputs.python-path }}
+        run: '"$CONTROLLER_PYTHON" -m pip install "snakemake==9.6.2"'
+      - name: Exercise genuine environment creation, incomplete deployment recovery, and failing post-deploy checks
+        shell: bash -el {0}
+        env:
+          CONTROLLER_PYTHON: ${{ steps.controller.outputs.python-path }}
+        run: '"$CONTROLLER_PYTHON" scripts/check_environment_recovery.py --workdir acceptance-environment-recovery'
+      - name: Preserve recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: environment-recovery-conda-${{ matrix.conda }}
+          path: |
+            acceptance-environment-recovery/summary.json
+            acceptance-environment-recovery/**/*.log

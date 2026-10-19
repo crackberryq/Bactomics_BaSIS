@@ -1,5 +1,5 @@
 # Native tools and the Python runtime used for checked executable probes.
-# The BaSIS package itself stays in the main environment.
+# Workflow helper code is used directly from this source checkout.
 name: basis-deepsafe
 channels:
   - conda-forge

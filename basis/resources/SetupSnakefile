@@ -1,2 +1,0 @@
-# Compatibility entry point. Supported setup uses the main Snakefile setup mode.
-include: "rules/setup.smk"
