@@ -1,0 +1,2 @@
+# Bundled resource manifests describe exact bytes, including original line endings.
+workflow/vendor/basis/resources/** -text
