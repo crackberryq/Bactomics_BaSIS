@@ -20,6 +20,8 @@ from .report_motif_views import candidate_motif_details, motif_search_terms, ren
 from .report_placement import candidate_placement_details, placement_search_terms, render_placement_overview, CSS as PLACEMENT_CSS
 from .report_context import finding_context
 from .report_sample_scope import render_sample_scope, record_requested, missing_requested_count
+from .report_deep_workflow import (candidate_workflow_details, render_workflow_overview,
+                                   workflow_search_terms)
 
 NAMES = {'amrfinder': 'AMRFinderPlus', 'rgi': 'CARD / RGI', 'vfdb': 'VFDB',
          'antismash': 'antiSMASH', 'genomad': 'geNomad', 'mobsuite': 'MOB-suite',
@@ -188,7 +190,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     completed_evidence = parent_execution == 'completed' and c.get('execution') == 'completed'
     features = _features(c) if completed_evidence else []
     entry = candidate_entry(sid, c, deep_record or {}, outdir)
-    search, title_note = entry['search_text'], entry['label']
+    search, title_note = entry['search_text'] + ' ' + workflow_search_terms(c), entry['label']
     def section_open(name):
         return '<div class="candidate-section" id="' + candidate_section_anchor(sid, ident, name) + '" tabindex="-1"><h4>' + esc(SECTIONS[name]) + '</h4>'
     result = '<details class="candidate" id="' + candidate_anchor(sid, ident) + '" data-protein="' + esc(ident) + '" data-search="' + esc(search) + '" data-sample="' + esc(sid) + '" data-queue="' + esc(queue) + '" data-interpretation="' + esc(interpretation) + '"><summary><div class="candidate-title"><strong>' + esc(ident) + '</strong><span>' + esc(title_note) + '</span></div><div class="candidate-meta">' + badge(QUEUES.get(queue, human(queue))) + badge(c.get('execution', 'unknown')) + '</div></summary><div class="candidate-body">'
@@ -200,6 +202,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     unique = {v['sequence_sha256'] for v in refs if isinstance(v, dict) and v.get('sequence_sha256')}
     result += '<div class="mini-stats">' + stat('Protein length', num((c.get('query') or {}).get('length')), 'amino acids') + stat('Comparator records', str(len(refs)), str(len(unique)) + ' unique sequences with hashes') + stat('Recorded features', str(len(features)), 'accepted domain / motif intervals') + '</div>'
     result += '<h4>Analysis coverage</h4>' + '<div class="layer-grid">' + ''.join('<div><span>' + esc(title) + '</span>' + badge((analyses.get(k) or {}).get('status', 'not_assessed')) + '</div>' for k, title in LAYERS.items()) + '</div>'
+    result += candidate_workflow_details(c, parent_execution)
     if not completed_evidence:
         result += '<p class="callout">Candidate or parent execution is not completed. Retained evidence is provisional; accepted feature maps and tree views are withheld.</p>'
     result += '</div>' + section_open('domains')
@@ -456,9 +459,11 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
         if href:
             placement_links[(sid, str(c.get('candidate_id') or ''), str(c.get('protein_id') or ''))] = href
     entries = [candidate_entry(sid, c, candidate_records.get(id(c)) or {}, outdir) for sid, c in selected]
+    for entry, (_, candidate) in zip(entries, selected):
+        entry['search_text'] += ' ' + workflow_search_terms(candidate)
     deep = render_navigator(entries) + deep
     deep += ''.join(_candidate(c,sid,outdir,candidate_records.get(id(c)),placement_views[id(c)]) for sid,c in selected)
-    deep = render_placement_overview(selected, deep_records, tree_links=placement_links) + render_motif_overview(selected, deep_records) + deep
+    deep = render_workflow_overview(selected, deep_records, run.get('deep_workflow_artifacts')) + render_placement_overview(selected, deep_records, tree_links=placement_links) + render_motif_overview(selected, deep_records) + deep
     if not selected:
         deep += '<p class="panel empty">No selected candidate evidence supplied.</p>'
     content += section('deep','07','DeepSafe · focused review','Inspect domains, motifs, comparator gaps, bounded trees and reference-panel placement.',deep)

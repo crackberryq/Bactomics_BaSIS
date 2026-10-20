@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import csv
 import hashlib
 import html
 import json
@@ -201,6 +202,49 @@ def _file_index(root: Path) -> None:
     (root / "metadata/files.html").write_text(page, encoding="utf-8")
 
 
+def export_workflow_coverage(deep_records, root):
+    """Export every candidate; no truncation and no reconstruction of old routing."""
+    from basis.deep_workflow import SCHEMA, SCOPE, candidate_workflow, summarize
+    rows, inventories = [], []
+    for record in deep_records:
+        inventory = (record.get("workflow_coverage") or {}).get("family_inventory")
+        if inventory is not None:
+            inventories.append({"sample_id": record["sample_id"], "inventory": inventory})
+        for candidate in record.get("candidates", []):
+            saved = candidate.get("workflow_coverage") or {}
+            valid = (saved.get("schema") == SCHEMA
+                     and saved.get("candidate_id") == candidate.get("candidate_id")
+                     and saved.get("protein_id") == candidate.get("protein_id")
+                     and isinstance(saved.get("selected"), bool)
+                     and saved.get("selected") == candidate.get("selected")
+                     and saved.get("sample_id") in {None, record["sample_id"]})
+            row = copy.deepcopy(saved) if valid else candidate_workflow({
+                **candidate, "family_routing": {}})
+            row["sample_id"] = record["sample_id"]
+            rows.append(row)
+    json_path, tsv_path = root / "metadata/deep-workflow.json", root / "metadata/deep-workflow.tsv"
+    _write_json(json_path, {"schema": "basis-deep-workflow-bundle-v1", "scope": SCOPE,
+                           "summary": summarize(rows), "inventories": inventories, "candidates": rows})
+    fields = ["sample_id", "candidate_id", "protein_id", "selected", "selection_queue",
+              "execution", "routing_status", "profile_id", "profile_status", "matched_panels",
+              "placement_status", "placement_reason", "adequacy_reasons", "interpretation", "followup", "stages"]
+    with tsv_path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields, delimiter="\t")
+        writer.writeheader()
+        for row in rows:
+            item = {key: row.get(key) for key in fields}
+            profile, placement = row.get("profile") or {}, row.get("placement") or {}
+            item.update(profile_id=profile.get("id"), profile_status=profile.get("status"),
+                        matched_panels=json.dumps(placement.get("matched_panels", [])),
+                        placement_status=placement.get("status"), placement_reason=placement.get("reason"),
+                        adequacy_reasons=json.dumps(placement.get("adequacy_reasons", [])),
+                        stages=json.dumps(row.get("stages", []), sort_keys=True))
+            # TSV is commonly opened in a spreadsheet. JSON preserves exact text.
+            writer.writerow({k: "'" + v if isinstance(v, str) and v.startswith(("=", "+", "-", "@")) else v
+                             for k, v in item.items()})
+    return {"json": str(json_path), "tsv": str(tsv_path)}
+
+
 def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], outdir: Path) -> dict:
     """Write the polished offline bundle into the isolate's safety directory."""
     sample, config = _read(sample_path), _read(config_path)
@@ -211,6 +255,9 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
         (root / name).mkdir(exist_ok=True)
     run["report_inputs"] = {"sample": {"path": str(sample_path.resolve()), "sha256": _sha(sample_path)},
                             "config": {"path": str(config_path.resolve()), "sha256": _sha(config_path)}}
+    coverage_artifacts = export_workflow_coverage(deep_records, root)
+    run["deep_workflow_artifacts"] = {key: Path(path).relative_to(root).as_posix()
+                                     for key, path in coverage_artifacts.items()}
     from basis.report import write_report
     from basis.run_summary import build_run_summary, write_run_summary
     # The vendored renderer is presentation only. Disable its legacy heartbeat;
@@ -220,6 +267,7 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
         artifacts = write_report(run, [sample], records, deep_records, root)
         summary = build_run_summary(run, [sample], records, deep_records)
         artifacts.update(write_run_summary(summary, root))
+        artifacts.update({"deep_workflow_" + key: path for key, path in coverage_artifacts.items()})
     finally:
         if previous is not None:
             os.environ["BASIS_VERBOSE"] = previous

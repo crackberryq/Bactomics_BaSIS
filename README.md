@@ -101,6 +101,55 @@ Path rules are explicit:
 
 Sample sheets can also provide declared `taxon` and `taxon_phylum` fields. Supply supported metadata rather than assigning taxonomy merely to make a held module run.
 
+### DeepSafe family automation
+
+DeepSafe applies the same Snakemake stages to every selected candidate. Family
+profiles and placement panels are configuration data; adding an already reviewed
+family definition does not require writing a new Snakefile or a gene-specific
+runner. Existing selection budgets, sequence checks, reference eligibility and
+interpretation gates still apply.
+
+The main report's **Family workflow coverage** section shows the matched profile
+and placement panel, ambiguous or unmatched routing, each recorded analysis
+status, and the reasons an analysis was held. Candidate links open the existing
+evidence and tree sections. The JSON and TSV downloads contain **all** candidates,
+including deferred candidates. Older evidence without a recorded routing audit
+is labelled **not recorded**, rather than being reinterpreted using today's
+configuration.
+
+The bundled resources contain **12 broad family profiles and one Cfr/RlmN
+development placement panel**. Those are different kinds of evidence coverage.
+The workflow is reusable across configured families; this distribution does not
+claim universal family coverage or independently validated functional prediction.
+Trees and conditional placement weights do not establish a resistance phenotype.
+
+Existing reviewed resources can be selected in a study configuration:
+
+```yaml
+deep:
+  enabled: true
+  profiles_dir: /absolute/path/to/reviewed-family-profiles
+  placement_registry: /absolute/path/to/reviewed-placement-registry.json
+```
+
+The profile directory and registry must follow the existing validated schemas.
+Multiple profiles/panels are supported. Conflicting matches remain ambiguous;
+unmatched candidates remain explicit coverage gaps. This update supplies no new
+reference labels, sequences, thresholds or biological validation claims.
+
+At preparation, small family resources are copied byte-for-byte into
+`safety/deepsafe/native/prepare/family-resources/`. Their source paths, checksums
+and configuration identity are recorded and verified before resumed stages use
+them. Snakemake tracks edits and additions/removals in the configured family
+files. Such changes refresh DeepSafe; reporting-only edits refresh the report.
+Completed upstream native analyses have no dependency on these new helpers.
+Do not modify source resources or pull code updates during an active run.
+
+Coverage exports are `safety/metadata/deep-workflow.json` and
+`safety/metadata/deep-workflow.tsv`. The final DeepSafe evidence also contains the
+same candidate workflow records and the configured family inventory. Reports
+remain offline and do not launch analyses or download references.
+
 ### Optional GPU execution
 
 CPU is the default. To request one GPU for PathogenFinder2, add these settings to the study YAML:

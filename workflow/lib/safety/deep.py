@@ -21,6 +21,8 @@ from basis.deep_candidate_jobs import (
     apply_fragment, candidate_ids, finalize_state, placement_budget_plan,
     run_candidate_stage, tree_budget_plan,
 )
+from .deep_resources import (load_discovered_inputs, resolve_profile_resources,
+                             snapshot_resources, verify_resources)
 
 SCHEMA = "basis-snakemake-deep-state-v1"
 PHASES = ("domains", "phylogeny", "patterns", "profiles", "motifs", "placement")
@@ -44,6 +46,18 @@ def digest(value):
                                      allow_nan=False).encode()).hexdigest()
 
 
+def verify_family_snapshot(config):
+    """Bind resumed stages to the exact small resources captured at prepare."""
+    snapshot = config.get("family_resource_snapshot")
+    if not snapshot:
+        return  # Earlier persisted states predate family-resource snapshots.
+    manifest = read(snapshot["manifest"])
+    if (manifest.get("manifest_sha256") != snapshot.get("manifest_sha256")
+            or manifest.get("content_sha256") != snapshot.get("content_sha256")):
+        raise ValueError("DeepSafe family resource snapshot identity changed")
+    verify_resources(manifest)
+
+
 def load_document(path):
     document = read(path)
     if document.get("schema") != SCHEMA:
@@ -55,6 +69,7 @@ def load_document(path):
                                 context["config"], context["work"])
     if document["state"].get("identity") != expected:
         raise ValueError("DeepSafe state does not match its saved inputs")
+    verify_family_snapshot(context["config"])
     return document
 
 
@@ -92,10 +107,16 @@ def reject_failures(state):
                                      + ": " + str(row.get("reason")) for row in failures))
 
 
-def prepare(isolate, records, native, threads, runner):
+def prepare(isolate, records, native, threads, runner, family_inputs=None):
     isolate = Path(isolate).resolve()
     sample = read(isolate / "safety/metadata/sample.json")
     full_config = read(isolate / "safety/metadata/config.json")
+    if family_inputs is not None:
+        discovered = load_discovered_inputs(family_inputs)
+        if (Path(discovered["source_config"]).resolve()
+                != isolate / "safety/metadata/config.json"
+                or discovered["deep"] != full_config["deep"]):
+            raise ValueError("DeepSafe discovered resources do not match sample configuration")
     config = copy.deepcopy(full_config["deep"])
     config["command_prefix"] = []
     # All mutable placement files belong to a Snakemake output directory. Never
@@ -107,10 +128,21 @@ def prepare(isolate, records, native, threads, runner):
             raise ValueError("DeepSafe upstream evidence belongs to another sample")
         if record.get("execution_status") in {"failed", "blocked", "not_started"}:
             raise RuntimeError("DeepSafe upstream did not complete: " + str(record.get("module")))
+    snapshot = snapshot_resources(config, Path(native) / "family-resources")
+    config = snapshot["effective_config"]
     work = str((isolate / "safety/deepsafe").resolve())
     context = {"sample": sample, "records": records, "config": config, "work": work}
     effective = execution_config(config, native, threads)
     state = stages.run_stage("prepare", sample, records, effective, native, runner)
+    for candidate in state["candidates"]:
+        if candidate.get("profile"):
+            candidate["profile"] = resolve_profile_resources(candidate["profile"], snapshot["manifest"])
+    state["artifacts"].append(config["family_resource_snapshot"]["manifest"])
+    state["artifacts"].extend(row["snapshot_path"]
+                              for resource in snapshot["manifest"]["resources"]
+                              for row in resource["files"])
+    from basis.deep_workflow import record_family_routes
+    state["family_inventory"] = record_family_routes(state["candidates"], effective)
     state["identity"] = stages._identity(sample, records, config, work)
     reject_failures(state)
     return {"schema": SCHEMA, "context": context, "context_sha256": digest(context),
@@ -129,6 +161,7 @@ def invoke(document, action, native, threads, runner, candidate=None, children=(
     """Execute one phase; preserve the original scientific input identity."""
     document = copy.deepcopy(document)
     context = document["context"]
+    verify_family_snapshot(context["config"])
     sample, records = context["sample"], context["records"]
     config = execution_config(context["config"], native, threads)
     original_identity = copy.deepcopy(document["state"]["identity"])
@@ -171,6 +204,24 @@ def invoke(document, action, native, threads, runner, candidate=None, children=(
         document["budget"] = placement_budget_plan(state, config, native)
     elif action == "finalize":
         state = finalize_state(sample, records, config, native, runner, state)
+        from basis.deep_workflow import candidate_workflow, summarize
+        for row in state["candidates"]:
+            row["workflow_coverage"] = candidate_workflow(row)
+            row["consolidated_evidence"]["workflow_coverage"] = row["workflow_coverage"]
+        rows = [row["workflow_coverage"] for row in state["candidates"]]
+        coverage = {"schema": "basis-deep-workflow-bundle-v1", "summary": summarize(rows),
+                    "family_inventory": state.get("family_inventory"), "candidates": rows}
+        path = Path(native) / "workflow_coverage.json"
+        write(path, coverage)
+        # Refresh only this finalization job's own views, keeping them consistent
+        # with the normalized evidence record.
+        write(Path(native) / "candidates.json", state["candidates"])
+        write(Path(native) / "consolidated_evidence.json", {
+            "schema": "basis-consolidated-v1",
+            "candidates": [r["consolidated_evidence"] for r in state["candidates"] if r.get("selected")],
+            "deferred_candidates": state["payload"]["metrics"]["deferred_candidates"]})
+        state["payload"]["workflow_coverage"] = coverage
+        state["payload"]["artifacts"].append(str(path))
     else:
         raise ValueError("Unknown DeepSafe action: " + action)
     state["identity"] = original_identity
@@ -222,6 +273,7 @@ def main(argv=None):
     parser.add_argument("--records", nargs="*", default=[])
     parser.add_argument("--children", nargs="*", default=[])
     parser.add_argument("--evidence")
+    parser.add_argument("--family-inputs")
     args = parser.parse_args(argv)
     from .runtime import DirectRunner
     if args.threads < 1:
@@ -230,7 +282,7 @@ def main(argv=None):
     os.environ.pop("BASIS_VERBOSE", None)
     runner = DirectRunner({"threads": args.threads}, Path(args.log))
     if args.action == "prepare":
-        document = prepare(args.isolate, args.records, native, args.threads, runner)
+        document = prepare(args.isolate, args.records, native, args.threads, runner, args.family_inputs)
     else:
         document = invoke(load_document(args.parent), args.action, native, args.threads,
                           runner, args.candidate, [load_document(p) for p in args.children])

@@ -5,6 +5,7 @@ from pathlib import Path
 REPORTING_SOURCE = [str(Path(ROOT) / "workflow/lib/safety/reporting.py")] + [
     str(path) for path in sorted((Path(ROOT) / "workflow/vendor/basis").glob("report*.py"))
 ] + [str(Path(ROOT) / "workflow/vendor/basis/run_summary.py")]
+REPORTING_SOURCE.append(str(Path(ROOT) / "workflow/vendor/basis/deep_workflow.py"))
 
 
 def safety_report_evidence(wildcards):
@@ -34,6 +35,8 @@ rule safety_report:
         artifacts="{isolate}/safety/metadata/report-artifacts.json",
         files_html="{isolate}/safety/metadata/files.html",
         files_json="{isolate}/safety/metadata/files.json",
+        deep_workflow_json="{isolate}/safety/metadata/deep-workflow.json",
+        deep_workflow_tsv="{isolate}/safety/metadata/deep-workflow.tsv",
         cff="{isolate}/safety/metadata/citations/CITATION.cff",
         bib="{isolate}/safety/metadata/citations/BaSIS.bib",
         ris="{isolate}/safety/metadata/citations/BaSIS.ris",

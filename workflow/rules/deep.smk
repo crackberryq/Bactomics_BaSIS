@@ -2,6 +2,7 @@
 # normalized. Each layer is an independent Snakemake job with owned native files.
 import json
 from pathlib import Path
+from safety.deep_resources import config_input_paths, load_discovered_inputs
 
 
 def safety_deep_sources():
@@ -12,10 +13,19 @@ def safety_deep_sources():
              "deep_reporting.py", "references.py", "motifs.py", "prosite.py",
              "prosite_profiles.py", "placement.py", "placement_panels.py",
              "placement_native.py", "placement_scoring.py", "placement_diagnostics.py",
-             "candidate_labels.py")
+             "candidate_labels.py", "deep_workflow.py")
     return [str(ROOT / "workflow/lib/safety/deep.py"),
+            str(ROOT / "workflow/lib/safety/deep_resources.py"),
             str(ROOT / "workflow/lib/safety/runtime.py")] + [
         str(ROOT / "workflow/vendor/basis" / name) for name in names]
+
+
+def safety_deep_resource_paths(wc):
+    discovered = checkpoints.safety_deep_resource_inputs.get(isolate=wc.isolate)
+    document = load_discovered_inputs(discovered.output.state)
+    # Enumerate live directory membership after config generation. New profile
+    # files become declared inputs, and later edits remain visible on resume.
+    return config_input_paths(document["deep"])
 
 
 def safety_deep_targets(wc, phase):
@@ -37,12 +47,32 @@ def safety_deep_parent(wc):
     return root + "candidates/" + wc.candidate + "/" + previous + ".json"
 
 
+checkpoint safety_deep_resource_inputs:
+    input:
+        config="{isolate}/safety/metadata/config.json",
+        source=str(ROOT / "workflow/lib/safety/deep_resources.py")
+    output:
+        state="{isolate}/safety/deepsafe/states/resource-inputs.json"
+    params: python=PYTHON, code=CODE_PATH
+    conda: CTX.env("deepsafe")
+    threads: 1
+    resources: mem_mb=1000
+    log: "{isolate}/safety/logs/deepsafe/resource-inputs.log"
+    message: "DeepSafe: discover configured family resources for {wildcards.isolate}"
+    shell:
+        "mkdir -p $(dirname {log:q}); "
+        "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep_resources "
+        "--config {input.config:q} --output {output.state:q} > {log:q} 2>&1"
+
+
 checkpoint safety_deep_prepare:
     input:
         setup=lambda wc: CTX.setup_target(wc.isolate),
         records=lambda wc: CTX.evidence_targets(wc.isolate),
         sample="{isolate}/safety/metadata/sample.json",
         config="{isolate}/safety/metadata/config.json",
+        family_inputs=lambda wc: checkpoints.safety_deep_resource_inputs.get(isolate=wc.isolate).output.state,
+        family_resources=safety_deep_resource_paths,
         source=safety_deep_sources()
     output:
         state="{isolate}/safety/deepsafe/states/prepare.json",
@@ -57,7 +87,8 @@ checkpoint safety_deep_prepare:
     shell:
         "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep prepare "
         "--isolate {wildcards.isolate:q} --output {output.state:q} --native {output.native:q} "
-        "--records {input.records:q} --threads {threads} --log {log:q} >> {log:q} 2>&1"
+        "--family-inputs {input.family_inputs:q} --records {input.records:q} "
+        "--threads {threads} --log {log:q} >> {log:q} 2>&1"
 
 
 rule safety_deep_candidate:

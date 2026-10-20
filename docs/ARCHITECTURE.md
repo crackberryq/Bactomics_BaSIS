@@ -70,3 +70,27 @@ After updating the checkout, rerun the original Snakemake command with
 `--rerun-incomplete`. No output deletion, timestamp changes, or relaxed rerun
 triggers are required. Unchanged embeddings are read and verified before the
 classifier retry; prediction and downstream jobs then resume normally.
+
+## Family workflow provenance
+
+The standalone DeepSafe wrapper records a `basis-deep-workflow-v1` description
+for each candidate at finalization. It describes the existing routers and saved
+analysis outputs; it does not select additional candidates, construct new
+biological panels, alter thresholds, or derive functional probabilities.
+`basis.deep_workflow` records the existing exact profile alias matches and the
+placement router's qualified-source matches. Profile coverage and placement
+coverage are separate, and ambiguous routing is preserved.
+
+`safety.deep_resources` freezes configured small family resources into the
+prepare job's output directory and binds exact-byte hashes to the serialized
+DeepSafe context. A DeepSafe-only discovery checkpoint exposes the effective
+resource paths to Snakemake after setup. Each subsequent stage verifies the
+frozen files. Large reference/domain databases keep their existing resource
+receipts and catalogue verification. None of these helpers is an input of
+upstream native rules or the global setup rules.
+
+The saved-evidence report exports complete coverage JSON/TSV under `metadata/`
+and renders per-candidate status/navigation. Historical records without this
+audit remain `not_recorded`. Report code cannot create a successful analysis or
+tree link from routing metadata; existing artifact verification remains in
+charge. These software checks are not independent biological validation.

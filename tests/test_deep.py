@@ -163,6 +163,18 @@ class DeepWorkflowTests(unittest.TestCase):
     @unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake is not installed in the test interpreter")
     def test_checkpoint_resume_and_report_change_do_not_rerun_deep(self):
         """Run the real DAG using context-only synthetic evidence; no tool stubs."""
+        profiles = self.isolate / "custom-profiles"
+        profiles.mkdir()
+        profile = profiles / "synthetic.yaml"
+        profile.write_text("schema_version: 1\nprofile_id: synthetic_registry_only\n"
+                           "validation_status: unvalidated_template\n"
+                           "interpretation_policy: exploratory_only\n"
+                           "candidate_aliases: [unmatched_fixture]\n"
+                           "required_comparison_groups: []\nanchor_reference_ids: []\n")
+        self.cfg["profiles_dir"] = str(profiles)
+        deep.write(self.isolate / "safety/metadata/config.json", {"deep": self.cfg})
+        upstream = {str(path): path.stat().st_mtime_ns for path in
+                    [self.record_path, Path(self.sample["assembly"]), Path(self.sample["proteins"])]}
         setup = self.isolate / "setup.txt"
         setup.write_text("ready\n")
         template = self.isolate / "template.txt"
@@ -179,6 +191,7 @@ class DeepWorkflowTests(unittest.TestCase):
             "from pathlib import Path\n"
             "import sys\n"
             f"ROOT = Path({str(ROOT)!r})\n"
+            "sys.path[:0] = [str(ROOT / 'workflow/lib'), str(ROOT / 'workflow/vendor')]\n"
             "PYTHON = sys.executable\n"
             f"CODE_PATH = {str(ROOT / 'workflow/lib') + ':' + str(ROOT / 'workflow/vendor')!r}\n"
             "class Context:\n"
@@ -208,6 +221,21 @@ class DeepWorkflowTests(unittest.TestCase):
         self.assertIn("report version two", report.read_text())
         self.assertEqual(snapshots, {str(path): path.stat().st_mtime_ns
                                    for path in (self.isolate / "safety/deepsafe").rglob("*") if path.is_file()})
+        prepared = self.isolate / "safety/deepsafe/states/prepare.json"
+        old_identity = deep.read(prepared)["context_sha256"]
+        profile.write_text(profile.read_text() + "notes: [same-path resource edit]\n")
+        fourth = subprocess.run(command, text=True, capture_output=True)
+        self.assertEqual(fourth.returncode, 0, fourth.stdout + fourth.stderr)
+        self.assertNotEqual(deep.read(prepared)["context_sha256"], old_identity)
+        self.assertEqual(upstream, {path: Path(path).stat().st_mtime_ns for path in upstream})
+        fifth = subprocess.run(command, text=True, capture_output=True)
+        self.assertEqual(fifth.returncode, 0, fifth.stdout + fifth.stderr)
+        self.assertIn("Nothing to be done", fifth.stdout + fifth.stderr)
+        self.cfg["maximum_candidates"] = 11
+        deep.write(self.isolate / "safety/metadata/config.json", {"deep": self.cfg})
+        sixth = subprocess.run(command, text=True, capture_output=True)
+        self.assertEqual(sixth.returncode, 0, sixth.stdout + sixth.stderr)
+        self.assertEqual(deep.read(prepared)["context"]["config"]["maximum_candidates"], 11)
 
 
 if __name__ == "__main__":
