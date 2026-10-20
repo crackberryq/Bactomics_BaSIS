@@ -1,0 +1,15 @@
+{
+  "repository": "genomicepidemiology/PathogenFinder2",
+  "revision": "3837caf6710da5da3038f5d1246dd82ab26e003a",
+  "purpose": "Pinned upstream configuration contract fixtures; no model weights or biological inputs.",
+  "files": {
+    "config_base.json": {
+      "source_path": "src/pathogenfinder2/data/configs/config_base.json",
+      "sha256": "5a668dbdfc77ccfb920c8ef9a9eab85fa3b67248323e60e2a244cb70fa09390e"
+    },
+    "config_schema.py": {
+      "source_path": "src/pathogenfinder2/utils/config_schema.py",
+      "sha256": "2705138356d3378d7ee73b705884ffdfc7b57ead544a128b9c8029cd2617bd0e"
+    }
+  }
+}

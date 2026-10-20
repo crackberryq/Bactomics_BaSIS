@@ -50,3 +50,23 @@ Snakemake owns resumability at declared rule boundaries. Unchanged completed ups
 An interrupted Conda deployment without its completion marker, or a deployment whose post-deploy checks fail, is handled through Snakemake's environment lifecycle. A fully deployed environment that later encounters a runtime or input error is a different case. Its cause must be resolved; environment deletion is not the default response.
 
 The active architecture is tested separately from biological validity. See [ACCEPTANCE.md](ACCEPTANCE.md).
+
+### PF2 classification configuration and recovery
+
+The classification rule uses `safety.pf2_classify`, which invokes the pinned
+PF2 CLI's default pretrained prediction configuration. In this PF2 release,
+passing `--config` selects a schema that requires training parameters even for
+prediction. BaSIS checks each of the four bundled classifier weights against
+the prepared copies before prediction, and records the actual bundled paths
+and both sets of checksums. No training settings or model changes are needed.
+
+This helper is a source dependency of classification only. The earlier
+`safety.extend classify` implementation is superseded on the active workflow
+path; the shared `extend.py` is deliberately unchanged in this repair so
+completed embeddings and CRISPR jobs retain their existing input provenance.
+Removing that legacy entrypoint is deferred to a planned source refactor.
+
+After updating the checkout, rerun the original Snakemake command with
+`--rerun-incomplete`. No output deletion, timestamp changes, or relaxed rerun
+triggers are required. Unchanged embeddings are read and verified before the
+classifier retry; prediction and downstream jobs then resume normally.

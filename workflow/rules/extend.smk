@@ -69,7 +69,7 @@ rule pathogenfinder2_classification:
         embeddings="{isolate}/safety/native/pathogenfinder2/ProteinEmbeddings.h5",
         manifest="{isolate}/safety/native/pathogenfinder2/embeddings_manifest.json",
         resources=lambda w: CTX.resource_inputs("pathogenfinder2"),
-        code=PF2_CODE
+        code=PF2_CODE + [str(ROOT / "workflow/lib/safety/pf2_classify.py")]
     output:
         native=directory("{isolate}/safety/native/pathogenfinder2/predictionPF2")
     params:
@@ -91,7 +91,7 @@ rule pathogenfinder2_classification:
     shell:
         r"""
         mkdir -p "$(dirname {log.job:q})"
-        PYTHONPATH={params.code:q} python -m safety.extend classify \
+        PYTHONPATH={params.code:q} python -m safety.pf2_classify \
             --sample {input.sample:q} --config {input.config:q} \
             --embeddings {input.embeddings:q} --manifest {input.manifest:q} \
             --output {output.native:q} --log {log.native:q} \
