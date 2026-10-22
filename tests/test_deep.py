@@ -151,6 +151,19 @@ class DeepWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "context changed"):
             deep.load_document(path)
 
+    def test_invalid_parent_does_not_delete_existing_native_output(self):
+        native = self.native("profiles/cand_" + "1" * 20)
+        sentinel = native / "keep.txt"
+        sentinel.write_text("saved work")
+        bad = self.isolate / "bad-state.json"
+        bad.write_text('{"schema": "unknown"}')
+        with self.assertRaisesRegex(ValueError, "Unrecognized"):
+            deep.main(["profiles", "--isolate", str(self.isolate), "--parent", str(bad),
+                       "--candidate", "cand_" + "1" * 20,
+                       "--output", str(self.isolate / "new.json"),
+                       "--native", str(native), "--log", str(self.isolate / "job.log")])
+        self.assertEqual(sentinel.read_text(), "saved work")
+
     def test_execution_config_has_no_old_environment_or_shared_cache(self):
         config = deep.execution_config({"command_prefix": ["conda", "run"],
                                          "placement_cache_dir": "/old/cache", "min_identity": 30},
@@ -235,7 +248,17 @@ class DeepWorkflowTests(unittest.TestCase):
         deep.write(self.isolate / "safety/metadata/config.json", {"deep": self.cfg})
         sixth = subprocess.run(command, text=True, capture_output=True)
         self.assertEqual(sixth.returncode, 0, sixth.stdout + sixth.stderr)
-        self.assertEqual(deep.read(prepared)["context"]["config"]["maximum_candidates"], 11)
+        self.assertEqual(deep.load_document(prepared)["context"]["config"]["maximum_candidates"], 11)
+        from safety.state_storage import object_paths
+        shared = object_paths(prepared)[0]
+        shared.unlink()
+        # Require a consumer of saved state; an already-complete report need
+        # not read unused checkpoint objects at all.
+        evidence.unlink()
+        report.unlink()
+        missing = subprocess.run(command + ["--dry-run"], text=True, capture_output=True)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("Missing shared state object", missing.stdout + missing.stderr)
 
 
 if __name__ == "__main__":

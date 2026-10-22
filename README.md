@@ -191,6 +191,46 @@ snakemake --snakefile BaSIS.smk \
 
 Then repeat the normal run command. Unlocking removes a workflow lock; the subsequent run handles incomplete work. Snakemake can discard and rebuild an interrupted or failed Conda deployment. An arbitrary failure in a tool whose environment was fully deployed does not imply that the environment will be rebuilt. Do not routinely delete environments, result folders or Snakemake metadata, and do not add `--forceall` to a resume command.
 
+### Shared checkpoint storage and offline compaction
+
+DeepSafe now stores shared JSON context, retrieval audit data and planning metadata
+once per content checksum under `safety/deepsafe/state-objects/`. Small v2 checkpoint
+envelopes reference those immutable objects. The reader still accepts the older
+inline v1 states. Logical input identities, analysis results and interpretation
+are unchanged. Keep the entire `deepsafe` directory together when copying a run;
+the shared object files are required checkpoint data, not disposable caches.
+Missing objects stop dependency loading when the saved state is required;
+altered shared data fails checksum verification before a worker consumes it.
+
+For an existing run with large repeated JSON states, stop all writers, update the
+checkout, and use the offline compactor. Substitute the isolate directory:
+
+```bash
+python scripts/compact_deep_states.py --isolate /absolute/path/to/isolate
+python scripts/compact_deep_states.py --isolate /absolute/path/to/isolate --apply
+```
+
+The first command reviews storage without replacing state files. `--apply` also
+performs full preflight validation, then compacts each state atomically, verifies
+lossless hydration, and preserves its original modification timestamp and file
+mode. Replacements are atomic per file; interrupted batches can contain both
+formats and can be resumed with the same command. Small audit records are saved
+under `deepsafe/storage-reviews/`, including original/replacement byte checksums,
+logical checksums and measured storage totals. No native tools run, and native
+outputs, evidence records, HybAs metadata and Snakemake receipts are not edited.
+Temporary space is still required for one state and newly shared objects. The
+compactor stops on invalid state, changed provenance or concurrent modifications;
+it does not label failed or incomplete work as complete or delete orphaned files.
+
+Normal Snakemake source, input and resource invalidation still applies after a
+code update. Compaction itself preserves checkpoint mtimes; it does not suppress
+reruns legitimately required by changed code or inputs. Do not roll back to a
+reader that only supports v1 after applying compaction.
+
+The HybAs metadata reader also accepts HybAs 9's structured `executed_stages`
+list and `skipped_stages` mapping. Other unexpected nested summary fields remain
+errors, and isolate identity, duplicate-key and provenance checks remain active.
+
 ## Interpretation and reproducibility
 
 DeepSafe runs configured analyses on selected candidates. It preserves deferred candidates, missing comparison groups and taxonomic review holds. Motifs, domains, similarity and phylogenetic placement are evidence layers; none independently proves a resistance phenotype or organism safety. A completed selected scope can coexist with an incomplete overall scope.

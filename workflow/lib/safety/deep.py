@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -23,6 +22,7 @@ from basis.deep_candidate_jobs import (
 )
 from .deep_resources import (load_discovered_inputs, resolve_profile_resources,
                              snapshot_resources, verify_resources)
+from .state_storage import logical_digest, read_document, write_document
 
 SCHEMA = "basis-snakemake-deep-state-v1"
 PHASES = ("domains", "phylogeny", "patterns", "profiles", "motifs", "placement")
@@ -42,8 +42,7 @@ def write(path, value):
 
 
 def digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str,
-                                     allow_nan=False).encode()).hexdigest()
+    return logical_digest(value)
 
 
 def verify_family_snapshot(config):
@@ -58,8 +57,8 @@ def verify_family_snapshot(config):
     verify_resources(manifest)
 
 
-def load_document(path):
-    document = read(path)
+def load_document(path, shared_cache=None, raw=None):
+    document = read_document(path, shared_cache, raw)
     if document.get("schema") != SCHEMA:
         raise ValueError("Unrecognized DeepSafe state: " + str(path))
     if document.get("context_sha256") != digest(document["context"]):
@@ -77,12 +76,13 @@ def combine(parent, documents):
     """Merge exactly one successful candidate task per selected candidate."""
     state = copy.deepcopy(parent["state"])
     expected = candidate_ids(state)
-    documents = list(documents)
-    received = [document.get("candidate_id") for document in documents]
-    if len(received) != len(set(received)) or set(received) != set(expected):
-        raise ValueError("Expected one state for every selected candidate")
+    received = set()
     replacements = {}
     for document in documents:
+        identifier = document.get("candidate_id")
+        if identifier in received or identifier not in expected:
+            raise ValueError("Expected one state for every selected candidate")
+        received.add(identifier)
         if (document["context_sha256"] != parent["context_sha256"] or
                 document["state"]["identity"] != state["identity"]):
             raise ValueError("Candidate aggregation input identity mismatch")
@@ -93,6 +93,8 @@ def combine(parent, documents):
         replacements[document["candidate_id"]] = rows[0]
         state["artifacts"].extend(document["state"].get("artifacts", []))
         state["notes"].extend(document["state"].get("notes", []))
+    if received != set(expected):
+        raise ValueError("Expected one state for every selected candidate")
     state["candidates"] = [copy.deepcopy(replacements.get(row["candidate_id"], row))
                            for row in state["candidates"]]
     state["artifacts"] = list(dict.fromkeys(state["artifacts"]))
@@ -167,10 +169,12 @@ def invoke(document, action, native, threads, runner, candidate=None, children=(
     original_identity = copy.deepcopy(document["state"]["identity"])
     state = document["state"]
     if action in {"references", "placement-plan", "finalize"}:
-        children = list(children)
-        state = combine(document, children)
-        commands = document.get("commands", []) + [command for child in children
-                                                    for command in child.get("commands", [])]
+        commands = list(document.get("commands", []))
+        def inputs():
+            for child in children:
+                commands.extend(child.get("commands", []))
+                yield child
+        state = combine(document, inputs())
         document["commands"] = list({digest(command): command for command in commands}.values())
     for row in state["candidates"]:
         if row.get("selected"):
@@ -278,20 +282,28 @@ def main(argv=None):
     from .runtime import DirectRunner
     if args.threads < 1:
         raise ValueError("DeepSafe threads must be positive")
+    # Check persisted inputs before deleting this job's interrupted native dir.
+    shared_cache = {}
+    parent = None
+    if args.action != "prepare":
+        parent = load_document(args.parent, shared_cache)
+        for path in args.children:
+            load_document(path, shared_cache)
     native = initialize_output(args.native, args.isolate)
     os.environ.pop("BASIS_VERBOSE", None)
     runner = DirectRunner({"threads": args.threads}, Path(args.log))
     if args.action == "prepare":
         document = prepare(args.isolate, args.records, native, args.threads, runner, args.family_inputs)
     else:
-        document = invoke(load_document(args.parent), args.action, native, args.threads,
-                          runner, args.candidate, [load_document(p) for p in args.children])
+        document = invoke(parent, args.action, native, args.threads,
+                          runner, args.candidate,
+                          (load_document(p, shared_cache) for p in args.children))
     document["commands"] = list(document.get("commands", [])) + list(getattr(runner, "commands", []))
     document["native_output"] = str(native)
     document["native_artifacts"] = [str(p) for p in sorted(native.rglob("*")) if p.is_file()]
     if args.evidence:
         write(args.evidence, evidence_record(document))
-    write(args.output, document)
+    write_document(args.output, document)
 
 
 if __name__ == "__main__":

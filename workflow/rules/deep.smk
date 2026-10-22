@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 from safety.deep_resources import config_input_paths, load_discovered_inputs
+from safety.state_storage import object_paths
 
 
 def safety_deep_sources():
@@ -15,6 +16,7 @@ def safety_deep_sources():
              "placement_native.py", "placement_scoring.py", "placement_diagnostics.py",
              "candidate_labels.py", "deep_workflow.py")
     return [str(ROOT / "workflow/lib/safety/deep.py"),
+            str(ROOT / "workflow/lib/safety/state_storage.py"),
             str(ROOT / "workflow/lib/safety/deep_resources.py"),
             str(ROOT / "workflow/lib/safety/runtime.py")] + [
         str(ROOT / "workflow/vendor/basis" / name) for name in names]
@@ -30,21 +32,35 @@ def safety_deep_resource_paths(wc):
 
 def safety_deep_targets(wc, phase):
     prepared = checkpoints.safety_deep_prepare.get(isolate=wc.isolate)
+    safety_deep_state(prepared.output.state)
     document = json.loads(Path(prepared.output.state).read_text())
-    return expand("{isolate}/safety/deepsafe/candidates/{candidate}/{phase}.json",
-                  isolate=[wc.isolate], candidate=document["selected_candidate_ids"], phase=[phase])
+    return [safety_deep_state(path) for path in expand(
+        "{isolate}/safety/deepsafe/candidates/{candidate}/{phase}.json",
+        isolate=[wc.isolate], candidate=document["selected_candidate_ids"], phase=[phase])]
 
 
 def safety_deep_parent(wc):
     root = wc.isolate + "/safety/deepsafe/"
     if wc.phase == "domains":
-        return checkpoints.safety_deep_prepare.get(isolate=wc.isolate).output.state
+        return safety_deep_state(checkpoints.safety_deep_prepare.get(isolate=wc.isolate).output.state)
     if wc.phase == "phylogeny":
-        return root + "states/tree-plan.json"
+        return safety_deep_state(root + "states/tree-plan.json")
     if wc.phase == "placement":
-        return root + "states/placement-plan.json"
+        return safety_deep_state(root + "states/placement-plan.json")
     previous = {"patterns": "phylogeny", "profiles": "patterns", "motifs": "profiles"}[wc.phase]
-    return root + "candidates/" + wc.candidate + "/" + previous + ".json"
+    return safety_deep_state(root + "candidates/" + wc.candidate + "/" + previous + ".json")
+
+
+def safety_deep_state(path):
+    # The manifest is the stable DAG input. Check referenced objects on resume;
+    # the worker verifies their checksums before consuming them. Making the
+    # input list depend on whether a non-checkpoint parent exists would cause
+    # unnecessary reruns on every transition from an empty to a populated DAG.
+    if Path(path).is_file():
+        for blob in object_paths(path):
+            if not blob.is_file():
+                raise ValueError("Missing shared state object: " + str(blob))
+    return str(path)
 
 
 checkpoint safety_deep_resource_inputs:
@@ -92,7 +108,9 @@ checkpoint safety_deep_prepare:
 
 
 rule safety_deep_candidate:
-    input: previous=safety_deep_parent, source=safety_deep_sources()
+    input:
+        previous=safety_deep_parent,
+        source=safety_deep_sources()
     output:
         state="{isolate}/safety/deepsafe/candidates/{candidate}/{phase}.json",
         native=directory("{isolate}/safety/deepsafe/native/{phase}/{candidate}")
@@ -115,7 +133,7 @@ rule safety_deep_candidate:
 
 rule safety_deep_references:
     input:
-        parent="{isolate}/safety/deepsafe/states/prepare.json",
+        parent=lambda wc: safety_deep_state(wc.isolate + "/safety/deepsafe/states/prepare.json"),
         candidates=lambda wc: safety_deep_targets(wc, "domains"),
         source=safety_deep_sources()
     output:
@@ -136,7 +154,9 @@ rule safety_deep_references:
 
 
 rule safety_deep_tree_plan:
-    input: parent="{isolate}/safety/deepsafe/states/references.json", source=safety_deep_sources()
+    input:
+        parent=lambda wc: safety_deep_state(wc.isolate + "/safety/deepsafe/states/references.json"),
+        source=safety_deep_sources()
     output:
         state="{isolate}/safety/deepsafe/states/tree-plan.json",
         native=directory("{isolate}/safety/deepsafe/native/tree-plan")
@@ -154,7 +174,7 @@ rule safety_deep_tree_plan:
 
 rule safety_deep_placement_plan:
     input:
-        parent="{isolate}/safety/deepsafe/states/tree-plan.json",
+        parent=lambda wc: safety_deep_state(wc.isolate + "/safety/deepsafe/states/tree-plan.json"),
         candidates=lambda wc: safety_deep_targets(wc, "motifs"),
         source=safety_deep_sources()
     output:
@@ -175,7 +195,7 @@ rule safety_deep_placement_plan:
 
 rule safety_deep_finalize:
     input:
-        parent="{isolate}/safety/deepsafe/states/placement-plan.json",
+        parent=lambda wc: safety_deep_state(wc.isolate + "/safety/deepsafe/states/placement-plan.json"),
         candidates=lambda wc: safety_deep_targets(wc, "placement"),
         source=safety_deep_sources()
     output:

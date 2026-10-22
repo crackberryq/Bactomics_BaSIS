@@ -81,12 +81,24 @@ def _json_summary(path):
         result = json.load(handle, object_pairs_hook=unique,
                            parse_constant=lambda value: (_ for _ in ()).throw(
                                ValueError(f"HybAs {path}: invalid number {value}")))
-    if not isinstance(result, dict) or any(
-        not _KEY.fullmatch(key) or isinstance(value, (dict, list))
-        or (isinstance(value, float) and not math.isfinite(value))
-        for key, value in result.items()
-    ):
-        raise ValueError(f"HybAs {path}: summary must be a flat object with valid keys")
+    if not isinstance(result, dict) or any(not _KEY.fullmatch(key) for key in result):
+        raise ValueError(f"HybAs {path}: summary must be an object with valid keys")
+    for key, value in result.items():
+        # HybAs 9 adds these two structured execution metadata fields. All other
+        # fields, including identity and decision provenance, remain scalar.
+        if key == "executed_stages":
+            if not isinstance(value, list) or any(
+                not isinstance(stage, str) or not _KEY.fullmatch(stage) for stage in value
+            ):
+                raise ValueError(f"HybAs {path}: executed_stages must be a list of stage names")
+        elif key == "skipped_stages":
+            if not isinstance(value, dict) or any(
+                not _KEY.fullmatch(stage) or not isinstance(reason, str) or not reason.strip()
+                for stage, reason in value.items()
+            ):
+                raise ValueError(f"HybAs {path}: skipped_stages must map stage names to nonempty string reasons")
+        elif isinstance(value, (dict, list)) or (isinstance(value, float) and not math.isfinite(value)):
+            raise ValueError(f"HybAs {path}: summary field {key} must be a finite scalar")
     return result
 
 
