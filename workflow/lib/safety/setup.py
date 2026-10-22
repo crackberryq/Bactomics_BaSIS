@@ -35,13 +35,19 @@ def environment(recipe, output):
                          ("name", "version", "build", "channel", "url", "sha256", "md5")})
     recipe = Path(recipe)
     post = recipe.with_suffix(".post-deploy.sh")
-    write_json(output, {"schema": "basis-snake-environment-v1", "status": "completed",
+    record = {"schema": "basis-snake-environment-v1", "status": "completed",
         "prefix": str(prefix), "recipe": str(recipe),
         "recipe_sha256": hashlib.sha256(recipe.read_bytes()).hexdigest(),
         "post_deploy_sha256": hashlib.sha256(post.read_bytes()).hexdigest(),
         "packages": packages, "conda_managed": bool(packages),
-        "platform": platform.platform(), "machine": platform.machine(),
-        "created_at": datetime.now(timezone.utc).isoformat()})
+        "platform": platform.platform(), "machine": platform.machine()}
+    output = Path(output)
+    if output.is_file():
+        previous = read_json(output)
+        if {key: value for key, value in previous.items() if key != "created_at"} == record:
+            return  # Stable contents and mtime avoid invalidating database jobs.
+    record["created_at"] = datetime.now(timezone.utc).isoformat()
+    write_json(output, record)
 
 
 def finalize(directory, resources, environments):

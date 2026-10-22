@@ -191,6 +191,37 @@ snakemake --snakefile BaSIS.smk \
 
 Then repeat the normal run command. Unlocking removes a workflow lock; the subsequent run handles incomplete work. Snakemake can discard and rebuild an interrupted or failed Conda deployment. An arbitrary failure in a tool whose environment was fully deployed does not imply that the environment will be rebuilt. Do not routinely delete environments, result folders or Snakemake metadata, and do not add `--forceall` to a resume command.
 
+### Database preservation and CRISPR job batching
+
+Resource jobs publish small completion records. Prepared databases live in
+verified snapshots outside Snakemake's failed-output cleanup, and matching
+requests reuse those snapshots. Failed preparation retains its files and
+diagnostics. Environment records depend on installation checks rather than
+sample policy code. Native command stdout and stderr are logged while running.
+geNomad additionally retains validated download archives, checks transfer length
+and gzip/tar integrity, and retries transient transfers up to three times.
+
+CRISPRCasFinder now groups 32 contigs into each scheduler job by default:
+
+```yaml
+modules:
+  crisprcasfinder:
+    batch_size: 32
+```
+
+Every contig still receives the same native call and output verification.
+Completed contigs have individual restart records and survive a later failure
+in their batch. For example, 3,699 contigs require 116 batch jobs plus preparation
+and collection; this reduces scheduler overhead, not the number of native
+analyses. AWARE continues to control later DeepSafe admission separately.
+
+Read [resource and batch recovery](docs/RESOURCES_AND_BATCHES.md) before updating
+an existing run. Finish or stop the running workflow before changing its code.
+Older automatically prepared resources without sufficient preparation identity
+must be selected through explicit local paths; they are preserved. Existing
+CRISPR outputs without the new restart records may require one recomputation,
+with the previous files retained.
+
 ### Shared checkpoint storage and offline compaction
 
 DeepSafe now stores shared JSON context, retrieval audit data and planning metadata
@@ -250,8 +281,9 @@ python scripts/preview_aware.py --isolate /absolute/path/to/isolate
 
 The report includes effective settings, qualifying/selected counts and separate
 admission/budget deferrals. `deep.aware.enabled: false` retains legacy admission.
-The existing candidate stages and compact checkpoint storage remain in use;
-this update does not claim cross-sample sequence caching or batched execution.
+The existing candidate stages and compact checkpoint storage remain in use.
+CRISPR scheduling batches are separate from DeepSafe candidate stages;
+cross-sample sequence caching is not implemented.
 
 ## Interpretation and reproducibility
 

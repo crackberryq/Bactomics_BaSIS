@@ -109,6 +109,10 @@ class SafetyContext:
                 _positive(section.get(key, 1), name + "." + key)
             section["command_prefix"] = []
         cfg["modules"]["pathogenfinder2"]["enabled"] &= self.extend_enabled
+        batch_size = cfg["modules"]["crisprcasfinder"].get("batch_size", 32)
+        if _positive(batch_size, "crisprcasfinder.batch_size") > 1024:
+            raise ValueError("crisprcasfinder.batch_size must be between 1 and 1024")
+        cfg["modules"]["crisprcasfinder"]["batch_size"] = batch_size
         cfg["deep"].setdefault("executables", {})["iqtree"] = "iqtree2"
         resources = supplied.get("resources", {})
         if not isinstance(resources, dict) or resources.get("policy", "auto") not in {"auto", "manual"}:
@@ -121,6 +125,28 @@ class SafetyContext:
         self.decisions = {isolate: plan_sample_modules(cfg, sample, self.extend_enabled)
                           for isolate, sample in self.samples.items()}
         self._specs = self._resource_specs()
+        self._check_resource_links()
+
+    def _check_resource_links(self):
+        """Detect missing undeclared payload links without changing the DAG's files."""
+        for name, spec in self._specs.items():
+            if spec.get("mode") == "external":
+                continue
+            receipt = Path(self.resource_root) / name / "provenance.json"
+            if not receipt.is_file():
+                continue  # Preparation will create or restore the managed link.
+            row = json.loads(receipt.read_text(encoding="utf-8"))
+            if not row.get("cache_key") or not row.get("payload_root"):
+                continue  # Legacy migration is handled by the resource worker.
+            payload = Path(row["payload_root"])
+            if not payload.is_dir():
+                raise ValueError(f"Prepared resource payload is missing: {payload}. Restore the recorded snapshot before resuming.")
+            alias = receipt.parent / "data"
+            if not alias.is_symlink() or alias.resolve() != payload.resolve():
+                raise ValueError(
+                    f"Managed resource link is missing or changed: {alias}. With the workflow stopped, "
+                    f"move only {receipt} aside and rerun the same command. The verified snapshot "
+                    "cache will restore its link and receipt without a download.")
 
     def _samples(self, supplied):
         # A direct isolate=... command line overrides the saved batch list.

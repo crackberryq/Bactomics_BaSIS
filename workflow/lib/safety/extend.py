@@ -335,7 +335,8 @@ def collect_pf2(sample, config, native, embeddings, manifest):
                 "Attention is an exploratory ranking signal, not evidence of virulence or causal function."]}
 
 
-def prepare_contigs(sample, destination):
+def prepare_contigs(sample, destination, batch_size=32):
+    from safety.ccf_batches import make_plan
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     mapping = {}
@@ -350,6 +351,7 @@ def prepare_contigs(sample, destination):
     if not mapping:
         raise ValueError("No assembly contigs")
     write_json(destination / "contigs.json", mapping)
+    write_json(destination / "batches.json", make_plan(mapping, batch_size))
 
 
 def run_contig(config, staged, safe, destination, logfile):
@@ -461,7 +463,7 @@ def collect_ccf(sample, config, contigs, native):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=["embed", "classify", "pf2-collect", "ccf-prepare", "ccf-contig", "ccf-collect", "normalize"])
+    parser.add_argument("stage", choices=["embed", "classify", "pf2-collect", "ccf-prepare", "ccf-contig", "ccf-batch", "ccf-collect", "normalize"])
     parser.add_argument("--sample", required=True)
     parser.add_argument("--config", required=True)
     parser.add_argument("--output", required=True)
@@ -471,6 +473,9 @@ def main(argv=None):
     parser.add_argument("--native")
     parser.add_argument("--contigs")
     parser.add_argument("--contig")
+    parser.add_argument("--batch")
+    parser.add_argument("--batch-receipts", nargs="+")
+    parser.add_argument("--log-directory")
     parser.add_argument("--log")
     parser.add_argument("--threads", type=int)
     parser.add_argument("--module", choices=["pathogenfinder2", "crisprcasfinder"])
@@ -488,12 +493,28 @@ def main(argv=None):
     elif args.stage == "classify":
         classify(sample, config, args.embeddings, args.manifest, args.output, args.log)
     elif args.stage == "ccf-prepare":
-        prepare_contigs(sample, args.output)
+        prepare_contigs(sample, args.output, config.get("batch_size", 32))
     elif args.stage == "ccf-contig":
         run_contig(config, Path(args.contigs) / f"{args.contig}.fna", args.contig, args.output, args.log)
+    elif args.stage == "ccf-batch":
+        from safety.ccf_batches import run_batch
+        if not all((args.batch, args.contigs, args.native, args.log_directory)):
+            parser.error("ccf-batch requires --batch, --contigs, --native and --log-directory")
+        run_batch(read_json(args.config), args.contigs, args.batch, args.native,
+                  args.output, args.log_directory, threads=args.threads)
     else:
+        audit = None
+        if args.stage == "ccf-collect":
+            from safety.ccf_batches import verify_batches
+            if not args.batch_receipts:
+                parser.error("ccf-collect requires --batch-receipts")
+            audit = verify_batches(read_json(args.config), args.contigs, args.native, args.batch_receipts)
         parsed = (collect_pf2(sample, config, args.native, args.embeddings, args.manifest)
                   if args.stage == "pf2-collect" else collect_ccf(sample, config, args.contigs, args.native))
+        if audit:
+            parsed["metrics"].update(scheduler_batch_count=audit["batch_count"],
+                                     scheduler_contigs_per_batch=audit["batch_size"])
+            parsed["artifacts"].extend(audit["artifacts"])
         write_json(args.output, parsed)
 
 

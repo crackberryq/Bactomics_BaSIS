@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import selectors
 import shlex
 import subprocess
 import tempfile
@@ -54,33 +55,57 @@ class DirectRunner:
         environment.pop("PYTHONPATH", None)
         environment.pop("PYTHONHOME", None)
         environment["PYTHONNOUSERSITE"] = "1"
+        environment["PYTHONUNBUFFERED"] = "1"
         for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
             environment[name] = str(self.threads)
         entry = {"argv": argv, "cwd": str(cwd) if cwd else None,
                  "started_at": datetime.now(timezone.utc).isoformat()}
         self.commands.append(entry)
-        with self.logfile.open("a", encoding="utf-8") as log:
-            log.write("\n$ " + shlex.join(argv) + "\n")
+        with self.logfile.open("ab") as log:
+            log.write(("\n$ " + shlex.join(argv) + "\n").encode("utf-8"))
             log.flush()
-            # Stream stderr directly so a live log remains useful. Capture stdout
-            # in a temporary file: return-value parsers need it, large tool output
-            # need not occupy RAM while the process is running.
-            if stdout_path:
-                target = Path(stdout_path)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with target.open("w", encoding="utf-8") as output:
-                    result = subprocess.run(argv, cwd=cwd, env=environment,
-                                            stdout=output, stderr=log, text=True)
-                stdout = ""
-            else:
-                with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as output:
-                    result = subprocess.run(argv, cwd=cwd, env=environment,
-                                            stdout=output, stderr=log, text=True)
-                    output.seek(0)
-                    stdout = output.read()
-                    log.write(stdout)
-            entry.update(returncode=result.returncode,
+            # Drain both streams continuously. Keep stdout separate for parsers;
+            # stderr must never contaminate their JSON/FASTA/version responses.
+            with tempfile.TemporaryFile() as captured:
+                target = None
+                if stdout_path:
+                    path = Path(stdout_path)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    target = path.open("wb")
+                try:
+                    with subprocess.Popen(argv, cwd=cwd, env=environment,
+                                          stdout=target or subprocess.PIPE,
+                                          stderr=subprocess.PIPE) as process:
+                        try:
+                            with selectors.DefaultSelector() as streams:
+                                if process.stdout is not None:
+                                    streams.register(process.stdout, selectors.EVENT_READ, "stdout")
+                                streams.register(process.stderr, selectors.EVENT_READ, "stderr")
+                                while streams.get_map():
+                                    for key, _ in streams.select():
+                                        block = os.read(key.fd, 65536)
+                                        if not block:
+                                            streams.unregister(key.fileobj)
+                                            continue
+                                        if key.data == "stdout":
+                                            captured.write(block)
+                                        log.write(block)
+                                        log.flush()
+                            returncode = process.wait()
+                        except BaseException:
+                            # Match subprocess.run's cleanup on interruption or
+                            # log-write failure; keep Snakemake's process group.
+                            process.kill()
+                            process.wait()
+                            raise
+                finally:
+                    if target is not None:
+                        target.close()
+                captured.seek(0)
+                stdout = captured.read().decode("utf-8", errors="replace") if not stdout_path else ""
+            entry.update(returncode=returncode,
                          finished_at=datetime.now(timezone.utc).isoformat())
-        if result.returncode:
-            raise RuntimeError(f"{Path(argv[0]).name} exited {result.returncode}; log: {self.logfile}")
-        return subprocess.CompletedProcess(argv, result.returncode, stdout=stdout, stderr="")
+            log.write((f"\n# Exit {returncode} at {entry['finished_at']}\n").encode("utf-8"))
+        if returncode:
+            raise RuntimeError(f"{Path(argv[0]).name} exited {returncode}; log: {self.logfile}")
+        return subprocess.CompletedProcess(argv, returncode, stdout=stdout, stderr="")

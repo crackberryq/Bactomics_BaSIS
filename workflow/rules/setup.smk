@@ -4,6 +4,8 @@ SETUP_SOURCE = [str(ROOT / "workflow/lib/safety" / name) for name in
                 ("setup.py", "context.py", "resources.py", "runtime.py")]
 ALL_RESOURCE_RECEIPTS = [CTX.resource_receipt(name) for name in CTX.resource_specs()]
 ALL_ENVIRONMENT_RECEIPTS = CTX.environment_receipts()
+ENVIRONMENT_SOURCE = [str(ROOT / "workflow/lib/safety" / name)
+                      for name in ("setup.py", "runtime.py")]
 ENVIRONMENT_PATTERN = "|".join(re.escape(name) for name in CTX.needed_recipes()) or "(?!)"
 
 
@@ -42,7 +44,7 @@ rule capture_environment:
     input:
         recipe=lambda w: CTX.env(w.recipe),
         checks=lambda w: str(Path(CTX.env(w.recipe)).with_suffix('.post-deploy.sh')),
-        source=SETUP_SOURCE
+        source=ENVIRONMENT_SOURCE
     output:
         str(CTX.resource_root) + "/environments/{recipe}.json"
     wildcard_constraints: recipe=ENVIRONMENT_PATTERN

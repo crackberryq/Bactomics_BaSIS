@@ -54,6 +54,35 @@ class ContextTests(unittest.TestCase):
         config.update(changes)
         return SafetyContext(config, ROOT)
 
+    def test_crispr_batch_size_is_a_bounded_scheduling_integer(self):
+        cfg = self.base_config([])
+        self.assertEqual(SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"]["batch_size"], 32)
+        for value in (0, -1, True, 1.5, "32", 1025):
+            cfg["modules"]["crisprcasfinder"]["batch_size"] = value
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "batch_size"):
+                SafetyContext(cfg, ROOT)
+        cfg["modules"]["crisprcasfinder"]["batch_size"] = 1
+        self.assertEqual(SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"]["batch_size"], 1)
+
+    def test_missing_managed_resource_link_cannot_be_a_silent_noop(self):
+        cfg = self.base_config([])
+        cfg["modules"]["vfdb"]["enabled"] = True
+        payload = self.resource_root / "snapshots/vfdb/key/attempt/data"
+        payload.mkdir(parents=True)
+        (payload / "vfdb_setA.dmnd").write_text("synthetic database fixture")
+        receipt = self.resource_root / "vfdb/provenance.json"
+        receipt.parent.mkdir()
+        receipt.write_text(json.dumps({"cache_key": "key", "payload_root": str(payload)}))
+        with self.assertRaisesRegex(ValueError, "Managed resource link"):
+            SafetyContext(cfg, ROOT)
+        alias = receipt.parent / "data"
+        alias.symlink_to(payload, target_is_directory=True)
+        context = SafetyContext(cfg, ROOT)
+        self.assertIn("vfdb", context.resource_specs())
+        alias.unlink()
+        receipt.rename(receipt.with_suffix(".repair-backup"))
+        SafetyContext(cfg, ROOT)  # The missing receipt can now schedule recovery.
+
     def test_csv_tsv_and_xlsx_preserve_ids_and_resolve_relative_paths(self):
         rows = [self.annotation("folder A", "001", arbitrary=True),
                 self.annotation("folder B", "sample-B", arbitrary=True)]

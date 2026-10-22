@@ -89,6 +89,7 @@ class StandaloneWorkflowTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.calls = self.root / "native-calls.jsonl"
+        self.version_calls = self.root / "version-calls.txt"
         self.allow = self.root / "allow-sample-b"
         self.bad_setup = self.root / "fail-environment-check"
         self.isolates = [self.root / "isolateA", self.root / "isolateB"]
@@ -98,6 +99,8 @@ class StandaloneWorkflowTests(unittest.TestCase):
             import json, os, sys
             from pathlib import Path
             if "--version" in sys.argv:
+                with open(os.environ["BASIS_FIXTURE_VERSION_CALLS"], "a") as handle:
+                    handle.write("probe\n")
                 if Path(os.environ["BASIS_FIXTURE_BAD_SETUP"]).exists():
                     print("Synthetic environment probe failure", file=sys.stderr)
                     raise SystemExit(31)
@@ -134,6 +137,7 @@ class StandaloneWorkflowTests(unittest.TestCase):
         self.environment.update(PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
                                 CONDA_PREFIX=str(self.root),
                                 BASIS_FIXTURE_CALLS=str(self.calls), BASIS_FIXTURE_ALLOW=str(self.allow),
+                                BASIS_FIXTURE_VERSION_CALLS=str(self.version_calls),
                                 BASIS_FIXTURE_BAD_SETUP=str(self.bad_setup))
         self.invocations = 0
 
@@ -239,6 +243,22 @@ class StandaloneWorkflowTests(unittest.TestCase):
         self.assertFalse(self.events(), "An analysis started before its environment/resource check passed")
         for isolate in self.isolates:
             self.assertFalse((isolate / "safety/native/minced").exists())
+
+    def test_resource_rerun_restores_receipt_without_reexecuting_provider(self):
+        self.snake("setup")
+        receipt = self.root / "resources/minced/provenance.json"
+        original = receipt.read_bytes()
+        probes = self.version_calls.read_text()
+        artifacts = json.loads(original)["artifacts"]
+        payload = {path: Path(path).read_bytes() for path in artifacts}
+        receipt.unlink()  # Simulate scheduler cleanup after a failed job.
+        self.snake("setup")
+        self.assertEqual(self.version_calls.read_text(), probes)
+        self.assertEqual(receipt.read_bytes(), original)
+        self.snake("setup", "--forcerun", "prepare_resource")
+        self.assertEqual(self.version_calls.read_text(), probes)
+        self.assertEqual({path: Path(path).read_bytes() for path in payload}, payload)
+        self.assertFalse(self.events(), "Resource checks must not execute sample analysis")
 
     def test_invalid_sample_blocks_batch_analyses(self):
         self.allow.touch()

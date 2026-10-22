@@ -6,7 +6,7 @@ PF2_CODE = [str(ROOT / path) for path in (
     "workflow/vendor/basis/adapters/extend.py", "workflow/vendor/basis/inputs.py",
     "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py")]
 CCF_CODE = [str(ROOT / path) for path in (
-    "workflow/lib/safety/extend.py", "workflow/lib/safety/runtime.py",
+    "workflow/lib/safety/extend.py", "workflow/lib/safety/ccf_batches.py", "workflow/lib/safety/runtime.py",
     "workflow/vendor/basis/adapters/crisprcasfinder.py", "workflow/vendor/basis/inputs.py",
     "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py")]
 
@@ -159,13 +159,20 @@ def ccf_contigs_directory(w):
     return checkpoints.crisprcasfinder_contigs.get(isolate=w.isolate).output.contigs
 
 
-def ccf_contig_outputs(w):
+def ccf_batch_receipts(w):
+    from safety.ccf_batches import check_receipt_outputs, load_plan
     folder = Path(ccf_contigs_directory(w))
-    mapping = extend_read_json(folder / "contigs.json")
-    return [str(extend_native(w.isolate, "crisprcasfinder") / key) for key in mapping]
+    _, plan = load_plan(folder)
+    native = extend_native(w.isolate, "crisprcasfinder")
+    receipts = []
+    for key, members in plan["batches"].items():
+        receipt = native / "batches" / (key + ".json")
+        check_receipt_outputs(receipt, members, native)
+        receipts.append(str(receipt))
+    return receipts
 
 
-rule crisprcasfinder_contig:
+rule crisprcasfinder_batch:
     input:
         setup=lambda w: CTX.setup_target(w.isolate),
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
@@ -174,11 +181,13 @@ rule crisprcasfinder_contig:
         resources=lambda w: CTX.resource_inputs("crisprcasfinder"),
         code=CCF_CODE
     output:
-        native=directory("{isolate}/safety/native/crisprcasfinder/{ccf_contig}")
+        receipt="{isolate}/safety/native/crisprcasfinder/batches/{ccf_batch}.json"
     wildcard_constraints:
-        ccf_contig="CCF[0-9]{6}"
+        ccf_batch="CCB[0-9]+"
     params:
-        code=CODE_PATH
+        code=CODE_PATH,
+        native=lambda w: str(extend_native(w.isolate, "crisprcasfinder")),
+        log_directory=lambda w: str(Path(w.isolate) / "safety/logs/crisprcasfinder")
     threads:
         lambda w: CTX.module_config(w.isolate, "crisprcasfinder").get("threads", 4)
     resources:
@@ -186,20 +195,20 @@ rule crisprcasfinder_contig:
     conda:
         CTX.env("crisprcasfinder")
     log:
-        job="{isolate}/safety/logs/crisprcasfinder/{ccf_contig}.log",
-        native="{isolate}/safety/logs/crisprcasfinder/{ccf_contig}.commands.log"
+        "{isolate}/safety/logs/crisprcasfinder/batches/{ccf_batch}.log"
     benchmark:
-        "{isolate}/safety/benchmarks/crisprcasfinder/{ccf_contig}.tsv"
+        "{isolate}/safety/benchmarks/crisprcasfinder/batches/{ccf_batch}.tsv"
     message:
-        "Run and verify CRISPRCasFinder contig {wildcards.ccf_contig}: {wildcards.isolate}"
+        "Run and verify CRISPRCasFinder batch {wildcards.ccf_batch}: {wildcards.isolate}"
     shell:
         r"""
-        mkdir -p "$(dirname {log.job:q})"
-        PYTHONPATH={params.code:q} python -m safety.extend ccf-contig \
+        mkdir -p "$(dirname {log:q})"
+        PYTHONPATH={params.code:q} python -m safety.extend ccf-batch \
             --sample {input.sample:q} --config {input.config:q} \
-            --contigs {input.contigs:q} --contig {wildcards.ccf_contig:q} \
-            --output {output.native:q} --log {log.native:q} \
-            --threads {threads} > {log.job:q} 2>&1
+            --contigs {input.contigs:q} --batch {wildcards.ccf_batch:q} \
+            --native {params.native:q} --output {output.receipt:q} \
+            --log-directory {params.log_directory:q} \
+            --threads {threads} > {log:q} 2>&1
         """
 
 
@@ -208,7 +217,7 @@ rule crisprcasfinder_collect:
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
         config=lambda w: extend_metadata(w.isolate, "config.json"),
         contigs=ccf_contigs_directory,
-        native=ccf_contig_outputs,
+        batches=ccf_batch_receipts,
         code=CCF_CODE
     output:
         "{isolate}/safety/native/crisprcasfinder/parsed.json"
@@ -226,6 +235,7 @@ rule crisprcasfinder_collect:
         PYTHONPATH={params.code:q} {params.python:q} -m safety.extend ccf-collect \
             --sample {input.sample:q} --config {input.config:q} \
             --contigs {input.contigs:q} --native {params.native:q} \
+            --batch-receipts {input.batches:q} \
             --output {output:q} > {log:q} 2>&1
         """
 
