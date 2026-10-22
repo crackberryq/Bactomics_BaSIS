@@ -2,11 +2,16 @@
 # ready before any sample's biological analysis starts.
 SETUP_SOURCE = [str(ROOT / "workflow/lib/safety" / name) for name in
                 ("setup.py", "context.py", "resources.py", "runtime.py")]
+VALIDATION_SOURCE = [str(ROOT / "workflow/lib/safety/setup.py"),
+                     str(ROOT / "workflow/vendor/basis/inputs.py"),
+                     str(ROOT / "workflow/vendor/basis/sequence_validation.py")]
 ALL_RESOURCE_RECEIPTS = [CTX.resource_receipt(name) for name in CTX.resource_specs()]
 ALL_ENVIRONMENT_RECEIPTS = CTX.environment_receipts()
 ENVIRONMENT_SOURCE = [str(ROOT / "workflow/lib/safety" / name)
                       for name in ("setup.py", "runtime.py")]
 ENVIRONMENT_PATTERN = "|".join(re.escape(name) for name in CTX.needed_recipes()) or "(?!)"
+MODULE_CONFIG_PATTERN = "|".join(re.escape(name) for name in
+                                [*CTX.config["modules"], "deepsafe"])
 
 
 rule setup:
@@ -20,15 +25,12 @@ rule validate_inputs:
     input:
         annotations=lambda w: [CTX.samples[w.isolate][key] for key in
                               ("assembly", "proteins", "gff", "genbank") if CTX.samples[w.isolate].get(key)],
-        source=SETUP_SOURCE + [str(ROOT / "workflow/vendor/basis/inputs.py"),
-                              str(ROOT / "workflow/vendor/basis/sequence_validation.py")]
+        source=VALIDATION_SOURCE
     output:
         sample="{isolate}/safety/metadata/sample.json",
-        validation="{isolate}/safety/metadata/validation.json",
-        requested="{isolate}/safety/metadata/requested-config.json"
+        validation="{isolate}/safety/metadata/validation.json"
     params:
         sample=lambda w: json.dumps(CTX.samples[w.isolate], sort_keys=True),
-        config=lambda w: json.dumps(CTX.sample_config(w.isolate), sort_keys=True),
         directory=lambda w: w.isolate + "/safety/metadata"
     threads: 1
     resources: mem_mb=2000
@@ -36,8 +38,38 @@ rule validate_inputs:
     message: "Check annotation identity and capture inputs: {wildcards.isolate}"
     shell:
         "PYTHONPATH={CODE_PATH:q} {PYTHON:q} -m safety.setup validate "
-        "--sample-json {params.sample:q} --config-json {params.config:q} "
+        "--sample-json {params.sample:q} "
         "--directory {params.directory:q} > {log:q} 2>&1"
+
+
+rule capture_requested_config:
+    input: source=SETUP_SOURCE
+    output: "{isolate}/safety/metadata/requested-config.json"
+    params: config=lambda w: json.dumps(CTX.sample_config(w.isolate), sort_keys=True)
+    threads: 1
+    resources: mem_mb=1000
+    log: "{isolate}/safety/logs/config-requested.log"
+    shell:
+        "PYTHONPATH={CODE_PATH:q} {PYTHON:q} -m safety.setup requested "
+        "--config-json {params.config:q} --output {output:q} > {log:q} 2>&1"
+
+
+rule resolve_module_config:
+    input:
+        resources=lambda w: CTX.resource_inputs(w.config_module),
+        environments=lambda w: CTX.module_environment_receipts(w.config_module),
+        source=SETUP_SOURCE
+    output: "{isolate}/safety/metadata/configs/{config_module}.json"
+    wildcard_constraints: config_module=MODULE_CONFIG_PATTERN
+    params: config=lambda w: json.dumps(CTX.module_document(w.isolate, w.config_module), sort_keys=True)
+    threads: 1
+    resources: mem_mb=1000
+    log: "{isolate}/safety/logs/configs/{config_module}.log"
+    message: "Resolve execution configuration for {wildcards.config_module}: {wildcards.isolate}"
+    shell:
+        "PYTHONPATH={CODE_PATH:q} {PYTHON:q} -m safety.setup module "
+        "--config-json {params.config:q} --output {output:q} "
+        "--resources {input.resources:q} --environments {input.environments:q} > {log:q} 2>&1"
 
 
 rule capture_environment:

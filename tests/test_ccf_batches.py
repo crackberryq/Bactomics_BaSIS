@@ -50,13 +50,21 @@ class ContigBatchTests(unittest.TestCase):
                        "resource_receipts": [{"path": str(self.resource)}],
                        "environment_receipts": [str(self.environment)]}
         self.calls = []
+        self.preparation_calls = []
         self.fail_on = None
         self.run_patch = patch.object(extend, "run_contig", self.fake_contig)
         self.run_patch.start()
         self.addCleanup(self.run_patch.stop)
+        self.prepare_patch = patch.object(extend, "prepare_ccf_execution", self.fake_prepare)
+        self.prepare_patch.start()
+        self.addCleanup(self.prepare_patch.stop)
         extend.prepare_contigs(self.sample, self.contigs, 3)
 
-    def fake_contig(self, config, staged, safe, work, logfile):
+    def fake_prepare(self, config):
+        self.preparation_calls.append(dict(config))
+        return {"settings": dict(config)}
+
+    def fake_contig(self, config, staged, safe, work, logfile, *, prepared=None, contig_name=None):
         """Write a parser-valid, explicitly synthetic no-CDS native fixture."""
         self.calls.append(safe)
         if safe == self.fail_on:
@@ -75,6 +83,11 @@ class ContigBatchTests(unittest.TestCase):
             "wrapper_sha256": hashlib.sha256(extend.ccf._MACSY_SHIM.encode()).hexdigest(),
             "config_sha256": hashlib.sha256((work / "macsyfinder.conf").read_bytes()).hexdigest(),
             "policy": "disable_system_and_user_config_readers", "home_environment_unchanged": True})
+        findings, status = extend.ccf.parse_contig(native, safe, contig_name or safe, sequence,
+                                                  (work / "stdout.txt").read_text(),
+                                                  config.get("min_evidence_level", 3))
+        extend.ccf._verify_runtime_isolation(work, status)
+        return {"findings": findings, "status": status}
 
     def receipt(self, batch="CCB000001"):
         return self.native / "batches" / (batch + ".json")
@@ -185,6 +198,61 @@ class ContigBatchTests(unittest.TestCase):
             self.run_batch(config=config)
         self.assertEqual(self.calls, [])
 
+    def test_static_preparation_once_and_cached_collection_never_reparses(self):
+        with patch.object(extend.ccf, "parse_contig", wraps=extend.ccf.parse_contig) as parser:
+            self.run_batch()
+            self.assertEqual(len(self.preparation_calls), 1)
+            self.assertEqual(parser.call_count, 3)
+            self.run_batch()
+            self.assertEqual(len(self.preparation_calls), 1)
+            audit = batches.verify_batches(self.config, self.contigs, self.native, [self.receipt()])
+            cached = extend.collect_ccf(self.sample, self.config["modules"]["crisprcasfinder"],
+                                       self.contigs, self.native, verified_parsed=audit["parsed"])
+            self.assertEqual(parser.call_count, 3)
+        uncached = extend.collect_ccf(self.sample, self.config["modules"]["crisprcasfinder"],
+                                     self.contigs, self.native)
+        self.assertEqual(cached, uncached)
+
+    def test_cached_result_and_extra_native_files_are_integrity_checked(self):
+        self.run_batch()
+        cached = self.native / "CCF000001" / batches.PARSED
+        payload = extend.read_json(cached)
+        payload["status"]["status"] = "completed"
+        extend.write_json(cached, payload)
+        with self.assertRaisesRegex(ValueError, "inputs and outputs"):
+            batches.verify_batches(self.config, self.contigs, self.native, [self.receipt()])
+        self.run_batch()
+        self.assertEqual(self.calls[3:], ["CCF000001"])
+        write(self.native / "CCF000002" / "unexpected.txt", "extra")
+        with self.assertRaisesRegex(ValueError, "inputs and outputs"):
+            batches.verify_batches(self.config, self.contigs, self.native, [self.receipt()])
+
+    def test_cached_result_binds_original_identity_and_raw_inventory(self):
+        self.run_batch()
+        work = self.native / "CCF000001"
+        row = extend.read_json(work / batches.COMPLETION)
+        signature = row["execution_identity"]
+        mapping, _ = batches.load_plan(self.contigs)
+        info = mapping["CCF000001"]
+        payload = extend.read_json(work / batches.PARSED)
+        self.assertEqual(payload["input"]["contig"], "first")
+        payload["input"]["contig"] = "another"
+        extend.write_json(work / batches.PARSED, payload)
+        row["artifacts"] = batches.output_inventory(work)
+        extend.write_json(work / batches.COMPLETION, row)
+        with self.assertRaisesRegex(ValueError, "verified native artifacts"):
+            batches.verify_contig(work, "CCF000001", info, "ACGT", signature,
+                                  self.config["modules"]["crisprcasfinder"])
+
+    def test_contig_cli_does_not_read_unused_sample_metadata(self):
+        config = self.root / "config.json"
+        extend.write_json(config, self.config)
+        extend.main(["ccf-batch", "--sample", str(self.root / "deliberately-absent-sample.json"),
+                     "--config", str(config), "--contigs", str(self.contigs),
+                     "--batch", "CCB000001", "--native", str(self.native),
+                     "--output", str(self.receipt()), "--log-directory", str(self.logs)])
+        self.assertTrue(self.receipt().is_file())
+
 
 @unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake required for scheduler acceptance")
 class ContigBatchSchedulerTests(unittest.TestCase):
@@ -210,7 +278,7 @@ class ContigBatchSchedulerTests(unittest.TestCase):
             sys.path.insert(0, {str(ROOT / "tests")!r})
             from test_ccf_batches import ContigBatchTests
             from safety import extend
-            def fixture_runner(config, staged, safe, work, logfile):
+            def fixture_runner(config, staged, safe, work, logfile, **kwargs):
                 with Path({str(calls)!r}).open("a") as handle:
                     handle.write(json.dumps({{"contig": safe}}) + "\\n")
                 if safe == "CCF000002" and not Path({str(allow)!r}).exists():
@@ -218,9 +286,12 @@ class ContigBatchSchedulerTests(unittest.TestCase):
                 fixture = ContigBatchTests()
                 fixture.calls = []
                 fixture.fail_on = None
-                fixture.fake_contig(config, staged, safe, work, logfile)
+                return fixture.fake_contig(config, staged, safe, work, logfile, **kwargs)
+            def fixture_prepare(config):
+                return {{"settings": dict(config)}}
             assert sys.argv[1:3] == ["-m", "safety.extend"]
             extend.run_contig = fixture_runner
+            extend.prepare_ccf_execution = fixture_prepare
             extend.main(sys.argv[3:])
         '''))
         binary = root / "bin/python"
@@ -258,6 +329,8 @@ class ContigBatchSchedulerTests(unittest.TestCase):
                     return str(Path(isolate) / "safety/metadata/setup.ready.json")
                 def module_config(self, isolate, module):
                     return {fixture.config["modules"]["crisprcasfinder"]!r}
+                def module_config_path(self, isolate, module):
+                    return str(Path(isolate) / "safety/metadata/config.json")
                 def resource_inputs(self, module):
                     return [{str(fixture.resource)!r}]
                 def env(self, module):

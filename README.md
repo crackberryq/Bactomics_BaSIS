@@ -172,6 +172,7 @@ Run that configuration with `--resources mem_mb=20000 gpu=1`. Requesting GPU exe
 | `<isolate>/safety/report.html` | Main offline report and evidence navigation |
 | `<isolate>/safety/evidence.json` | Consolidated machine-readable evidence |
 | `<isolate>/safety/native/` | Native tool outputs, including reusable embeddings |
+| `<isolate>/safety/completion/` and `results-cache/` | Core completion receipts, verified payloads and retained failed attempts |
 | `<isolate>/safety/deepsafe/` | Selected-candidate stages, native outputs and state |
 | `<isolate>/safety/evidence/` | Normalized module records |
 | `<isolate>/safety/tables/` | Findings, review priorities, scope and run summaries |
@@ -191,7 +192,7 @@ snakemake --snakefile BaSIS.smk \
 
 Then repeat the normal run command. Unlocking removes a workflow lock; the subsequent run handles incomplete work. Snakemake can discard and rebuild an interrupted or failed Conda deployment. An arbitrary failure in a tool whose environment was fully deployed does not imply that the environment will be rebuilt. Do not routinely delete environments, result folders or Snakemake metadata, and do not add `--forceall` to a resume command.
 
-### Database preservation and CRISPR job batching
+### Database preservation, job batching and restart checks
 
 Resource jobs publish small completion records. Prepared databases live in
 verified snapshots outside Snakemake's failed-output cleanup, and matching
@@ -214,6 +215,24 @@ Completed contigs have individual restart records and survive a later failure
 in their batch. For example, 3,699 contigs require 116 batch jobs plus preparation
 and collection; this reduces scheduler overhead, not the number of native
 analyses. AWARE continues to control later DeepSafe admission separately.
+
+Core native results also use verified snapshots, with failed-attempt diagnostics
+kept outside Snakemake cleanup. Module-specific configuration prevents a change
+to a downstream AWARE policy from rerunning unrelated upstream work. CRISPR
+workers check static resources once per batch and reuse verified parsed output.
+Configured command timeouts are enforced, with heartbeat and final-status logs;
+DeepSafe stages now use their configured CPU and memory allocations.
+
+Inspect configuration, input paths and existing resource receipts without
+downloads or changes:
+
+```bash
+python scripts/doctor.py --configfile my-study.yaml local-resources.yaml --json
+```
+
+Use the same overlays as your run. Optional `--validate-inputs` and
+`--verify-resources` perform the more expensive read-only checks. Missing setup
+and invalid resources are reported separately.
 
 Read [resource and batch recovery](docs/RESOURCES_AND_BATCHES.md) before updating
 an existing run. Finish or stop the running workflow before changing its code.

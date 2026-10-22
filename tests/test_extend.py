@@ -234,6 +234,48 @@ class ExtendMetadataTests(unittest.TestCase):
         self.assertEqual(assembly.read_text(), original)
         self.assertEqual(extend.read_fasta(output / "CCF000002.fna"), {"CCF000002": "NNACGT"})
 
+    def test_static_ccf_preparation_keeps_checks_and_binds_worker_settings(self):
+        root = self.root / "synthetic-installation"
+        script = root / "CRISPRCasFinder.pl"
+        write(script, "# synthetic installation fixture; not executable\n")
+        write(root / "sel392v2.so", "fixture")
+        models = root / "models/CASFinder"
+        write(models / "metadata.yml", "vers: 3.1.0\n")
+        write(models / "profiles/fixture.hmm", "fixture")
+        write(models / "definitions/fixture.xml", "fixture")
+        config = {"database": str(root), "threads": 2, "min_evidence_level": 3}
+        with patch.object(extend.ccf, "SOURCE_SHA256", hashlib.sha256(script.read_bytes()).hexdigest()):
+            prepared = extend.prepare_ccf_execution(config)
+            self.assertEqual(prepared["models"], models)
+            self.assertEqual(prepared["level"], 3)
+            staged, logfile = self.root / "one.fna", self.root / "commands.log"
+            write(staged, ">CCF000001\nACGT\n")
+            def fake_native(argv, *, cwd, stdout_path):
+                write(stdout_path, "synthetic stdout")
+                logfile.touch()
+            from safety.runtime import DirectRunner
+            result = ([{"contig": "original|identifier"}], {"status": "not_assessed_no_predicted_cds"})
+            with patch.object(DirectRunner, "run", side_effect=fake_native) as runner, \
+                    patch.object(extend.ccf, "parse_contig", return_value=result) as parser, \
+                    patch.object(extend.ccf, "_verify_runtime_isolation"):
+                parsed = extend.run_contig(config, staged, "CCF000001", self.root / "contig-output",
+                                           logfile, prepared=prepared, contig_name="original|identifier")
+            self.assertEqual(parser.call_args.args[2], "original|identifier")
+            self.assertEqual(parsed, {"findings": result[0], "status": result[1]})
+            self.assertEqual(runner.call_args.args[0], [
+                "python", "basis_ccf_launch.py", "perl", "CRISPRCasFinder.pl", "-in", "input.fna",
+                "-out", "native", "-so", "./sel392v2.so", "-cas", "-keep", "-log",
+                "-cpuM", "2", "-gcode", "11"])
+            with self.assertRaisesRegex(ValueError, "settings changed"):
+                extend.run_contig({**config, "threads": 3}, self.root / "absent.fna", "CCF000001",
+                                  self.root / "absent-output", self.root / "absent-log", prepared=prepared)
+            write(models / "metadata.yml", "- unexpected-list\n")
+            with self.assertRaisesRegex(ValueError, "Prepared CASFinder"):
+                extend.prepare_ccf_execution(config)
+            write(script, "modified installation")
+            with self.assertRaisesRegex(ValueError, "checksum differs"):
+                extend.prepare_ccf_execution(config)
+
     def test_unassessed_cas_is_not_reported_as_a_negative_result(self):
         assembly = self.root / "assembly.fna"
         sequence = "A" * 90

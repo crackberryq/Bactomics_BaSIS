@@ -354,9 +354,8 @@ def prepare_contigs(sample, destination, batch_size=32):
     write_json(destination / "batches.json", make_plan(mapping, batch_size))
 
 
-def run_contig(config, staged, safe, destination, logfile):
-    """One per-contig native invocation, isolated from ambient MacSyFinder config."""
-    from safety.runtime import DirectRunner
+def prepare_ccf_execution(config):
+    """Validate static installation/settings once for one bounded worker."""
     import yaml
 
     root = Path(config["database"]).resolve(strict=True)
@@ -369,10 +368,23 @@ def run_contig(config, staged, safe, destination, logfile):
     library = pf2._nonempty(root / "sel392v2.so")
     models = root / "models" / "CASFinder"
     model_info = yaml.safe_load((models / "metadata.yml").read_text())
-    if (str(model_info.get("vers")) != ccf.CAS_MODELS_VERSION
+    if (not isinstance(model_info, dict) or str(model_info.get("vers")) != ccf.CAS_MODELS_VERSION
             or not any((models / "profiles").glob("*.hmm"))
             or not any((models / "definitions").rglob("*.xml"))):
         raise ValueError("Prepared CASFinder 3.1.0 models are required")
+    return {"script": script, "library": library, "models": models, "root": root,
+            "level": level, "settings": dict(config)}
+
+
+def run_contig(config, staged, safe, destination, logfile, *, prepared=None, contig_name=None):
+    """One native invocation; return the parsed output already verified here."""
+    from safety.runtime import DirectRunner
+
+    prepared = prepare_ccf_execution(config) if prepared is None else prepared
+    if prepared["settings"] != config:
+        raise ValueError("CRISPR prepared execution settings changed within a worker")
+    root, script, library, models = (prepared[key] for key in ("root", "script", "library", "models"))
+    level = prepared["level"]
     sequences = read_fasta(staged)
     if list(sequences) != [safe]:
         raise ValueError("Staged CRISPR contig identity mismatch")
@@ -406,10 +418,11 @@ def run_contig(config, staged, safe, destination, logfile):
             if ccf._ERROR.search(ccf._ANSI.sub("", handle.read().decode("utf-8", errors="replace"))):
                 raise ValueError("CRISPRCasFinder command log records a native error")
         stdout = (work / "stdout.txt").read_text()
-        _, status = ccf.parse_contig(work / "native", safe, safe, sequences[safe], stdout,
-                                   level)
+        rows, status = ccf.parse_contig(work / "native", safe, contig_name or safe,
+                                       sequences[safe], stdout, level)
         ccf._verify_runtime_isolation(work, status)
         shutil.move(str(work), destination)
+        return {"findings": rows, "status": status}
     except BaseException:
         # Native diagnostics remain linked from the rule's log; no success output.
         failed = destination.parent / (safe + ".failed-" + work.name)
@@ -420,21 +433,26 @@ def run_contig(config, staged, safe, destination, logfile):
         raise
 
 
-def collect_ccf(sample, config, contigs, native):
+def collect_ccf(sample, config, contigs, native, verified_parsed=None):
     mapping = read_json(Path(contigs) / "contigs.json")
     sequences = read_fasta(sample["assembly"])
     if {r["contig"] for r in mapping.values()} != set(sequences):
         raise ValueError("CRISPR contig map does not cover supplied assembly")
+    if verified_parsed is not None and set(verified_parsed) != set(mapping):
+        raise ValueError("Verified CRISPR parsed records do not cover supplied assembly")
     findings, statuses, artifacts = [], {}, [str(Path(contigs) / "contigs.json")]
     for safe, info in mapping.items():
         sequence = sequences[info["contig"]]
         if len(sequence) != info["length"] or hashlib.sha256(sequence.encode("ascii")).hexdigest() != info["sequence_sha256"]:
             raise ValueError("CRISPR staged contig differs from supplied assembly")
         work = Path(native) / safe
-        stdout = ccf._read(work / "stdout.txt")
-        rows, status = ccf.parse_contig(work / "native", safe, info["contig"], sequence, stdout,
-                                       int(config.get("min_evidence_level", 3)))
-        ccf._verify_runtime_isolation(work, status)
+        if verified_parsed is None:
+            stdout = ccf._read(work / "stdout.txt")
+            rows, status = ccf.parse_contig(work / "native", safe, info["contig"], sequence, stdout,
+                                           int(config.get("min_evidence_level", 3)))
+            ccf._verify_runtime_isolation(work, status)
+        else:
+            rows, status = verified_parsed[safe]["findings"], verified_parsed[safe]["status"]
         findings.extend(rows)
         statuses[info["contig"]] = status
         artifacts.append(str(work))
@@ -480,13 +498,16 @@ def main(argv=None):
     parser.add_argument("--threads", type=int)
     parser.add_argument("--module", choices=["pathogenfinder2", "crisprcasfinder"])
     args = parser.parse_args(argv)
-    sample = read_json(args.sample)
+    # Contig workers need only the staged input and their module settings.
+    # sample.json contains the full annotation coordinate map and can be large.
+    sample = None if args.stage in {"ccf-contig", "ccf-batch"} else read_json(args.sample)
     module = args.module or ("crisprcasfinder" if args.stage.startswith("ccf-") else "pathogenfinder2")
-    config = settings(args.config, module)
+    full_config = read_json(args.config)
+    config = settings(full_config, module)
     if args.threads is not None:
         config["threads"] = args.threads
     if args.stage == "normalize":
-        write_json(args.output, normalize_saved(module, sample, read_json(args.config),
+        write_json(args.output, normalize_saved(module, sample, full_config,
                    read_json(args.validation), args.native))
     elif args.stage == "embed":
         embed(sample, config, args.output, args.manifest)
@@ -500,7 +521,7 @@ def main(argv=None):
         from safety.ccf_batches import run_batch
         if not all((args.batch, args.contigs, args.native, args.log_directory)):
             parser.error("ccf-batch requires --batch, --contigs, --native and --log-directory")
-        run_batch(read_json(args.config), args.contigs, args.batch, args.native,
+        run_batch(full_config, args.contigs, args.batch, args.native,
                   args.output, args.log_directory, threads=args.threads)
     else:
         audit = None
@@ -508,9 +529,10 @@ def main(argv=None):
             from safety.ccf_batches import verify_batches
             if not args.batch_receipts:
                 parser.error("ccf-collect requires --batch-receipts")
-            audit = verify_batches(read_json(args.config), args.contigs, args.native, args.batch_receipts)
+            audit = verify_batches(full_config, args.contigs, args.native, args.batch_receipts)
         parsed = (collect_pf2(sample, config, args.native, args.embeddings, args.manifest)
-                  if args.stage == "pf2-collect" else collect_ccf(sample, config, args.contigs, args.native))
+                  if args.stage == "pf2-collect" else collect_ccf(sample, config, args.contigs, args.native,
+                                                                 verified_parsed=audit["parsed"] if audit else None))
         if audit:
             parsed["metrics"].update(scheduler_batch_count=audit["batch_count"],
                                      scheduler_contigs_per_batch=audit["batch_size"])

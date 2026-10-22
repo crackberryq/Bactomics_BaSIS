@@ -230,6 +230,7 @@ class ClassifierRuleMigrationTests(unittest.TestCase):
             package = root / "synthetic-python/safety"
             package.mkdir(parents=True)
             (package / "__init__.py").write_text("")
+            shutil.copy2(ROOT / "workflow/lib/safety/runtime.py", package / "runtime.py")
             synthetic = textwrap.dedent(r'''
                 import argparse, hashlib, json, os, sys
                 from pathlib import Path
@@ -282,6 +283,7 @@ class ClassifierRuleMigrationTests(unittest.TestCase):
                 from pathlib import Path
                 import sys
                 ROOT = Path({str(workflow_root)!r})
+                PYTHON = sys.executable
                 CODE_PATH = {str(package.parent)!r}
                 sys.path.insert(0, CODE_PATH)
                 ISOLATE = {str(isolate)!r}
@@ -291,6 +293,8 @@ class ClassifierRuleMigrationTests(unittest.TestCase):
                         return [str(Path(isolate) / "safety/metadata/setup.ready.json")]
                     def resource_inputs(self, module):
                         return []
+                    def module_config_path(self, isolate, module):
+                        return str(Path(isolate) / "safety/metadata/config.json")
                     def module_config(self, isolate, module):
                         return {{"threads": 1, "memory_mb": 64, "gpus": 0}}
                     def env(self, module):

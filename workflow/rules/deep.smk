@@ -65,7 +65,7 @@ def safety_deep_state(path):
 
 checkpoint safety_deep_resource_inputs:
     input:
-        config="{isolate}/safety/metadata/config.json",
+        config=lambda wc: CTX.module_config_path(wc.isolate, "deepsafe"),
         source=str(ROOT / "workflow/lib/safety/deep_resources.py")
     output:
         state="{isolate}/safety/deepsafe/states/resource-inputs.json"
@@ -83,10 +83,10 @@ checkpoint safety_deep_resource_inputs:
 
 checkpoint safety_deep_prepare:
     input:
-        setup=lambda wc: CTX.setup_target(wc.isolate),
+        setup=lambda wc: ancient(CTX.setup_target(wc.isolate)),
         records=lambda wc: CTX.evidence_targets(wc.isolate),
         sample="{isolate}/safety/metadata/sample.json",
-        config="{isolate}/safety/metadata/config.json",
+        config=lambda wc: CTX.module_config_path(wc.isolate, "deepsafe"),
         family_inputs=lambda wc: checkpoints.safety_deep_resource_inputs.get(isolate=wc.isolate).output.state,
         family_resources=safety_deep_resource_paths,
         source=safety_deep_sources()
@@ -95,15 +95,15 @@ checkpoint safety_deep_prepare:
         native=directory("{isolate}/safety/deepsafe/native/prepare")
     params: python=PYTHON, code=CODE_PATH
     conda: CTX.env("deepsafe")
-    threads: 1
-    resources: mem_mb=4000
+    threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
+    resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
     log: "{isolate}/safety/logs/deepsafe/prepare.log"
     benchmark: "{isolate}/safety/benchmarks/deepsafe/prepare.tsv"
     message: "DeepSafe: select candidates and extract context for {wildcards.isolate}"
     shell:
         "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep prepare "
         "--isolate {wildcards.isolate:q} --output {output.state:q} --native {output.native:q} "
-        "--family-inputs {input.family_inputs:q} --records {input.records:q} "
+        "--family-inputs {input.family_inputs:q} --records {input.records:q} --config {input.config:q} "
         "--threads {threads} --log {log:q} >> {log:q} 2>&1"
 
 
@@ -119,8 +119,8 @@ rule safety_deep_candidate:
         phase="domains|phylogeny|patterns|profiles|motifs|placement"
     params: python=PYTHON, code=CODE_PATH
     conda: CTX.env("deepsafe")
-    threads: 4
-    resources: mem_mb=8000
+    threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
+    resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
     log: "{isolate}/safety/logs/deepsafe/{candidate}/{phase}.log"
     benchmark: "{isolate}/safety/benchmarks/deepsafe/{candidate}/{phase}.tsv"
     message: "DeepSafe {wildcards.phase}: {wildcards.candidate}"
@@ -141,8 +141,8 @@ rule safety_deep_references:
         native=directory("{isolate}/safety/deepsafe/native/references")
     params: python=PYTHON, code=CODE_PATH
     conda: CTX.env("deepsafe")
-    threads: 4
-    resources: mem_mb=8000
+    threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
+    resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
     log: "{isolate}/safety/logs/deepsafe/references.log"
     benchmark: "{isolate}/safety/benchmarks/deepsafe/references.tsv"
     message: "DeepSafe: retrieve comparator evidence for {wildcards.isolate}"
@@ -162,8 +162,8 @@ rule safety_deep_tree_plan:
         native=directory("{isolate}/safety/deepsafe/native/tree-plan")
     params: python=PYTHON, code=CODE_PATH
     conda: CTX.env("deepsafe")
-    threads: 1
-    resources: mem_mb=4000
+    threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
+    resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
     log: "{isolate}/safety/logs/deepsafe/tree-plan.log"
     message: "DeepSafe: apply existing tree eligibility and budgets for {wildcards.isolate}"
     shell:
@@ -182,8 +182,8 @@ rule safety_deep_placement_plan:
         native=directory("{isolate}/safety/deepsafe/native/placement-plan")
     params: python=PYTHON, code=CODE_PATH
     conda: CTX.env("deepsafe")
-    threads: 1
-    resources: mem_mb=4000
+    threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
+    resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
     log: "{isolate}/safety/logs/deepsafe/placement-plan.log"
     message: "DeepSafe: audit existing placement panels for {wildcards.isolate}"
     shell:
@@ -204,8 +204,8 @@ rule safety_deep_finalize:
         native=directory("{isolate}/safety/deepsafe/native/finalize")
     params: python=PYTHON, code=CODE_PATH
     conda: CTX.env("deepsafe")
-    threads: 1
-    resources: mem_mb=4000
+    threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
+    resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
     log: "{isolate}/safety/logs/deepsafe/finalize.log"
     benchmark: "{isolate}/safety/benchmarks/deepsafe/finalize.tsv"
     message: "DeepSafe: consolidate selected and deferred evidence for {wildcards.isolate}"

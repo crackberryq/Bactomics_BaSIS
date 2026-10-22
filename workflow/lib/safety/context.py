@@ -10,6 +10,7 @@ import re
 from basis.config import ALL_MODULES, PATH_KEYS, default_config, merge_dict
 from basis.hybas import enrich_sample
 from basis.sample_policy import plan_sample_modules, validate_sample_overrides
+from .runtime import _positive_seconds
 
 RECIPES = {"amrfinder": "core-amr", "rgi": "rgi", "vfdb": "diamond", "bacmet": "diamond",
            "antismash": "antismash", "genomad": "context", "integronfinder": "context",
@@ -107,6 +108,9 @@ class SafetyContext:
                     section[key] = _path(section[key], self.root)
             for key in ("threads", "memory_mb"):
                 _positive(section.get(key, 1), name + "." + key)
+            for key in ("timeout_seconds", "heartbeat_seconds"):
+                if key in section:
+                    _positive_seconds(section[key], name + "." + key)
             section["command_prefix"] = []
         cfg["modules"]["pathogenfinder2"]["enabled"] &= self.extend_enabled
         batch_size = cfg["modules"]["crisprcasfinder"].get("batch_size", 32)
@@ -288,6 +292,41 @@ class SafetyContext:
 
     def environment_receipts(self):
         return [str(Path(self.resource_root) / "environments" / (name + ".json")) for name in self.needed_recipes()]
+
+    def module_environment_receipts(self, module):
+        recipe = RECIPES[module]
+        return ([str(Path(self.resource_root) / "environments" / (recipe + ".json"))]
+                if recipe in self.needed_recipes() else [])
+
+    def module_config_path(self, isolate, module):
+        if module not in ALL_MODULES and module != "deepsafe":
+            raise ValueError("Unknown module configuration: " + str(module))
+        return str(Path(isolate) / "safety/metadata/configs" / (module + ".json"))
+
+    def module_document(self, isolate, module):
+        """Configuration consumed by one execution stage, without other policy.
+
+        The complete configuration remains in metadata/config.json for reports.
+        Per-module documents are independently produced: changing downstream
+        admission policy must not invalidate completed upstream native work.
+        """
+        result = {"version": self.config["version"], "engine": self.config["engine"],
+                  "modules": {}, "module_decisions": {}}
+        if module == "deepsafe":
+            result["deep"] = copy.deepcopy(self.config["deep"])
+        else:
+            result["modules"][module] = self.module_config(isolate, module)
+            result["module_decisions"][module] = copy.deepcopy(self.decisions[isolate][module])
+            if module == "pathogenfinder2":
+                result["execution"] = copy.deepcopy(self.config["execution"])
+        return result
+
+    def deep_config(self, isolate):
+        # DeepSafe currently has one global configuration; keep the isolate
+        # argument for the same resource interface used by module rules.
+        if str(isolate) not in self.samples:
+            raise ValueError("Unknown isolate: " + str(isolate))
+        return copy.deepcopy(self.config["deep"])
 
     def setup_target(self, isolate):
         # Every requested isolate's input/setup check must finish before any

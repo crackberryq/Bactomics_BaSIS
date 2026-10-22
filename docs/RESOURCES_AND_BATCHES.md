@@ -1,4 +1,4 @@
-# Resource preservation and contig scheduling
+# Resource preservation, execution and recovery
 
 This infrastructure update changes preparation, logging and scheduling. Native
 screening calls, supplied contig coverage, AWARE admission settings and reporting
@@ -35,11 +35,24 @@ by `deep.placement_allow_download`.
 
 ## Downloads and logs
 
-Both command streams reach the command log during execution. Stdout remains
-separate from stderr when a parser needs the command's return text, and commands
-that deliberately write stdout into a result file keep that behaviour. A log
-write failure or controller interruption kills and reaps the immediate child.
-Snakemake continues to own the process group and workflow shutdown.
+The runner streams captured stdout and stderr into its command log. Core native
+commands retain their existing redirections: their stdout/stderr files update
+during execution and are copied into the command log on exit. Heartbeats remain
+live in that log. Stdout stays separate when a parser needs the return text, and
+commands that write stdout into a result file keep that behaviour. A log
+write failure, elapsed-time timeout or controller interruption stops the native
+process group created for that command, including descendants holding its pipes.
+Snakemake owns the enclosing worker and workflow shutdown.
+
+`timeout_seconds` and `heartbeat_seconds` are finite positive module settings,
+defaulting to 14,400 and 30 seconds. Logs record command start, PID, periodic
+elapsed-time heartbeats and final status. A heartbeat confirms that the worker
+is waiting; it is not a biological progress estimate. Core native jobs retain
+`commands.log` and `commands.json` beside each attempt's `data` directory.
+PathogenFinder2 embedding and classification have separate outer deadlines,
+including their in-process Python work, and `.runtime.log`/`.runtime.json`
+diagnostics in `safety/logs/`. DeepSafe native commands use its configured runtime
+settings. Deadlines apply to commands, not to the total workflow duration.
 
 geNomad uses its installed version and the official compatibility table to
 select the database release. Its downloader checks advertised transfer length,
@@ -72,10 +85,66 @@ Changing batch size, CPU allocation or receipt timestamps can regroup jobs
 without recomputing valid native results. Relevant input or execution changes
 invalidate reuse. Collection checks every current contig exactly once.
 
+Static executable/model checks happen once per executed batch. Workers no longer
+read the unused complete sample manifest for each contig. Parsing happens once
+per newly completed contig; a checksum-bound parsed sidecar is reused during
+collection after raw-output verification. Changing the parser or its relevant
+execution source invalidates that cache. Native arguments and evidence values
+are unchanged.
+
 At size 32, 3,699 contigs produce 116 CRISPR batch jobs, plus preparation and
 collection. The same 3,699 native calls remain. The smaller step count measures
 scheduling granularity, not a 32-fold runtime improvement. AWARE remains a
 separate downstream candidate-admission policy.
+
+## Native results and scoped configuration
+
+Core native jobs publish `safety/completion/<module>.json`. Verified payloads
+live in `safety/results-cache/<module>/<identity>/attempt-*/data`, with their
+ordinary `safety/native/` locations pointing to those payloads. Reuse checks
+sample inputs, the module configuration, relevant sources, the executable,
+environment/resource receipts and output inventory. Missing scheduler receipts
+can be restored without rerunning a matching verified command. Existing payloads
+are verified during DAG construction as well as before reuse/normalization; this
+adds file-reading cost to a restart but detects changed outputs on an idle run.
+
+New attempts never replace a previous successful payload. Failed attempts retain
+their logs and partial files. `modules.<name>.failed_attempts_to_keep` keeps the
+newest three failed attempts by default, and accepts integers from 1 to 100.
+Only failed attempts in that module's owned store are pruned. Successful and
+legacy payloads are not automatically deleted. `cache: false` prevents verified
+reuse when the job executes; it does not force an otherwise up-to-date Snakemake
+job to run.
+
+RGI database loading is independent of sample sequences. Analysis uses a private
+writable copy so generated indexes cannot alter the verified loader snapshot.
+The private copy is removed after successful verification and retained on
+failure. A reused result requires neither a new copy nor a native call.
+
+Each worker now consumes `safety/metadata/configs/<module>.json`. Changes to a
+downstream AWARE policy do not invalidate completed core, CRISPR or embedding
+work. Changes to a module's own settings, inputs, resources, environment or code
+still invalidate its work. Full configuration remains in metadata for reports.
+DeepSafe's scheduled stages use `deep.threads` and `deep.memory_mb`, subject to
+the overall allocation, rather than fixed rule allocations. Configuration
+separation does not change the selected analysis scope.
+
+## Read-only preflight
+
+From the checkout, inspect the same ordered configuration overlays as the run:
+
+```bash
+python scripts/doctor.py --configfile study.yaml local-resources.yaml --json
+python scripts/doctor.py --configfile study.yaml local-resources.yaml \
+  --validate-inputs --verify-resources
+```
+
+The doctor reads inputs, paths and existing receipts; it does not run tools,
+download, change configuration or prepare missing resources. The optional full
+checks read more data and can take longer. A path merely existing is not reported
+as a verified compatible resource. Missing setup is distinguished from invalid
+data. `--outdir /absolute/path/to/new-review-directory` exports JSON, HTML and TSV
+to a new directory outside isolate and resource folders; omit it for no writes.
 
 ## Updating and recovering an existing checkout
 
@@ -96,6 +165,12 @@ not labelled reusable solely because a parser accepts them. Subsequent batch
 retries use the new verified completion records. Allow an existing run to finish
 before adopting the update if avoiding this migration work is the priority.
 
+The added parsed-cache identity can also require one recomputation of earlier
+batch records. Core native outputs created before the result store lack the new
+execution identity: on their next required execution, old directories are moved
+into `.previous-results/` beside their conventional location. They are preserved,
+but are not assumed to be reusable merely because they can be parsed.
+
 Resume normal failed jobs with the same command and `--rerun-incomplete`. If a
 managed resource link alone was deleted, the workflow reports the exact outer
 receipt to move aside while stopped; the next preparation restores the link and
@@ -103,6 +178,15 @@ receipt from the verified cache. If recorded payload files themselves are lost,
 restore the matching snapshot instead. Missing CRISPR native folders produce a
 targeted batch-receipt/collection repair instruction; verified sibling contigs
 are retained and reused.
+
+For a deleted core native link, stop writers and move only its small scheduler
+receipt aside; the next scheduled job verifies the saved payload and restores
+the link and receipt. Do not delete the result store. If payload bytes are
+missing or changed, verification stops with the affected path; restore the
+recorded files before retrying. Deliberate recomputation requires moving aside
+the affected `safety/completion/<module>.json` and its matching identity folder's
+`cache.json` while stopped; retain the payload for inspection. A corrupted
+payload is never silently relabelled complete.
 
 Do not delete referenced snapshots, completion records or shared execution
 identity files as ordinary cache cleanup. Retained failed downloads, older

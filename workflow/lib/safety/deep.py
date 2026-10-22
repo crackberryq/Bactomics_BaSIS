@@ -109,14 +109,15 @@ def reject_failures(state):
                                      + ": " + str(row.get("reason")) for row in failures))
 
 
-def prepare(isolate, records, native, threads, runner, family_inputs=None):
+def prepare(isolate, records, native, threads, runner, family_inputs=None, config_path=None):
     isolate = Path(isolate).resolve()
     sample = read(isolate / "safety/metadata/sample.json")
-    full_config = read(isolate / "safety/metadata/config.json")
+    config_path = Path(config_path).resolve() if config_path else isolate / "safety/metadata/config.json"
+    full_config = read(config_path)
     if family_inputs is not None:
         discovered = load_discovered_inputs(family_inputs)
         if (Path(discovered["source_config"]).resolve()
-                != isolate / "safety/metadata/config.json"
+                != config_path
                 or discovered["deep"] != full_config["deep"]):
             raise ValueError("DeepSafe discovered resources do not match sample configuration")
     config = copy.deepcopy(full_config["deep"])
@@ -278,6 +279,7 @@ def main(argv=None):
     parser.add_argument("--children", nargs="*", default=[])
     parser.add_argument("--evidence")
     parser.add_argument("--family-inputs")
+    parser.add_argument("--config", help="Scoped execution configuration for preparation")
     args = parser.parse_args(argv)
     from .runtime import DirectRunner
     if args.threads < 1:
@@ -289,11 +291,14 @@ def main(argv=None):
         parent = load_document(args.parent, shared_cache)
         for path in args.children:
             load_document(path, shared_cache)
+    runtime_config = (read(args.config or Path(args.isolate) / "safety/metadata/config.json")["deep"]
+                      if args.action == "prepare" else parent["context"]["config"])
+    runner = DirectRunner(execution_config(runtime_config, args.native, args.threads), Path(args.log))
     native = initialize_output(args.native, args.isolate)
     os.environ.pop("BASIS_VERBOSE", None)
-    runner = DirectRunner({"threads": args.threads}, Path(args.log))
     if args.action == "prepare":
-        document = prepare(args.isolate, args.records, native, args.threads, runner, args.family_inputs)
+        document = prepare(args.isolate, args.records, native, args.threads, runner,
+                           args.family_inputs, args.config)
     else:
         document = invoke(parent, args.action, native, args.threads,
                           runner, args.candidate,

@@ -27,9 +27,9 @@ def extend_normalization_inputs(w):
 
 rule pathogenfinder2_embeddings:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: extend_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "pathogenfinder2"),
         proteins=lambda w: CTX.samples[w.isolate]["proteins"],
         resources=lambda w: CTX.resource_inputs("pathogenfinder2"),
         code=PF2_CODE
@@ -37,6 +37,11 @@ rule pathogenfinder2_embeddings:
         embeddings="{isolate}/safety/native/pathogenfinder2/ProteinEmbeddings.h5",
         manifest="{isolate}/safety/native/pathogenfinder2/embeddings_manifest.json"
     params:
+        timeout=lambda w: CTX.module_config(w.isolate, "pathogenfinder2").get("timeout_seconds", 14400),
+        heartbeat=lambda w: CTX.module_config(w.isolate, "pathogenfinder2").get("heartbeat_seconds", 30),
+        command_log=lambda w: str(Path(w.isolate) / "safety/logs/pathogenfinder2.embeddings.runtime.log"),
+        command_record=lambda w: str(Path(w.isolate) / "safety/logs/pathogenfinder2.embeddings.runtime.json"),
+        python=PYTHON,
         code=CODE_PATH
     threads:
         lambda w: CTX.module_config(w.isolate, "pathogenfinder2").get("threads", 4)
@@ -54,7 +59,10 @@ rule pathogenfinder2_embeddings:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        PYTHONPATH={params.code:q} python -m safety.extend embed \
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.runtime run \
+            --timeout-seconds {params.timeout} --heartbeat-seconds {params.heartbeat} \
+            --threads {threads} --log {params.command_log:q} --record {params.command_record:q} \
+            -- env PYTHONPATH={params.code:q} python -m safety.extend embed \
             --sample {input.sample:q} --config {input.config:q} \
             --output {output.embeddings:q} --manifest {output.manifest:q} \
             --threads {threads} > {log:q} 2>&1
@@ -63,9 +71,9 @@ rule pathogenfinder2_embeddings:
 
 rule pathogenfinder2_classification:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: extend_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "pathogenfinder2"),
         embeddings="{isolate}/safety/native/pathogenfinder2/ProteinEmbeddings.h5",
         manifest="{isolate}/safety/native/pathogenfinder2/embeddings_manifest.json",
         resources=lambda w: CTX.resource_inputs("pathogenfinder2"),
@@ -73,6 +81,11 @@ rule pathogenfinder2_classification:
     output:
         native=directory("{isolate}/safety/native/pathogenfinder2/predictionPF2")
     params:
+        timeout=lambda w: CTX.module_config(w.isolate, "pathogenfinder2").get("timeout_seconds", 14400),
+        heartbeat=lambda w: CTX.module_config(w.isolate, "pathogenfinder2").get("heartbeat_seconds", 30),
+        command_log=lambda w: str(Path(w.isolate) / "safety/logs/pathogenfinder2.classification.runtime.log"),
+        command_record=lambda w: str(Path(w.isolate) / "safety/logs/pathogenfinder2.classification.runtime.json"),
+        python=PYTHON,
         code=CODE_PATH
     threads:
         lambda w: CTX.module_config(w.isolate, "pathogenfinder2").get("threads", 4)
@@ -91,7 +104,10 @@ rule pathogenfinder2_classification:
     shell:
         r"""
         mkdir -p "$(dirname {log.job:q})"
-        PYTHONPATH={params.code:q} python -m safety.pf2_classify \
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.runtime run \
+            --timeout-seconds {params.timeout} --heartbeat-seconds {params.heartbeat} \
+            --threads {threads} --log {params.command_log:q} --record {params.command_record:q} \
+            -- env PYTHONPATH={params.code:q} python -m safety.pf2_classify \
             --sample {input.sample:q} --config {input.config:q} \
             --embeddings {input.embeddings:q} --manifest {input.manifest:q} \
             --output {output.native:q} --log {log.native:q} \
@@ -102,7 +118,7 @@ rule pathogenfinder2_classification:
 rule pathogenfinder2_collect:
     input:
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: extend_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "pathogenfinder2"),
         embeddings="{isolate}/safety/native/pathogenfinder2/ProteinEmbeddings.h5",
         manifest="{isolate}/safety/native/pathogenfinder2/embeddings_manifest.json",
         native="{isolate}/safety/native/pathogenfinder2/predictionPF2",
@@ -132,9 +148,9 @@ rule pathogenfinder2_collect:
 
 checkpoint crisprcasfinder_contigs:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: extend_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "crisprcasfinder"),
         assembly=lambda w: CTX.samples[w.isolate]["assembly"],
         code=CCF_CODE
     output:
@@ -174,9 +190,9 @@ def ccf_batch_receipts(w):
 
 rule crisprcasfinder_batch:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: extend_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "crisprcasfinder"),
         contigs=ccf_contigs_directory,
         resources=lambda w: CTX.resource_inputs("crisprcasfinder"),
         code=CCF_CODE
@@ -215,7 +231,7 @@ rule crisprcasfinder_batch:
 rule crisprcasfinder_collect:
     input:
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: extend_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "crisprcasfinder"),
         contigs=ccf_contigs_directory,
         batches=ccf_batch_receipts,
         code=CCF_CODE
@@ -243,7 +259,7 @@ rule crisprcasfinder_collect:
 rule normalize_extend:
     input:
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: extend_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, w.extend_module),
         validation=lambda w: extend_metadata(w.isolate, "validation.json"),
         native=extend_normalization_inputs,
         code=lambda w: PF2_CODE if w.extend_module == "pathogenfinder2" else CCF_CODE

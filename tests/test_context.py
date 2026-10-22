@@ -64,6 +64,19 @@ class ContextTests(unittest.TestCase):
         cfg["modules"]["crisprcasfinder"]["batch_size"] = 1
         self.assertEqual(SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"]["batch_size"], 1)
 
+    def test_runtime_durations_are_validated_before_scheduling(self):
+        for section in ("minced", "deep"):
+            for key in ("timeout_seconds", "heartbeat_seconds"):
+                for value in (0, -1, True, float("nan"), float("inf"), "invalid"):
+                    cfg = self.base_config([])
+                    target = cfg["deep"] if section == "deep" else cfg["modules"][section]
+                    target[key] = value
+                    with self.subTest(section=section, key=key, value=value):
+                        with self.assertRaisesRegex(ValueError, section + "." + key):
+                            SafetyContext(cfg, ROOT)
+                target[key] = .25
+                SafetyContext(cfg, ROOT)
+
     def test_missing_managed_resource_link_cannot_be_a_silent_noop(self):
         cfg = self.base_config([])
         cfg["modules"]["vfdb"]["enabled"] = True
@@ -168,8 +181,8 @@ class ContextTests(unittest.TestCase):
         expected = {str(Path(row["isolate_dir"]) / "safety/metadata/setup.ready.json") for row in rows}
         for row in rows:
             self.assertEqual(set(context.setup_target(row["isolate_dir"])), expected)
-        rules = (ROOT / "workflow/rules/native.smk").read_text()
-        self.assertIn("setup=lambda w: CTX.setup_target(w.isolate)", rules)
+        # Real execution ordering is checked by test_workflow; the barrier may
+        # be marked order-only without propagating unrelated config changes.
 
     def test_disabled_modules_do_not_prepare_resources_or_evidence(self):
         row = self.annotation("disabled")

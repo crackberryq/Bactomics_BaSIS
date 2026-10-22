@@ -188,8 +188,16 @@ class StandaloneWorkflowTests(unittest.TestCase):
         return [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []
 
     def native_snapshot(self, isolate):
-        return {str(path.relative_to(isolate)): (hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns)
-                for path in (isolate / "safety/native").rglob("*") if path.is_file()}
+        root = isolate / "safety/native"
+        snapshot = {}
+        if root.exists():
+            for entry in root.iterdir():
+                if entry.is_dir():
+                    for path in entry.resolve().rglob("*"):
+                        if path.is_file():
+                            key = str(Path(entry.name) / path.relative_to(entry.resolve()))
+                            snapshot[key] = (hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns)
+        return snapshot
 
     def test_direct_failure_resume_noop_and_report_only_refresh(self):
         self.assertEqual(importlib.metadata.version("snakemake"), "9.6.2")
@@ -228,10 +236,60 @@ class StandaloneWorkflowTests(unittest.TestCase):
         self.assertGreater(report.stat().st_mtime_ns, before_report)
         self.assertEqual(self.events(), events, "Report redraw ran an analysis tool")
         self.assertEqual([self.native_snapshot(isolate) for isolate in self.isolates], snapshots)
-        # Each invocation publishes stable isolate-local outputs, not timestamped
-        # attempt trees which prevent Snakemake itself from deciding what resumes.
+        # Snakemake owns small receipts; verified payloads and failed diagnostics
+        # survive its incomplete-output cleanup independently.
         for isolate in self.isolates:
-            self.assertFalse(list((isolate / "safety").rglob("attempts")))
+            self.assertTrue((isolate / "safety/native/minced").is_symlink())
+            self.assertTrue((isolate / "safety/completion/minced.json").is_file())
+        failures = list((self.isolates[1] / "safety/results-cache/minced").rglob("failure.json"))
+        self.assertEqual(len(failures), 1)
+        self.assertIn("Intentional synthetic native task failure",
+                      (failures[0].parent / "data/stderr.txt").read_text())
+
+    def test_verified_result_reuse_and_policy_scoping(self):
+        self.allow.touch()
+        self.snake()
+        events = self.events()
+        before = [self.native_snapshot(isolate) for isolate in self.isolates]
+        receipt = self.isolates[0] / "safety/completion/minced.json"
+        original_receipt = receipt.read_bytes()
+        receipt.unlink()
+        self.snake()
+        self.assertEqual(self.events(), events, "Repairing a readiness receipt reran native analysis")
+        self.assertEqual(receipt.read_bytes(), original_receipt)
+        self.assertIn("Nothing to be done", self.snake().stdout,
+                      "The first resume after receipt repair must be a no-op")
+        config = yaml.safe_load(self.config.read_text())
+        config["deep"]["aware"] = {"enabled": True, "preset": "auto-strict"}
+        self.config.write_text(yaml.safe_dump(config))
+        policy = self.snake()
+        self.assertNotIn("Rule: minced", policy.stdout, "Downstream policy change scheduled upstream analysis")
+        self.assertNotIn("Rule: normalize_native", policy.stdout,
+                         "Downstream policy change scheduled upstream normalization")
+        self.assertEqual(self.events(), events, "Downstream policy change reran upstream analysis")
+        self.assertEqual([self.native_snapshot(isolate) for isolate in self.isolates], before)
+        assembly = self.isolates[0] / "annotation/isolateA.fna"
+        assembly.write_text(assembly.read_text().replace("ATGAAATTTTAA", "ATGAAATTCTAA"))
+        genbank = self.isolates[0] / "annotation/isolateA.gbk"
+        genbank.write_text(genbank.read_text().replace("atgaaattttaa", "atgaaattctaa"))
+        self.snake()
+        self.assertEqual(Counter(event["sample"] for event in self.events()), {"isolateA": 2, "isolateB": 1})
+
+    def test_modified_payload_is_not_reused(self):
+        self.allow.touch()
+        self.snake()
+        events = self.events()
+        receipt = self.isolates[0] / "safety/completion/minced.json"
+        record = json.loads(receipt.read_text())
+        (Path(record["payload_root"]) / "arrays.gff").write_text("modified synthetic output\n")
+        existing = self.snake(success=False)
+        self.assertIn("integrity", existing.stdout, "An idle resume accepted a modified native payload")
+        self.assertTrue(receipt.is_file(), "Read-only DAG verification removed the scheduler receipt")
+        receipt.unlink()
+        failure = self.snake(success=False)
+        self.assertEqual(self.events(), events, "A corrupt cache silently fell back to recomputation")
+        logs = "\n".join(path.read_text(errors="replace") for path in self.isolates[0].glob("safety/logs/*.log"))
+        self.assertIn("integrity", logs + failure.stdout)
 
     def test_failed_setup_blocks_native_analysis(self):
         self.bad_setup.touch()

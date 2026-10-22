@@ -80,6 +80,8 @@ class RuntimeStreamingTests(unittest.TestCase):
                     return self.file.write(block)
                 def flush(self):
                     self.file.flush()
+                def close(self):
+                    self.file.close()
 
             def open_file(path, *args, **kwargs):
                 return BrokenLog() if path == logfile else original_open(path, *args, **kwargs)

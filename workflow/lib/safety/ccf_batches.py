@@ -24,6 +24,8 @@ PLAN_SCHEMA = "basis-ccf-batches-v1"
 CONTIG_SCHEMA = "basis-ccf-contig-completion-v1"
 BATCH_SCHEMA = "basis-ccf-batch-completion-v1"
 COMPLETION = "basis-contig-completion.json"
+PARSED_SCHEMA = "basis-ccf-parsed-contig-v1"
+PARSED = "basis-contig-parsed.json"
 
 
 def digest(value):
@@ -112,6 +114,8 @@ def execution_identity(full_config):
         "min_evidence_level": config.get("min_evidence_level", 3),
     }
     sources = {"run_contig": hashlib.sha256(inspect.getsource(extend.run_contig).encode()).hexdigest(),
+               "prepare_execution": hashlib.sha256(inspect.getsource(extend.prepare_ccf_execution).encode()).hexdigest(),
+               "parsed_cache_schema": PARSED_SCHEMA,
                "adapter": extend.pf2._sha256(Path(ccf.__file__)),
                "input_reader": extend.pf2._sha256(Path(inputs.__file__)),
                "runner": extend.pf2._sha256(Path(runtime.__file__))}
@@ -141,7 +145,30 @@ def contig_identity(safe, info, signature):
     return digest({"contig": safe, "input": info, "execution": signature})
 
 
-def verify_contig(work, safe, info, sequence, signature, config):
+def parsed_contig(work, row, safe, info, sequence, signature, config):
+    """Read a sealed parsed result, or verify a legacy uncached result once."""
+    work = Path(work)
+    if row.get("parsed_result") is None:
+        findings, status = ccf.parse_contig(work / "native", safe, info["contig"], sequence,
+                                           ccf._read(work / "stdout.txt"),
+                                           int(config.get("min_evidence_level", 3)))
+        ccf._verify_runtime_isolation(work, status)
+        return {"findings": findings, "status": status}
+    if row["parsed_result"] != PARSED or (work / PARSED).is_symlink():
+        raise ValueError("CRISPR parsed result must be an owned completion artifact")
+    parsed = extend.read_json(work / PARSED)
+    raw = {key: value for key, value in row["artifacts"].items() if key != PARSED}
+    if (parsed.get("schema") != PARSED_SCHEMA or parsed.get("contig") != safe
+            or parsed.get("input") != info or parsed.get("execution_identity") != signature
+            or parsed.get("raw_artifacts_sha256") != digest(raw)
+            or not isinstance(parsed.get("findings"), list) or not isinstance(parsed.get("status"), dict)
+            or any(not isinstance(finding, dict) or finding.get("contig") != info["contig"]
+                   for finding in parsed["findings"])):
+        raise ValueError("CRISPR parsed result does not match its verified native artifacts")
+    return {"findings": parsed["findings"], "status": parsed["status"]}
+
+
+def verify_contig(work, safe, info, sequence, signature, config, *, parsed_results=None):
     if Path(work).is_symlink() or not Path(work).is_dir():
         raise ValueError("CRISPR contig output must be an owned directory")
     row = extend.read_json(Path(work) / COMPLETION)
@@ -150,10 +177,9 @@ def verify_contig(work, safe, info, sequence, signature, config):
             or row.get("execution_identity") != signature
             or row.get("artifacts") != output_inventory(work)):
         raise ValueError("CRISPR contig completion record does not match its inputs and outputs")
-    _, status = ccf.parse_contig(Path(work) / "native", safe, info["contig"], sequence,
-                                ccf._read(Path(work) / "stdout.txt"),
-                                int(config.get("min_evidence_level", 3)))
-    ccf._verify_runtime_isolation(Path(work), status)
+    parsed = parsed_contig(work, row, safe, info, sequence, signature, config)
+    if parsed_results is not None:
+        parsed_results[safe] = parsed
     return row
 
 
@@ -209,7 +235,7 @@ def run_batch(full_config, contigs, batch, native, receipt, log_directory, threa
         raise ValueError("CRISPR execution identity record was modified")
     with work_lock(native, batch):
         receipt.unlink(missing_ok=True)
-        completed, reused = {}, []
+        completed, reused, prepared = {}, [], None
         for safe in plan["batches"][batch]:
             info = mapping[safe]
             sequence = staged_sequence(contigs, safe, info)
@@ -230,15 +256,28 @@ def run_batch(full_config, contigs, batch, native, receipt, log_directory, threa
                         print(f"{batch}: reused verified {safe}", flush=True)
                         continue
                 print(f"{batch}: running {safe}", flush=True)
-                extend.run_contig(config, Path(contigs) / f"{safe}.fna", safe, work,
-                                  log_directory / f"{safe}.commands.log")
+                if prepared is None:
+                    prepared = extend.prepare_ccf_execution(config)
+                parsed = extend.run_contig(config, Path(contigs) / f"{safe}.fna", safe, work,
+                                           log_directory / f"{safe}.commands.log", prepared=prepared,
+                                           contig_name=info["contig"])
+                raw_artifacts = output_inventory(work)
+                extend.write_json(work / PARSED, {"schema": PARSED_SCHEMA, "contig": safe,
+                    "input": info, "execution_identity": signature,
+                    "raw_artifacts_sha256": digest(raw_artifacts), **parsed})
                 row = {"schema": CONTIG_SCHEMA, "status": "completed",
                        "identity": contig_identity(safe, info, signature),
                        "input": info, "execution_identity": signature,
                        "allocated_threads": config.get("threads", 1),
-                       "artifacts": output_inventory(work)}
+                       "parsed_result": PARSED,
+                       "artifacts": {**raw_artifacts, PARSED: {
+                           "bytes": (work / PARSED).stat().st_size,
+                           "sha256": extend.pf2._sha256(work / PARSED)}}}
                 extend.write_json(work / COMPLETION, row)
-                verify_contig(work, safe, info, sequence, signature, config)
+                # run_contig already parsed and checked native completion.
+                # Publish only after sealing those exact raw and parsed bytes;
+                # retries and collection recheck this inventory without parsing
+                # the same native JSON/GFF/tables again.
                 completed[safe] = digest(row)
         extend.write_json(receipt, {"schema": BATCH_SCHEMA, "status": "completed",
                                    "batch": batch, "members": plan["batches"][batch],
@@ -256,7 +295,7 @@ def verify_batches(full_config, contigs, native, receipts):
     execution_record = Path(native) / ".execution-identities" / (signature + ".json")
     if extend.read_json(execution_record) != context:
         raise ValueError("CRISPR execution identity record was modified")
-    observed = set()
+    observed, parsed_results = set(), {}
     for path in receipts:
         row = extend.read_json(path)
         batch = row.get("batch")
@@ -270,10 +309,12 @@ def verify_batches(full_config, contigs, native, receipts):
         for safe in plan["batches"][batch]:
             info = mapping[safe]
             sequence = staged_sequence(contigs, safe, info)
-            completed = verify_contig(Path(native) / safe, safe, info, sequence, signature, config)
+            completed = verify_contig(Path(native) / safe, safe, info, sequence, signature, config,
+                                      parsed_results=parsed_results)
             if row["contigs"][safe] != digest(completed):
                 raise ValueError("CRISPR contig completion changed after its batch completed")
     if observed != set(plan["batches"]):
         raise ValueError("CRISPR batch receipts do not cover every supplied contig")
     return {"batch_count": len(observed), "batch_size": plan["batch_size"],
+            "parsed": parsed_results,
             "artifacts": [str(Path(path)) for path in receipts] + [str(execution_record)]}
