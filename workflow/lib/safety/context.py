@@ -87,6 +87,8 @@ class SafetyContext:
         cfg = merge_dict(cfg, {key: supplied[key] for key in
             ("project", "modules", "sample_module_overrides", "execution") if key in supplied})
         cfg["deep"] = merge_dict(cfg["deep"], deep)
+        from basis.aware import resolve_policy
+        resolve_policy(cfg["deep"])
         cfg["execution"].update(cores=self.threads, memory_mb=self.memory_mb)
         cfg["version"] = "0.4.0a1"
         cfg["engine"] = "snakemake"

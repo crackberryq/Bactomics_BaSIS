@@ -231,6 +231,28 @@ The HybAs metadata reader also accepts HybAs 9's structured `executed_stages`
 list and `skipped_stages` mapping. Other unexpected nested summary fields remain
 errors, and isolate identity, duplicate-key and provenance checks remain active.
 
+## BaSIS AWARE: candidate admission and deduplication
+
+DeepSafe now defaults to **auto-medium** admission, with **auto-strict** and
+**auto-loose** alternatives plus manual per-tool overrides under `deep.aware`.
+Each source is evaluated independently before unique candidates consume budgets.
+Verified duplicate identities are merged while all linked findings and deferral
+reasons remain visible. Native screening and reference-retrieval settings stay
+separate. The presets control computational scope, not organism safety ratings.
+
+See [AWARE definitions and migration notes](docs/AWARE.md) and the
+[commented configuration overlay](config/aware.example.yaml). A read-only
+comparison on completed saved screening results is available with:
+
+```bash
+python scripts/preview_aware.py --isolate /absolute/path/to/isolate
+```
+
+The report includes effective settings, qualifying/selected counts and separate
+admission/budget deferrals. `deep.aware.enabled: false` retains legacy admission.
+The existing candidate stages and compact checkpoint storage remain in use;
+this update does not claim cross-sample sequence caching or batched execution.
+
 ## Interpretation and reproducibility
 
 DeepSafe runs configured analyses on selected candidates. It preserves deferred candidates, missing comparison groups and taxonomic review holds. Motifs, domains, similarity and phylogenetic placement are evidence layers; none independently proves a resistance phenotype or organism safety. A completed selected scope can coexist with an incomplete overall scope.

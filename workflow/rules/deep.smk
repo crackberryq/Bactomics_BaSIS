@@ -14,7 +14,7 @@ def safety_deep_sources():
              "deep_reporting.py", "references.py", "motifs.py", "prosite.py",
              "prosite_profiles.py", "placement.py", "placement_panels.py",
              "placement_native.py", "placement_scoring.py", "placement_diagnostics.py",
-             "candidate_labels.py", "deep_workflow.py")
+             "candidate_labels.py", "deep_workflow.py", "aware.py")
     return [str(ROOT / "workflow/lib/safety/deep.py"),
             str(ROOT / "workflow/lib/safety/state_storage.py"),
             str(ROOT / "workflow/lib/safety/deep_resources.py"),

@@ -1,0 +1,47 @@
+# Overlay after your study config; this file deliberately contains no samples,
+# resource locations, or native screening settings.
+# snakemake --snakefile BaSIS.smk --configfile config.bioinfo-four.yaml config/aware.example.yaml ...
+deep:
+  aware:
+    enabled: true
+    preset: auto-medium  # auto-strict | auto-medium | auto-loose
+    # Omit overrides to use the selected preset. Explicit values always win.
+    queues: {}
+    tools: {}
+    # Example manual overrides (uncomment only the values you want):
+    # queues:
+    #   exploratory: false
+    #   attention: false
+    # tools:
+    #   amrfinder:
+    #     enabled: true
+    #     methods: [ALLELE, ALLELEP, ALLELEX, EXACT, EXACTP, EXACTX]
+    #     min_identity: null              # null = native criteria only
+    #     min_reference_coverage: null    # non-null requires this metric
+    #   rgi:
+    #     enabled: true
+    #     cutoffs: [perfect, strict]
+    #     allow_nudged: false
+    #     min_identity: null
+    #     min_reference_coverage: null    # reference length ratio is NOT coverage
+    #   vfdb:
+    #     enabled: true
+    #     min_identity: 80.0
+    #     min_reference_coverage: 70.0
+    #     min_query_coverage: 70.0
+    #     max_evalue: 1.0e-5
+    #   bacmet:
+    #     enabled: true
+    #     min_identity: 80.0
+    #     min_reference_coverage: 70.0
+    #     min_query_coverage: 70.0
+    #     max_evalue: 1.0e-5
+    #   pathogenfinder2:
+    #     enabled: true
+    #     maximum_rank: 20               # also requires queues.attention: true
+  # Existing independent controls still apply:
+  # include_stress: true                # needed for BacMet stress follow-up
+  # include_exploratory: true           # also requires queues.exploratory: true
+  # maximum_candidates: 100            # ceiling; never a target to fill
+  # maximum_exploratory_candidates: 20
+  # maximum_attention_candidates: 20

@@ -107,6 +107,14 @@ def evidence_priority(candidate: dict) -> dict:
 
 
 def select_candidates(records: list[dict], config: dict, sample: dict | None = None) -> list[dict]:
+    from .aware import resolve_policy, select
+    policy = resolve_policy(config)
+    if policy["enabled"]:
+        return select(records, config, sample, policy)
+    return _select_candidates_legacy(records, config, sample)
+
+
+def _select_candidates_legacy(records: list[dict], config: dict, sample: dict | None = None) -> list[dict]:
     budgets = {}
     for key, default, minimum in (("maximum_candidates", 40, 1),
                                   ("maximum_attention_candidates", 5, 0),

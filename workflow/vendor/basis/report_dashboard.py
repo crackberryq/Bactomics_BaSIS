@@ -463,7 +463,8 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
         entry['search_text'] += ' ' + workflow_search_terms(candidate)
     deep = render_navigator(entries) + deep
     deep += ''.join(_candidate(c,sid,outdir,candidate_records.get(id(c)),placement_views[id(c)]) for sid,c in selected)
-    deep = render_workflow_overview(selected, deep_records, run.get('deep_workflow_artifacts')) + render_placement_overview(selected, deep_records, tree_links=placement_links) + render_motif_overview(selected, deep_records) + deep
+    from .report_aware import render_aware
+    deep = render_aware(deep_records) + render_workflow_overview(selected, deep_records, run.get('deep_workflow_artifacts')) + render_placement_overview(selected, deep_records, tree_links=placement_links) + render_motif_overview(selected, deep_records) + deep
     if not selected:
         deep += '<p class="panel empty">No selected candidate evidence supplied.</p>'
     content += section('deep','07','DeepSafe · focused review','Inspect domains, motifs, comparator gaps, bounded trees and reference-panel placement.',deep)

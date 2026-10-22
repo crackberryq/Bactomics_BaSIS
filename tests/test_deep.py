@@ -103,6 +103,19 @@ class DeepWorkflowTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["completed_candidates"], 0)
         self.assertFalse(result["complete"])
 
+    def test_aware_audit_survives_candidate_stages_and_evidence_output(self):
+        self.cfg["aware"] = {"enabled": True, "preset": "auto-medium"}
+        deep.write(self.isolate / "safety/metadata/config.json", {"deep": self.cfg})
+        result = deep.evidence_record(self.completed())
+        audit = result["aware_selection"]
+        self.assertEqual(audit["effective_policy"]["preset"], "auto-medium")
+        self.assertEqual(audit["counts"]["selected_candidates"], 1)
+        self.assertEqual(audit["counts"]["admission_deferred"], 1)
+        self.assertEqual(audit["counts"]["unique_selected_sequences"], 1)
+        self.assertFalse(result["complete"])
+        saved = self.isolate / "safety/deepsafe/native/prepare/aware_selection.json"
+        self.assertEqual(deep.read(saved), audit)
+
     def test_missing_references_is_not_promoted_to_completed(self):
         self.record["findings"][0]["identity"] = 80
         deep.write(self.record_path, self.record)
@@ -185,6 +198,7 @@ class DeepWorkflowTests(unittest.TestCase):
                            "candidate_aliases: [unmatched_fixture]\n"
                            "required_comparison_groups: []\nanchor_reference_ids: []\n")
         self.cfg["profiles_dir"] = str(profiles)
+        self.cfg["aware"] = {"enabled": True, "preset": "auto-medium"}
         deep.write(self.isolate / "safety/metadata/config.json", {"deep": self.cfg})
         upstream = {str(path): path.stat().st_mtime_ns for path in
                     [self.record_path, Path(self.sample["assembly"]), Path(self.sample["proteins"])]}
@@ -249,6 +263,15 @@ class DeepWorkflowTests(unittest.TestCase):
         sixth = subprocess.run(command, text=True, capture_output=True)
         self.assertEqual(sixth.returncode, 0, sixth.stdout + sixth.stderr)
         self.assertEqual(deep.load_document(prepared)["context"]["config"]["maximum_candidates"], 11)
+        # Admission-only configuration changes must recompute the selection;
+        # old candidate outputs must not make an excluded candidate reappear.
+        self.cfg["aware"]["tools"] = {"amrfinder": {"enabled": False}}
+        deep.write(self.isolate / "safety/metadata/config.json", {"deep": self.cfg})
+        reselection = subprocess.run(command, text=True, capture_output=True)
+        self.assertEqual(reselection.returncode, 0, reselection.stdout + reselection.stderr)
+        self.assertEqual(deep.read(prepared)["selected_candidate_ids"], [])
+        self.assertEqual(deep.read(evidence)["aware_selection"]["counts"]["admission_deferred"], 2)
+        self.assertEqual(upstream, {path: Path(path).stat().st_mtime_ns for path in upstream})
         from safety.state_storage import object_paths
         shared = object_paths(prepared)[0]
         shared.unlink()

@@ -8,6 +8,10 @@ memory_mb: 20000
 extend: true
 deep:
   enabled: true
+  aware:
+    enabled: true
+    preset: auto-medium  # auto-strict | auto-medium | auto-loose
+    tools: {}           # Per-tool manual overrides: see config/aware.example.yaml
 resources:
   policy: auto
   directory: resources

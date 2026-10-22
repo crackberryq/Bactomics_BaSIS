@@ -1,7 +1,7 @@
 """Serializable DeepSafe stage execution for Snakemake-owned scheduling.
 
-This module partitions the existing scientific operations; it does not change
-candidate selection, thresholds, comparator eligibility, or interpretation.
+This module partitions scientific operations and records the configured AWARE
+admission audit without changing comparator eligibility or interpretation.
 Each state is bound to the same sample, upstream records, configuration and work
 folder. Reference catalogues remain files rather than being copied into states.
 The workflow worker owns atomic checkpoint writes and scheduler receipts.
@@ -95,7 +95,7 @@ def _prepare(sample, records, config, outdir, runner, state):
         candidate["analyses"] = {}
         candidate["notes"] = []
         if not candidate["selected"]:
-            candidate["analysis_plan"] = {"route": "resource_deferred", "analyses": {},
+            candidate["analysis_plan"] = {"route": "admission_deferred" if candidate["reason"] == "aware_admission_deferred" else "resource_deferred", "analyses": {},
                 "decision_trace": [{"decision": "defer", "reason": candidate["reason"]}]}
             candidate["decision_trace"] = candidate["analysis_plan"]["decision_trace"]
             continue
@@ -132,6 +132,17 @@ def _prepare(sample, records, config, outdir, runner, state):
     state.update(candidates=candidates, notes=notes, artifacts=artifacts,
                  motif_rules=motif_rules, motif_registry=motif_registry,
                  internal={}, tree_budget={"used": 0})
+    from .aware import audit
+    state["aware_audit"] = audit(candidates, records, config)
+    if state["aware_audit"]:
+        counts = state["aware_audit"]["counts"]
+        _deep.emit("BaSIS AWARE: " + str(counts["findings_received"]) + " findings -> " +
+                   str(counts["unique_candidates"]) + " unique candidates -> " +
+                   str(counts["eligible_candidates"]) + " eligible -> " +
+                   str(counts["selected_candidates"]) + " selected")
+        path = outdir / "aware_selection.json"
+        path.write_text(json.dumps(state["aware_audit"], indent=2, allow_nan=False) + "\n")
+        state["artifacts"].append(str(path))
 
 
 def _domains(sample, records, config, outdir, runner, state):
@@ -324,6 +335,8 @@ def _finalize(sample, records, config, outdir, runner, state):
             "interpretation": "inconclusive" if candidates else "not_applicable",
             "candidates": candidates, "complete": complete,
             "completion_summary": _deep.completion_summary({"candidates": candidates})}
+    if state.get("aware_audit"):
+        state["payload"]["aware_selection"] = state["aware_audit"]
 
 
 _HANDLERS = {stage: globals()["_" + stage] for stage in STAGES}

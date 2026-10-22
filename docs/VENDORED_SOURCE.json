@@ -290,5 +290,42 @@
     "workflow/vendor/basis/resources/placement",
     "workflow/vendor/basis/resources/profiles"
   ],
-  "scientific_threshold_changes": false
+  "scientific_threshold_changes": true,
+  "threshold_change_scope": "BaSIS AWARE v1 changes admission to computational follow-up. Native screening calls, comparator retrieval, motif rules and biological interpretations are unchanged; presets are uncalibrated workload policies.",
+  "aware_update": {
+    "base_commit": "60a030fd3f63689cccf48d48e1cc9fa9ac327f62",
+    "policy_version": "basis-aware-v1",
+    "files": [
+      {
+        "path": "workflow/vendor/basis/aware.py",
+        "base_sha256": null,
+        "updated_sha256": "caf8517e26014431c48ebe405fddb21cfb7b92dea5e7950831cb2fe2ad58c486"
+      },
+      {
+        "path": "workflow/vendor/basis/report_aware.py",
+        "base_sha256": null,
+        "updated_sha256": "92df69253d92f86c408085e4cf850c64e352c8d380c225ef06cc0fe43ca50bb1"
+      },
+      {
+        "path": "workflow/vendor/basis/config.py",
+        "base_sha256": "a8d16c33ba74f57062d206b4d23269689c2c11bf495971543ced54ad00f16374",
+        "updated_sha256": "1ec5e45b5e596cc023203eadddd8fdf066b02fffa0f782560ce3b0bcfbe168c2"
+      },
+      {
+        "path": "workflow/vendor/basis/deep.py",
+        "base_sha256": "ba234227e50e0e18127a2313a4752857fd5d85f3ac8087a0f5b6f6d0cc99d82e",
+        "updated_sha256": "470122171efe282137cda367b08ee2847440026687d1fc7e9e27a303458aa956"
+      },
+      {
+        "path": "workflow/vendor/basis/deep_stages.py",
+        "base_sha256": "3c218500a01fc63a6a1da526b2969a1be0e472b0134018e7dd04058dfa5bc82c",
+        "updated_sha256": "35ee375b78cc817ccedfe14e6c1c8e5b78d857fc5cac4381a2d611b031c7a22b"
+      },
+      {
+        "path": "workflow/vendor/basis/report_dashboard.py",
+        "base_sha256": "3f2e5b8b6b3ecbde7d09c22b14d66c7f3d7f099b0a51916051700b1de24dfab4",
+        "updated_sha256": "ff8d9e4d8439175c949b93ab5cf2f286993e12d93478b43d7bda7bd42972c8b7"
+      }
+    ]
+  }
 }
