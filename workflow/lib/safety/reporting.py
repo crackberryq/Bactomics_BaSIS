@@ -111,6 +111,19 @@ def aggregate(sample: dict, config: dict, paths: list[Path]) -> tuple[dict, list
         record.setdefault("metrics", {})
         record.setdefault("artifacts", [])
         decision = _decision(module, record, config, sid)
+        # A completed process may explicitly leave part of its input unassessed.
+        # Planning metadata cannot clear that observed limitation, nor can an
+        # evidence record clear an existing planning hold.
+        if "scope_incomplete" in record:
+            if not isinstance(record["scope_incomplete"], bool):
+                raise ValueError(f"Invalid evidence scope_incomplete for {module}")
+            if record["scope_incomplete"]:
+                if not isinstance(record.get("reason"), str) or not record["reason"].strip():
+                    raise ValueError(f"Incomplete evidence requires an explicit reason: {module}")
+                decision["scope_incomplete"] = True
+                if decision.get("reason") != record["reason"]:
+                    decision.setdefault("declared_reason", decision.get("reason"))
+                    decision["reason"] = record["reason"]
         if status in {"not_assessed", "not_requested"} and not (record.get("reason") or decision.get("reason")):
             raise ValueError(f"Unassessed record requires an explicit reason: {module}")
         if status == "completed" and decision.get("action") == "disabled":

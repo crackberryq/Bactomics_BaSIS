@@ -78,6 +78,37 @@ class ReportTests(unittest.TestCase):
         self.assertIn("sample1:icescreen", run["incomplete_modules"])
         self.assertEqual(run["module_decisions"]["sample1"]["icescreen"]["action"], "withheld")
 
+    def test_completed_process_with_partial_assessment_retains_incomplete_scope(self):
+        config = {"modules": {"integronfinder": {"enabled": True}},
+                  "module_decisions": {"integronfinder": {
+                      "requested": True, "action": "run", "scope_incomplete": False,
+                      "reason": "requested"}}}
+        record = {"sample_id": "sample1", "module": "integronfinder",
+                  "execution_status": "completed", "interpretation": "inconclusive",
+                  "scope_incomplete": True, "reason": "integronfinder_skipped_contigs",
+                  "findings": [], "metrics": {}, "artifacts": []}
+        path = self.write("evidence/integronfinder.json", record)
+        run, records, _ = aggregate(self.sample, config, [path])
+        self.assertEqual(run["completeness"], "incomplete")
+        self.assertEqual(run["incomplete_modules"], ["sample1:integronfinder"])
+        decision = run["module_decisions"]["sample1"]["integronfinder"]
+        self.assertTrue(decision["scope_incomplete"])
+        self.assertEqual(decision["declared_reason"], "requested")
+        self.assertEqual(decision["reason"], "integronfinder_skipped_contigs")
+        self.assertEqual(records[0]["execution_status"], "completed")
+        self.assertEqual(records[0]["interpretation"], "inconclusive")
+
+        for changes in ({"scope_incomplete": "true"}, {"reason": ""}):
+            self.write("evidence/integronfinder.json", {**record, **changes})
+            with self.assertRaises(ValueError):
+                aggregate(self.sample, config, [path])
+
+        # An evidence record may add limitations but cannot clear a planned one.
+        config["module_decisions"]["integronfinder"]["scope_incomplete"] = True
+        self.write("evidence/integronfinder.json", {**record, "scope_incomplete": False})
+        run, _, _ = aggregate(self.sample, config, [path])
+        self.assertEqual(run["completeness"], "incomplete")
+
     def test_render_keeps_native_files_and_exports_citations_and_valid_hashes(self):
         native = self.root / "native/amrfinder/calls.tsv"
         native.parent.mkdir(parents=True)

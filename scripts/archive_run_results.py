@@ -37,7 +37,7 @@ def _workflow_command(argv):
              "vmatch", "mkvtree", "vsubseqselect", "fuzznuc", "needle", "hmmsearch",
              "prodigal", "pathogenfinder2", *EXECUTABLES.values()}
     modules = {"snakemake", "safety.extend", "safety.ccf_assembly", "safety.ccf_batches",
-               "safety.native_execution", "safety.deep", "safety.runtime",
+               "safety.native_execution", "safety.integron", "safety.deep", "safety.runtime",
                "safety.setup", "safety.resources", "safety.deep_resources", "safety.pf2_classify"}
     if any(Path(value).name in names for value in argv):
         return True
@@ -52,7 +52,7 @@ def _workflow_command(argv):
             except ValueError:
                 # An unreadable command which mentions a workflow is not safe
                 # evidence that all writers have stopped.
-                return bool(re.search(r"\b(?:snakemake|safety\.(?:extend|deep|native_execution))\b", argv[index]))
+                return bool(re.search(r"\b(?:snakemake|safety\.(?:extend|deep|native_execution|integron))\b", argv[index]))
     return False
 
 
