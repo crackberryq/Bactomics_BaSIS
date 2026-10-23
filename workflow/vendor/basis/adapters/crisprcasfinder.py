@@ -236,22 +236,60 @@ def _parse_arrays(arrays, contig, sequence, min_level):
                 continue
             left, right = _interval(region, len(sequence))
             if not start <= left <= right <= end or not _BASES.fullmatch(bases) or bases != sequence[left - 1:right]:
-                raise ValueError("CRISPR repeat/spacer sequence does not match assembly")
+                raise ValueError(f"CRISPR repeat/spacer coordinates or sequence do not match assembly: "
+                                 f"contig {contig}, array {ident}, array bounds {start}..{end}, "
+                                 f"{kind} bounds {left}..{right}")
             parts.append((kind, left, right))
         expected_kinds = [value for _ in range(spacers) for value in ("DR", "Spacer")] + ["DR"]
         if [p[0] for p in parts] != expected_kinds or flanks != {"LeftFLANK", "RightFLANK"}:
             raise ValueError("Incomplete/nonalternating CRISPR region coverage")
-        if parts[0][1] != start or parts[-1][2] != end or any(a[2] + 1 != b[1] for a, b in zip(parts, parts[1:])):
-            raise ValueError("CRISPR array bounds or region continuity disagree")
+        boundary_review = None
+        contiguous = all(a[2] + 1 == b[1] for a, b in zip(parts, parts[1:]))
+        if parts[0][1] != start or not contiguous:
+            raise ValueError(f"CRISPR array bounds or region continuity disagree: contig {contig}, "
+                             f"array {ident}, array bounds {start}..{end}, "
+                             f"component bounds {parts[0][1]}..{parts[-1][2]}, contiguous={contiguous}")
+        if parts[-1][2] != end:
+            # Native array bounds and component intervals are generated separately.
+            # Preserve this observed one-base discrepancy as unresolved evidence;
+            # neither trim the array nor invent a base in its final repeat.
+            if (end != parts[-1][2] + 1
+                    or any(right - left + 1 != repeat_length for kind, left, right in parts if kind == "DR")):
+                raise ValueError(f"CRISPR array endpoint disagrees with region coverage: contig {contig}, "
+                                 f"array {ident}, reported end {end}, final repeat end {parts[-1][2]}, "
+                                 f"declared repeat length {repeat_length}")
+            boundary_review = {"status": "native_end_unresolved",
+                               "reported_start": start, "reported_end": end,
+                               "component_start": parts[0][1], "component_end": parts[-1][2],
+                               "unassigned_terminal_bases": 1}
         finding = _finding(contig, ident, "predicted CRISPR array", start, end, "array", array,
                            native_evidence_level=level, passes_threshold=level >= min_level,
                            repeat_count=spacers + 1, spacer_count=spacers, repeat_sequence=repeat,
                            repeat_intervals=[{"start": a, "end": b, "length": b - a + 1} for k, a, b in parts if k == "DR"])
         finding["strand"] = orientation
+        if boundary_review is not None:
+            finding["attributes"]["boundary_review"] = boundary_review
         if level < min_level:
             finding["evidence_level"] = "exploratory"
         findings.append(finding)
     return findings
+
+
+def _mark_boundary_reviews(payload):
+    reviews = [{"contig": row["contig"], "array_name": row["gene"],
+                **row["attributes"]["boundary_review"]}
+               for row in payload["findings"] if "boundary_review" in row["attributes"]]
+    if reviews:
+        payload["scope_incomplete"] = True
+        payload["reason"] = "crisprcasfinder_boundary_review_required"
+        payload["metrics"]["array_boundary_reviews"] = reviews
+        payload["metrics"]["completion_check"] = (
+            "all_contig_JSON_native_Cas_artifacts_and_component_coordinates_verified_boundary_review_required")
+        payload["notes"].append(
+            "Unresolved native array boundary: the reported end includes one terminal base outside "
+            "the contiguous repeat/spacer intervals. Both bounds are preserved; no coordinate was "
+            "corrected. Boundary review is required and report scope remains incomplete.")
+    return payload
 
 
 def _native_table(path, no_hit):
@@ -524,7 +562,7 @@ def run(module, sample, config, outdir, runner):
         statuses[contig] = status
     arrays = [f for f in findings if f["attributes"]["feature_type"] == "array"]
     complete = all(s["status"] == "completed" for s in statuses.values())
-    return {"findings": findings, "artifacts": [str(native), str(map_path)],
+    return _mark_boundary_reviews({"findings": findings, "artifacts": [str(native), str(map_path)],
             "interpretation": "detected" if findings else ("not_detected" if complete else "inconclusive"),
             "metrics": {"crisprcasfinder_version": VERSION, "source_sha256": SOURCE_SHA256,
                         "macsyfinder_version": MACSYFINDER_VERSION, "casfinder_models_version": CAS_MODELS_VERSION,
@@ -545,4 +583,4 @@ def run(module, sample, config, outdir, runner):
                       "Rejected/incomplete Cas candidates remain in the native MacSyFinder artifacts and do not establish a typed system.",
                       "Saved run-local wrappers suppress ambient MacSyFinder system/user configuration; pinned defaults, model configuration and explicit native settings remain active. HOME is unchanged.",
                       "Prodigal predicts Cas-search proteins independently; native protein IDs are not asserted to match the submitted annotation.",
-                      "No predicted CDS means Cas was not assessed, not that Cas genes are absent."]}
+                      "No predicted CDS means Cas was not assessed, not that Cas genes are absent."]})

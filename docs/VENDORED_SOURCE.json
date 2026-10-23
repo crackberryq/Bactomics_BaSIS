@@ -30,6 +30,12 @@
       "source_sha256": "a8d16c33ba74f57062d206b4d23269689c2c11bf495971543ced54ad00f16374",
       "standalone_sha256": "a0972f0463c381275b73ba68ba828e351e00f4c5faee28ef53969f13be2d4a27",
       "reason": "Retain AWARE admission settings and the historical batch helper default. Standalone SafetyContext removes batch_size and selects whole-assembly CRISPR execution."
+    },
+    {
+      "path": "workflow/vendor/basis/adapters/crisprcasfinder.py",
+      "source_sha256": "6cd1c8ad05dca2dd6a6c87e7095d98fb99f22b3e4d4bd9bfd98186dd728a4c0c",
+      "standalone_sha256": "793920c2b5f668c541505bf49948a839553cce6af8d7f65d8bfaa438193dd0b1",
+      "reason": "Preserve the observed one-base native array/component endpoint discrepancy with explicit boundary-review and incomplete-report scope; retain other validation and all native search settings."
     }
   ],
   "removed_files": [

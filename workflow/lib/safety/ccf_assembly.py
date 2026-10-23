@@ -209,7 +209,7 @@ def parse_assembly(work, sequences, *, min_evidence_level=3, genetic_code=11, ar
                       ("native", "contig_map.json", "stdout.txt", "runtime_isolation.json")]
     if (work / "macsyfinder-audits").is_dir():
         artifact_paths.append(str(artifacts / "macsyfinder-audits"))
-    return {"findings": findings, "artifacts": artifact_paths,
+    return ccf._mark_boundary_reviews({"findings": findings, "artifacts": artifact_paths,
         "interpretation": "detected" if findings else ("not_detected" if complete else "inconclusive"),
         "metrics": {"crisprcasfinder_version": ccf.VERSION, "source_sha256": ccf.SOURCE_SHA256,
             "macsyfinder_version": ccf.MACSYFINDER_VERSION, "casfinder_models_version": ccf.CAS_MODELS_VERSION,
@@ -230,7 +230,7 @@ def parse_assembly(work, sequences, *, min_evidence_level=3, genetic_code=11, ar
             "Upstream circular topology is an algorithm setting, not confirmed assembly topology.",
             "Short-contig unordered candidates are retained without asserting typed systems.",
             "No predicted CDS means Cas was not assessed; it does not establish Cas absence.",
-            "All supplied assembly records share one pinned native invocation; each Cas invocation has its own configuration-isolation audit."]}
+            "All supplied assembly records share one pinned native invocation; each Cas invocation has its own configuration-isolation audit."]})
 
 
 def run_assembly(sample, full_config, destination, receipt, store_root, *, threads, sources=()):
