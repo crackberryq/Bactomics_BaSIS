@@ -232,5 +232,5 @@ rule normalize_extend:
         PYTHONPATH={params.code:q} {params.python:q} -m safety.extend normalize \
             --sample {input.sample:q} --config {input.config:q} \
             --validation {input.validation:q} --module {wildcards.extend_module:q} \
-            --native {params.native:q} --receipt {params.receipt:q} --output {output:q} > {log:q} 2>&1
+            --native {params.native:q} --receipt={params.receipt:q} --output {output:q} > {log:q} 2>&1
         """
