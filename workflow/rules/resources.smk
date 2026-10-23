@@ -22,7 +22,6 @@ rule prepare_resource:
         external=lambda wc: external_inputs(RESOURCE_SPECS[wc.resource]),
         source=lambda wc: source_inputs(RESOURCE_SPECS[wc.resource], ROOT)
     output:
-        data=directory(str(CTX.resource_root) + "/{resource}/data"),
         receipt=str(CTX.resource_root) + "/{resource}/provenance.json"
     wildcard_constraints:
         resource=RESOURCE_NAMES
@@ -50,5 +49,6 @@ rule prepare_resource:
         PYTHONPATH={CODE_PATH:q} {PYTHON:q} -m safety.resources prepare \
             --name {wildcards.resource:q} --spec-json {params.spec:q} \
             --resource-root {params.root:q} --logfile {params.commands:q} \
+            --environment {input.environment:q} \
             --threads {threads} {params.dependency_args} > {log:q} 2>&1
         """

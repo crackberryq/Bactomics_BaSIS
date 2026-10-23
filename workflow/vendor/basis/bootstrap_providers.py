@@ -447,7 +447,11 @@ def prepare_resource(spec: dict, destination: Path, runner) -> dict:
                        sources=[{"source": "AMRFinder", "path": str(resolved / "AMRProt.fa"), "format": "fasta", "review_status": "unreviewed"}],
                        details={"database_version_probe": probe, "selection": "upstream current compatible database resolved once"})
     if provider == "genomad":
-        runner.run(["genomad", "download-database", str(root)], cwd=root)
+        # Keep verified archives outside the attempt/output directory so an
+        # extraction failure or Snakemake cleanup never forces a new transfer.
+        cache = Path(spec.get("cache_directory") or root.parent) / "downloads" / "genomad"
+        runner.run(["python", str(Path(__file__).with_name("download_genomad.py")),
+                    "--destination", str(root), "--cache", str(cache)], cwd=root)
         db = root / "genomad_db"
         for name in ("version.txt", "genomad_marker_metadata.tsv", "names.dmp", "nodes.dmp"):
             _require(db, name)
@@ -455,7 +459,9 @@ def prepare_resource(spec: dict, destination: Path, runner) -> dict:
             for suffix in ("", ".dbtype", ".index"):
                 _require(db, prefix + suffix)
         version = _version(db / "version.txt")
-        return _finish(spec, root, {"genomad": {"database": str(db)}}, version)
+        download = json.loads((root / "genomad-download.json").read_text())
+        return _finish(spec, root, {"genomad": {"database": str(db)}}, version,
+                       details={"download": download})
     if provider == "antismash":
         runner.run(["download-antismash-databases", "--database-dir", str(root)], cwd=root)
         pfams = sorted(root.glob("pfam/*/Pfam-A.hmm"))

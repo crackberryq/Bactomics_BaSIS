@@ -54,6 +54,49 @@ class ContextTests(unittest.TestCase):
         config.update(changes)
         return SafetyContext(config, ROOT)
 
+    def test_crispr_runs_whole_assembly_and_ignores_legacy_batch_setting(self):
+        cfg = self.base_config([])
+        first = SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"]
+        self.assertEqual(first["execution_scope"], "assembly")
+        self.assertNotIn("batch_size", first)
+        cfg["modules"]["crisprcasfinder"]["batch_size"] = 32
+        self.assertEqual(SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"], first)
+        cfg["modules"]["crisprcasfinder"]["execution_scope"] = "contig"
+        with self.assertRaisesRegex(ValueError, "execution_scope"):
+            SafetyContext(cfg, ROOT)
+
+    def test_runtime_durations_are_validated_before_scheduling(self):
+        for section in ("minced", "deep"):
+            for key in ("timeout_seconds", "heartbeat_seconds"):
+                for value in (0, -1, True, float("nan"), float("inf"), "invalid"):
+                    cfg = self.base_config([])
+                    target = cfg["deep"] if section == "deep" else cfg["modules"][section]
+                    target[key] = value
+                    with self.subTest(section=section, key=key, value=value):
+                        with self.assertRaisesRegex(ValueError, section + "." + key):
+                            SafetyContext(cfg, ROOT)
+                target[key] = .25
+                SafetyContext(cfg, ROOT)
+
+    def test_missing_managed_resource_link_cannot_be_a_silent_noop(self):
+        cfg = self.base_config([])
+        cfg["modules"]["vfdb"]["enabled"] = True
+        payload = self.resource_root / "snapshots/vfdb/key/attempt/data"
+        payload.mkdir(parents=True)
+        (payload / "vfdb_setA.dmnd").write_text("synthetic database fixture")
+        receipt = self.resource_root / "vfdb/provenance.json"
+        receipt.parent.mkdir()
+        receipt.write_text(json.dumps({"cache_key": "key", "payload_root": str(payload)}))
+        with self.assertRaisesRegex(ValueError, "Managed resource link"):
+            SafetyContext(cfg, ROOT)
+        alias = receipt.parent / "data"
+        alias.symlink_to(payload, target_is_directory=True)
+        context = SafetyContext(cfg, ROOT)
+        self.assertIn("vfdb", context.resource_specs())
+        alias.unlink()
+        receipt.rename(receipt.with_suffix(".repair-backup"))
+        SafetyContext(cfg, ROOT)  # The missing receipt can now schedule recovery.
+
     def test_csv_tsv_and_xlsx_preserve_ids_and_resolve_relative_paths(self):
         rows = [self.annotation("folder A", "001", arbitrary=True),
                 self.annotation("folder B", "sample-B", arbitrary=True)]
@@ -139,8 +182,8 @@ class ContextTests(unittest.TestCase):
         expected = {str(Path(row["isolate_dir"]) / "safety/metadata/setup.ready.json") for row in rows}
         for row in rows:
             self.assertEqual(set(context.setup_target(row["isolate_dir"])), expected)
-        rules = (ROOT / "workflow/rules/native.smk").read_text()
-        self.assertIn("setup=lambda w: CTX.setup_target(w.isolate)", rules)
+        # Real execution ordering is checked by test_workflow; the barrier may
+        # be marked order-only without propagating unrelated config changes.
 
     def test_disabled_modules_do_not_prepare_resources_or_evidence(self):
         row = self.annotation("disabled")

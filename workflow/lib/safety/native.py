@@ -117,7 +117,7 @@ def command_argv(module, sample, settings, native, threads):
     return argv + (["--scheme", scheme] if scheme else []) + [assembly]
 
 
-def command_shell(module, sample, settings, native, threads):
+def command_shell(module, sample, settings, native, threads, *, local_database=None):
     """A transparent shell body executed directly by the owning Snakemake rule."""
     native = Path(native)
     q = shlex.quote
@@ -129,7 +129,7 @@ def command_shell(module, sample, settings, native, threads):
     if module == "icescreen":
         lines += [f"mkdir -p {q(str(native / 'input'))} {q(str(native / 'output'))}",
                   f"cp -- {q(str(sample['genbank']))} {q(str(native / 'input/basis.gbk'))}"]
-    cwd = native.parent / "database" if module == "rgi" else native
+    cwd = (Path(local_database) if local_database else native.parent / "database") if module == "rgi" else native
     lines += [f"printf '%s\\n' {q(command)} > {q(str(native / 'command.sh'))}",
               f"cd {q(str(cwd))}", f"{command} > {q(str(native / 'stdout.txt'))} 2> {q(str(native / 'stderr.txt'))}"]
     return "\n".join(lines)
@@ -264,6 +264,7 @@ def main(argv=None):
     parser.add_argument("--native", required=True)
     parser.add_argument("--validation")
     parser.add_argument("--output")
+    parser.add_argument("--receipt")
     args = parser.parse_args(argv)
     sample, config = _load(args.sample), _load(args.config)
     settings = config.get("modules", {}).get(args.module, {})
@@ -272,6 +273,10 @@ def main(argv=None):
     else:
         if not args.output or not args.validation:
             parser.error("parse requires --output and --validation")
+        decision = config.get("module_decisions", {}).get(args.module, {})
+        if args.receipt and decision.get("action", "run") == "run":
+            from .result_store import verify_receipt
+            verify_receipt(args.receipt, args.native)
         _write(args.output, normalized_record(args.module, sample, config, _load(args.validation), args.native))
 
 

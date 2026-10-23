@@ -1,6 +1,8 @@
-# Native tools run directly inside their Snakemake-deployed environments.
-# Python below only checks and normalizes saved files; it never launches tools.
-from safety.native import MODULES as NATIVE_MODULES, command_shell, native_dir, rgi_load_shell
+# Each Snakemake job runs one checked native command in its selected environment.
+# Successful payloads and failed diagnostics outlive disposable completion receipts.
+from safety.native import MODULES as NATIVE_MODULES, native_dir
+
+VERIFIED_NATIVE_RECEIPTS = set()
 
 
 def native_metadata(isolate, name):
@@ -16,55 +18,89 @@ def native_input_paths(w, module):
 def native_parser_sources(module):
     group = ("amr" if module in {"amrfinder", "rgi", "vfdb", "bacmet"} else
              "minced" if module == "minced" else "typing_defense" if module == "mlst" else "context")
-    return [str(ROOT / "workflow/lib/safety/native.py"),
+    return [str(ROOT / "workflow/lib/safety" / name) for name in
+            ("native.py", "native_execution.py", "result_store.py", "runtime.py")] + [
             str(ROOT / "workflow/vendor/basis/adapters" / (group + ".py")),
             str(ROOT / "workflow/vendor/basis/inputs.py")]
 
 
+def native_completion_receipt(isolate, module):
+    from safety.result_store import verify_receipt
+    receipt = Path(isolate) / "safety/completion" / (module + ".json")
+    destination = (Path(isolate) / "safety/native/rgi/database" if module == "rgi_database"
+                   else native_dir(isolate, module))
+    # The scheduler input set must be identical before and after a first run.
+    # Verify retained payloads without making their discovered inventory a new
+    # input set on the next invocation; the worker verifies again before parse.
+    key = (str(receipt), str(destination))
+    if receipt.is_file() and key not in VERIFIED_NATIVE_RECEIPTS:
+        verify_receipt(receipt, destination)
+        VERIFIED_NATIVE_RECEIPTS.add(key)
+    return str(receipt)
+
+
 def native_normalization_inputs(w):
-    return [str(native_dir(w.isolate, w.module))] if CTX.module_enabled(w.isolate, w.module) else []
+    if not CTX.module_enabled(w.isolate, w.module):
+        return []
+    return [native_completion_receipt(w.isolate, w.module)]
+
+
+def native_completion_targets():
+    # Completion receipts are retained targets, rather than disposable
+    # intermediates hidden behind already completed reports. A missing receipt
+    # therefore schedules verified cache recovery during an ordinary resume.
+    result = []
+    for isolate in CTX.samples:
+        for module in NATIVE_MODULES:
+            if CTX.module_enabled(isolate, module):
+                result.append(native_completion_receipt(isolate, module))
+                if module == "rgi":
+                    result.append(native_completion_receipt(isolate, "rgi_database"))
+    return result
 
 
 rule rgi_load_database:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
+        sample=lambda w: native_metadata(w.isolate, "sample.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "rgi"),
         resources=lambda w: CTX.resource_inputs("rgi"),
-        source=str(ROOT / "workflow/lib/safety/native.py")
+        parser=native_parser_sources("rgi")
     output:
-        db=directory("{isolate}/safety/native/rgi/database")
+        receipt="{isolate}/safety/completion/rgi_database.json"
     params:
-        command=lambda w: rgi_load_shell(CTX.module_config(w.isolate, "rgi"), Path(w.isolate) / "safety/native/rgi/database")
-    conda:
-        CTX.env("rgi")
+        native=lambda w: str(Path(w.isolate) / "safety/native/rgi/database"),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/rgi_database"),
+        code=CODE_PATH,
+        python=PYTHON
+    conda: CTX.env("rgi")
     threads: 1
-    log:
-        "{isolate}/safety/logs/rgi_load_database.log"
-    benchmark:
-        "{isolate}/safety/benchmarks/rgi_load_database.tsv"
-    message:
-        "Prepare the isolate-local CARD database for RGI: {wildcards.isolate}"
+    log: "{isolate}/safety/logs/rgi_load_database.log"
+    benchmark: "{isolate}/safety/benchmarks/rgi_load_database.tsv"
+    message: "Prepare or reuse the verified isolate-local CARD database: {wildcards.isolate}"
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module rgi --load-database --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule amrfinder:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "amrfinder"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "amrfinder"),
         resources=lambda w: CTX.resource_inputs("amrfinder"),
         parser=native_parser_sources("amrfinder")
     output:
-        native=directory("{isolate}/safety/native/amrfinder")
+        receipt="{isolate}/safety/completion/amrfinder.json"
     params:
-        command=lambda w, threads: command_shell("amrfinder", CTX.samples[w.isolate], CTX.module_config(w.isolate, "amrfinder"), native_dir(w.isolate, "amrfinder"), threads),
+        native=lambda w: str(native_dir(w.isolate, "amrfinder")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/amrfinder"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -82,28 +118,27 @@ rule amrfinder:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module amrfinder --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module amrfinder --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule rgi:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "rgi"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "rgi"),
-        database="{isolate}/safety/native/rgi/database",
+        database="{isolate}/safety/completion/rgi_database.json",
         resources=lambda w: CTX.resource_inputs("rgi"),
         parser=native_parser_sources("rgi")
     output:
-        native=directory("{isolate}/safety/native/rgi/results")
+        receipt="{isolate}/safety/completion/rgi.json"
     params:
-        command=lambda w, threads: command_shell("rgi", CTX.samples[w.isolate], CTX.module_config(w.isolate, "rgi"), native_dir(w.isolate, "rgi"), threads),
+        native=lambda w: str(native_dir(w.isolate, "rgi")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/rgi"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -121,27 +156,27 @@ rule rgi:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module rgi --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module rgi --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} \
+            --database-receipt {input.database:q} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule vfdb:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "vfdb"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "vfdb"),
         resources=lambda w: CTX.resource_inputs("vfdb"),
         parser=native_parser_sources("vfdb")
     output:
-        native=directory("{isolate}/safety/native/vfdb")
+        receipt="{isolate}/safety/completion/vfdb.json"
     params:
-        command=lambda w, threads: command_shell("vfdb", CTX.samples[w.isolate], CTX.module_config(w.isolate, "vfdb"), native_dir(w.isolate, "vfdb"), threads),
+        native=lambda w: str(native_dir(w.isolate, "vfdb")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/vfdb"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -159,27 +194,26 @@ rule vfdb:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module vfdb --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module vfdb --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule bacmet:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "bacmet"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "bacmet"),
         resources=lambda w: CTX.resource_inputs("bacmet"),
         parser=native_parser_sources("bacmet")
     output:
-        native=directory("{isolate}/safety/native/bacmet")
+        receipt="{isolate}/safety/completion/bacmet.json"
     params:
-        command=lambda w, threads: command_shell("bacmet", CTX.samples[w.isolate], CTX.module_config(w.isolate, "bacmet"), native_dir(w.isolate, "bacmet"), threads),
+        native=lambda w: str(native_dir(w.isolate, "bacmet")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/bacmet"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -197,27 +231,26 @@ rule bacmet:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module bacmet --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module bacmet --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule antismash:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "antismash"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "antismash"),
         resources=lambda w: CTX.resource_inputs("antismash"),
         parser=native_parser_sources("antismash")
     output:
-        native=directory("{isolate}/safety/native/antismash")
+        receipt="{isolate}/safety/completion/antismash.json"
     params:
-        command=lambda w, threads: command_shell("antismash", CTX.samples[w.isolate], CTX.module_config(w.isolate, "antismash"), native_dir(w.isolate, "antismash"), threads),
+        native=lambda w: str(native_dir(w.isolate, "antismash")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/antismash"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -235,27 +268,26 @@ rule antismash:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module antismash --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module antismash --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule genomad:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "genomad"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "genomad"),
         resources=lambda w: CTX.resource_inputs("genomad"),
         parser=native_parser_sources("genomad")
     output:
-        native=directory("{isolate}/safety/native/genomad")
+        receipt="{isolate}/safety/completion/genomad.json"
     params:
-        command=lambda w, threads: command_shell("genomad", CTX.samples[w.isolate], CTX.module_config(w.isolate, "genomad"), native_dir(w.isolate, "genomad"), threads),
+        native=lambda w: str(native_dir(w.isolate, "genomad")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/genomad"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -273,27 +305,26 @@ rule genomad:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module genomad --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module genomad --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule mobsuite:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "mobsuite"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "mobsuite"),
         resources=lambda w: CTX.resource_inputs("mobsuite"),
         parser=native_parser_sources("mobsuite")
     output:
-        native=directory("{isolate}/safety/native/mobsuite")
+        receipt="{isolate}/safety/completion/mobsuite.json"
     params:
-        command=lambda w, threads: command_shell("mobsuite", CTX.samples[w.isolate], CTX.module_config(w.isolate, "mobsuite"), native_dir(w.isolate, "mobsuite"), threads),
+        native=lambda w: str(native_dir(w.isolate, "mobsuite")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/mobsuite"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -311,27 +342,26 @@ rule mobsuite:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module mobsuite --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module mobsuite --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule integronfinder:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "integronfinder"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "integronfinder"),
         resources=lambda w: CTX.resource_inputs("integronfinder"),
         parser=native_parser_sources("integronfinder")
     output:
-        native=directory("{isolate}/safety/native/integronfinder")
+        receipt="{isolate}/safety/completion/integronfinder.json"
     params:
-        command=lambda w, threads: command_shell("integronfinder", CTX.samples[w.isolate], CTX.module_config(w.isolate, "integronfinder"), native_dir(w.isolate, "integronfinder"), threads),
+        native=lambda w: str(native_dir(w.isolate, "integronfinder")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/integronfinder"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -349,27 +379,26 @@ rule integronfinder:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module integronfinder --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module integronfinder --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule isescan:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "isescan"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "isescan"),
         resources=lambda w: CTX.resource_inputs("isescan"),
         parser=native_parser_sources("isescan")
     output:
-        native=directory("{isolate}/safety/native/isescan")
+        receipt="{isolate}/safety/completion/isescan.json"
     params:
-        command=lambda w, threads: command_shell("isescan", CTX.samples[w.isolate], CTX.module_config(w.isolate, "isescan"), native_dir(w.isolate, "isescan"), threads),
+        native=lambda w: str(native_dir(w.isolate, "isescan")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/isescan"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -387,27 +416,26 @@ rule isescan:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module isescan --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module isescan --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule icescreen:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "icescreen"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "icescreen"),
         resources=lambda w: CTX.resource_inputs("icescreen"),
         parser=native_parser_sources("icescreen")
     output:
-        native=directory("{isolate}/safety/native/icescreen")
+        receipt="{isolate}/safety/completion/icescreen.json"
     params:
-        command=lambda w, threads: command_shell("icescreen", CTX.samples[w.isolate], CTX.module_config(w.isolate, "icescreen"), native_dir(w.isolate, "icescreen"), threads),
+        native=lambda w: str(native_dir(w.isolate, "icescreen")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/icescreen"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -425,27 +453,26 @@ rule icescreen:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module icescreen --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module icescreen --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule minced:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "minced"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "minced"),
         resources=lambda w: CTX.resource_inputs("minced"),
         parser=native_parser_sources("minced")
     output:
-        native=directory("{isolate}/safety/native/minced")
+        receipt="{isolate}/safety/completion/minced.json"
     params:
-        command=lambda w, threads: command_shell("minced", CTX.samples[w.isolate], CTX.module_config(w.isolate, "minced"), native_dir(w.isolate, "minced"), threads),
+        native=lambda w: str(native_dir(w.isolate, "minced")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/minced"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -463,27 +490,26 @@ rule minced:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module minced --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module minced --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule mlst:
     input:
-        setup=lambda w: CTX.setup_target(w.isolate),
+        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, "mlst"),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         sources=lambda w: native_input_paths(w, "mlst"),
         resources=lambda w: CTX.resource_inputs("mlst"),
         parser=native_parser_sources("mlst")
     output:
-        native=directory("{isolate}/safety/native/mlst")
+        receipt="{isolate}/safety/completion/mlst.json"
     params:
-        command=lambda w, threads: command_shell("mlst", CTX.samples[w.isolate], CTX.module_config(w.isolate, "mlst"), native_dir(w.isolate, "mlst"), threads),
+        native=lambda w: str(native_dir(w.isolate, "mlst")),
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/mlst"),
         code=CODE_PATH,
         python=PYTHON
     threads:
@@ -501,18 +527,16 @@ rule mlst:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        (
-            {params.command}
-            PYTHONPATH={params.code:q} {params.python:q} -m safety.native verify \
-                --module mlst --sample {input.sample:q} --config {input.config:q} \
-                --native {output.native:q}
-        ) > {log:q} 2>&1
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+            --module mlst --sample {input.sample:q} --config {input.config:q} \
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.parser:q} > {log:q} 2>&1
         """
 
 rule normalize_native:
     input:
         sample=lambda w: native_metadata(w.isolate, "sample.json"),
-        config=lambda w: native_metadata(w.isolate, "config.json"),
+        config=lambda w: CTX.module_config_path(w.isolate, w.module),
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         native=native_normalization_inputs,
         parser=lambda w: native_parser_sources(w.module) + [str(ROOT / "workflow/vendor/basis/normalize.py"),
@@ -522,6 +546,7 @@ rule normalize_native:
     wildcard_constraints:
         module="(?:" + "|".join(NATIVE_MODULES) + ")"
     params:
+        receipt=lambda w: str(Path(w.isolate) / "safety/completion" / (w.module + ".json")),
         native=lambda w: str(native_dir(w.isolate, w.module)),
         code=CODE_PATH,
         python=PYTHON
@@ -534,5 +559,5 @@ rule normalize_native:
         mkdir -p "$(dirname {log:q})"
         PYTHONPATH={params.code:q} {params.python:q} -m safety.native parse \
             --module {wildcards.module:q} --sample {input.sample:q} --config {input.config:q} \
-            --validation {input.validation:q} --native {params.native:q} --output {output:q} > {log:q} 2>&1
+            --receipt {params.receipt:q} --validation {input.validation:q} --native {params.native:q} --output {output:q} > {log:q} 2>&1
         """

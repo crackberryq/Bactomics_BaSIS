@@ -186,6 +186,40 @@ class DeepWorkflowTests(unittest.TestCase):
         self.assertEqual(config["min_identity"], 30)
         self.assertTrue(config["placement_cache_dir"].startswith(str(self.isolate)))
 
+    def test_prepare_cli_uses_scoped_config_and_allocated_runtime_settings(self):
+        from safety.deep_resources import discover_inputs
+        scoped = self.isolate / "safety/metadata/configs/deepsafe.json"
+        config = {**self.cfg, "maximum_candidates": 7,
+                  "timeout_seconds": 123, "heartbeat_seconds": .5}
+        deep.write(scoped, {"deep": config})
+        discovery = self.isolate / "discovered.json"
+        discover_inputs(scoped, discovery)
+        output = self.isolate / "prepared.json"
+        native = self.isolate / "safety/deepsafe/native/prepare"
+        with patch("safety.runtime.DirectRunner", return_value=self.runner) as runner:
+            deep.main(["prepare", "--isolate", str(self.isolate),
+                       "--config", str(scoped), "--family-inputs", str(discovery),
+                       "--records", str(self.record_path), "--threads", "2",
+                       "--output", str(output), "--native", str(native),
+                       "--log", str(self.isolate / "job.log")])
+        used = runner.call_args.args[0]
+        self.assertEqual(used["threads"], 2)
+        self.assertEqual(used["timeout_seconds"], 123)
+        self.assertEqual(used["heartbeat_seconds"], .5)
+        self.assertEqual(deep.load_document(output)["context"]["config"]["maximum_candidates"], 7)
+
+    def test_invalid_runtime_config_does_not_delete_existing_native_output(self):
+        native = self.native("prepare")
+        sentinel = native / "keep.txt"
+        sentinel.write_text("saved work")
+        scoped = self.isolate / "safety/metadata/configs/deepsafe.json"
+        deep.write(scoped, {"deep": {**self.cfg, "timeout_seconds": -1}})
+        with self.assertRaisesRegex(ValueError, "timeout_seconds"):
+            deep.main(["prepare", "--isolate", str(self.isolate), "--config", str(scoped),
+                       "--output", str(self.isolate / "prepared.json"), "--native", str(native),
+                       "--log", str(self.isolate / "job.log")])
+        self.assertEqual(sentinel.read_text(), "saved work")
+
     @unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake is not installed in the test interpreter")
     def test_checkpoint_resume_and_report_change_do_not_rerun_deep(self):
         """Run the real DAG using context-only synthetic evidence; no tool stubs."""
@@ -223,6 +257,8 @@ class DeepWorkflowTests(unittest.TestCase):
             f"CODE_PATH = {str(ROOT / 'workflow/lib') + ':' + str(ROOT / 'workflow/vendor')!r}\n"
             "class Context:\n"
             f"    def setup_target(self, isolate): return {str(setup)!r}\n"
+            f"    def module_config_path(self, isolate, module): return {str(self.isolate / 'safety/metadata/config.json')!r}\n"
+            "    def deep_config(self, isolate): return {'threads': 2, 'memory_mb': 5555}\n"
             f"    def evidence_targets(self, isolate): return [{str(self.record_path)!r}]\n"
             f"    def env(self, name): return {str(ROOT / 'envs/deepsafe.yml')!r}\n"
             "CTX = Context()\n"

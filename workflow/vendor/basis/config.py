@@ -35,7 +35,7 @@ def default_config() -> dict:
     modules["genomad"].update(database=None, memory_mb=12000)
     modules["mobsuite"].update(database=None)
     modules["antismash"].update(database=None, memory_mb=12000)
-    modules["crisprcasfinder"].update(database=None, version_args=[])
+    modules["crisprcasfinder"].update(database=None, version_args=[], batch_size=32)
     modules["pathogenfinder2"].update(enabled=True, attention=True, attention_top_n=20, map=False,
                                       memory_mb=16000, gpus=0,
                                       pf2_source_commit="3837caf6710da5da3038f5d1246dd82ab26e003a")

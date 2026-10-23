@@ -15,9 +15,9 @@ BaSIS 0.4.0a1 uses a directly runnable `BaSIS.smk`, organized in the style of Hy
 | Retry, resume and detect outdated outputs | Snakemake's declared inputs, outputs and metadata |
 | Render visualizations and citations | Saved-evidence reporting rule |
 
-There is no inner BaSIS scheduler, environment activation, detached job launcher or cache controller on the active path. The small `DirectRunner` boundary runs commands synchronously in the environment already activated by Snakemake. It rejects attempts to invoke another `conda`, `mamba`, `micromamba`, `snakemake` or `basis` launcher.
+There is no inner BaSIS scheduler, environment activation or detached job launcher on the active path. The small `DirectRunner` boundary runs commands synchronously in the environment already activated by Snakemake. It rejects attempts to invoke another `conda`, `mamba`, `micromamba`, `snakemake` or `basis` launcher. Resource snapshot reuse and per-contig completion checks run synchronously inside their owning jobs.
 
-This does not mean every operating-system subprocess is a separate DAG node. Some scientific stages need a small ordered sequence of commands, such as an alignment and bounded tree follow-up. Those stages remain inside one Snakemake job. A failure exits that job, and the rule owns the corresponding native directory and state output. The documentation does not claim finer-grained restartability than those rule boundaries provide.
+This does not mean every operating-system subprocess is a separate DAG node. Some scientific stages need a small ordered sequence of commands, such as an alignment and bounded tree follow-up. Those stages remain inside one Snakemake job. CRISPR batches retain verified per-contig work outside declared batch receipts; resource payloads likewise survive failed receipt jobs. Other stages retain their declared rule boundaries. See [resource and batch recovery](RESOURCES_AND_BATCHES.md) for these explicit restart contracts.
 
 ## Rule groups
 

@@ -10,6 +10,7 @@ import re
 from basis.config import ALL_MODULES, PATH_KEYS, default_config, merge_dict
 from basis.hybas import enrich_sample
 from basis.sample_policy import plan_sample_modules, validate_sample_overrides
+from .runtime import _positive_seconds
 
 RECIPES = {"amrfinder": "core-amr", "rgi": "rgi", "vfdb": "diamond", "bacmet": "diamond",
            "antismash": "antismash", "genomad": "context", "integronfinder": "context",
@@ -107,8 +108,18 @@ class SafetyContext:
                     section[key] = _path(section[key], self.root)
             for key in ("threads", "memory_mb"):
                 _positive(section.get(key, 1), name + "." + key)
+            for key in ("timeout_seconds", "heartbeat_seconds"):
+                if key in section:
+                    _positive_seconds(section[key], name + "." + key)
             section["command_prefix"] = []
         cfg["modules"]["pathogenfinder2"]["enabled"] &= self.extend_enabled
+        ccf = cfg["modules"]["crisprcasfinder"]
+        if ccf.get("execution_scope", "assembly") != "assembly":
+            raise ValueError("crisprcasfinder.execution_scope must be assembly")
+        ccf["execution_scope"] = "assembly"
+        # Older overlays may contain a scheduler batch size. The active rule now
+        # runs the complete assembly; this setting no longer affects execution.
+        ccf.pop("batch_size", None)
         cfg["deep"].setdefault("executables", {})["iqtree"] = "iqtree2"
         resources = supplied.get("resources", {})
         if not isinstance(resources, dict) or resources.get("policy", "auto") not in {"auto", "manual"}:
@@ -121,6 +132,28 @@ class SafetyContext:
         self.decisions = {isolate: plan_sample_modules(cfg, sample, self.extend_enabled)
                           for isolate, sample in self.samples.items()}
         self._specs = self._resource_specs()
+        self._check_resource_links()
+
+    def _check_resource_links(self):
+        """Detect missing undeclared payload links without changing the DAG's files."""
+        for name, spec in self._specs.items():
+            if spec.get("mode") == "external":
+                continue
+            receipt = Path(self.resource_root) / name / "provenance.json"
+            if not receipt.is_file():
+                continue  # Preparation will create or restore the managed link.
+            row = json.loads(receipt.read_text(encoding="utf-8"))
+            if not row.get("cache_key") or not row.get("payload_root"):
+                continue  # Legacy migration is handled by the resource worker.
+            payload = Path(row["payload_root"])
+            if not payload.is_dir():
+                raise ValueError(f"Prepared resource payload is missing: {payload}. Restore the recorded snapshot before resuming.")
+            alias = receipt.parent / "data"
+            if not alias.is_symlink() or alias.resolve() != payload.resolve():
+                raise ValueError(
+                    f"Managed resource link is missing or changed: {alias}. With the workflow stopped, "
+                    f"move only {receipt} aside and rerun the same command. The verified snapshot "
+                    "cache will restore its link and receipt without a download.")
 
     def _samples(self, supplied):
         # A direct isolate=... command line overrides the saved batch list.
@@ -262,6 +295,41 @@ class SafetyContext:
 
     def environment_receipts(self):
         return [str(Path(self.resource_root) / "environments" / (name + ".json")) for name in self.needed_recipes()]
+
+    def module_environment_receipts(self, module):
+        recipe = RECIPES[module]
+        return ([str(Path(self.resource_root) / "environments" / (recipe + ".json"))]
+                if recipe in self.needed_recipes() else [])
+
+    def module_config_path(self, isolate, module):
+        if module not in ALL_MODULES and module != "deepsafe":
+            raise ValueError("Unknown module configuration: " + str(module))
+        return str(Path(isolate) / "safety/metadata/configs" / (module + ".json"))
+
+    def module_document(self, isolate, module):
+        """Configuration consumed by one execution stage, without other policy.
+
+        The complete configuration remains in metadata/config.json for reports.
+        Per-module documents are independently produced: changing downstream
+        admission policy must not invalidate completed upstream native work.
+        """
+        result = {"version": self.config["version"], "engine": self.config["engine"],
+                  "modules": {}, "module_decisions": {}}
+        if module == "deepsafe":
+            result["deep"] = copy.deepcopy(self.config["deep"])
+        else:
+            result["modules"][module] = self.module_config(isolate, module)
+            result["module_decisions"][module] = copy.deepcopy(self.decisions[isolate][module])
+            if module == "pathogenfinder2":
+                result["execution"] = copy.deepcopy(self.config["execution"])
+        return result
+
+    def deep_config(self, isolate):
+        # DeepSafe currently has one global configuration; keep the isolate
+        # argument for the same resource interface used by module rules.
+        if str(isolate) not in self.samples:
+            raise ValueError("Unknown isolate: " + str(isolate))
+        return copy.deepcopy(self.config["deep"])
 
     def setup_target(self, isolate):
         # Every requested isolate's input/setup check must finish before any

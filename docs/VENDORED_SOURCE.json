@@ -22,8 +22,14 @@
     {
       "path": "workflow/vendor/basis/bootstrap_providers.py",
       "source_sha256": "d40732bd315798041b47776174225da6cb13d1895cdc7ddc7f2232e32833ecea",
-      "standalone_sha256": "cf66e06fc3d48350857ab8906333d66d570eea60325198e3554c0b403d83d765",
-      "reason": "Remove unused legacy nested-Conda prefix compatibility branch; DirectRunner executes the already-selected environment and preserves native interpreter/resource integrity checks."
+      "standalone_sha256": "f0cfc6e10e70b653e6bdfe95f5944e92630eea51d143a58b87dbe31181bfa325",
+      "reason": "Use a retained and validated geNomad archive helper in the already-selected tool environment; other native provider commands remain unchanged."
+    },
+    {
+      "path": "workflow/vendor/basis/config.py",
+      "source_sha256": "a8d16c33ba74f57062d206b4d23269689c2c11bf495971543ced54ad00f16374",
+      "standalone_sha256": "a0972f0463c381275b73ba68ba828e351e00f4c5faee28ef53969f13be2d4a27",
+      "reason": "Retain AWARE admission settings and the historical batch helper default. Standalone SafetyContext removes batch_size and selects whole-assembly CRISPR execution."
     }
   ],
   "removed_files": [
@@ -326,6 +332,22 @@
         "base_sha256": "3f2e5b8b6b3ecbde7d09c22b14d66c7f3d7f099b0a51916051700b1de24dfab4",
         "updated_sha256": "ff8d9e4d8439175c949b93ab5cf2f286993e12d93478b43d7bda7bd42972c8b7"
       }
+    ]
+  },
+  "infrastructure_update": {
+    "base_commit": "caff6119959848ca23886ccdbf9006075db53c87",
+    "scope": "Durable resource snapshots, checked geNomad download archive reuse, live command logs, module-scoped configuration, and whole-assembly CRISPR execution with verified durable results and stopped-run archiving.",
+    "native_analysis_settings_changed": false,
+    "added_helpers": [
+      {
+        "path": "workflow/vendor/basis/download_genomad.py",
+        "sha256": "8ad0225c35882cd18f61a39a39b512ea38dd23031c33f23795a0b5042dc0e494"
+      }
+    ],
+    "limitations": [
+      "No HTTP Range download resume",
+      "No cross-sample sequence cache",
+      "No measured native-runtime speedup or biological calibration"
     ]
   }
 }
