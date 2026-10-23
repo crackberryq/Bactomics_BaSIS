@@ -54,15 +54,16 @@ class ContextTests(unittest.TestCase):
         config.update(changes)
         return SafetyContext(config, ROOT)
 
-    def test_crispr_batch_size_is_a_bounded_scheduling_integer(self):
+    def test_crispr_runs_whole_assembly_and_ignores_legacy_batch_setting(self):
         cfg = self.base_config([])
-        self.assertEqual(SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"]["batch_size"], 32)
-        for value in (0, -1, True, 1.5, "32", 1025):
-            cfg["modules"]["crisprcasfinder"]["batch_size"] = value
-            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "batch_size"):
-                SafetyContext(cfg, ROOT)
-        cfg["modules"]["crisprcasfinder"]["batch_size"] = 1
-        self.assertEqual(SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"]["batch_size"], 1)
+        first = SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"]
+        self.assertEqual(first["execution_scope"], "assembly")
+        self.assertNotIn("batch_size", first)
+        cfg["modules"]["crisprcasfinder"]["batch_size"] = 32
+        self.assertEqual(SafetyContext(cfg, ROOT).config["modules"]["crisprcasfinder"], first)
+        cfg["modules"]["crisprcasfinder"]["execution_scope"] = "contig"
+        with self.assertRaisesRegex(ValueError, "execution_scope"):
+            SafetyContext(cfg, ROOT)
 
     def test_runtime_durations_are_validated_before_scheduling(self):
         for section in ("minced", "deep"):

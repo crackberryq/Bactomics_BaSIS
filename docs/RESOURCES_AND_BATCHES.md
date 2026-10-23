@@ -1,8 +1,9 @@
 # Resource preservation, execution and recovery
 
 This infrastructure update changes preparation, logging and scheduling. Native
-screening calls, supplied contig coverage, AWARE admission settings and reporting
-interpretation are preserved. Synthetic tests establish software contracts;
+analysis settings, supplied contig coverage, AWARE admission settings and reporting
+interpretation are preserved. CRISPRCasFinder now receives the entire assembly
+in one outer invocation, as in the original Safety Extend Snakefile. Synthetic tests establish software contracts;
 they do not measure biological accuracy or promise a particular runtime gain.
 
 ## Resource lifecycle
@@ -69,37 +70,71 @@ as transient retries. MOB-suite still uses its own native initializer and mirror
 logic; this update does not promise faster remote servers or change its retry
 policy. Durable snapshot reuse prevents unnecessary repeated initialization.
 
-## CRISPRCasFinder batches
+## Execution units and remaining job counts
 
-`modules.crisprcasfinder.batch_size` is an integer from 1 to 1024, default 32.
-Batches follow the deterministic assembly record order. Each job executes its
-contigs sequentially using its allocated threads. There is no nested scheduler
-or additional parallel native execution inside a batch.
+The old standalone rules split CRISPRCasFinder into one invocation per contig.
+The other screening modules already receive the full selected sample input:
 
-Small scheduler outputs live at
-`safety/native/crisprcasfinder/batches/CCB*.json`. Native contig folders retain
-their `CCF*` names. Each completed contig has a record binding its input,
-execution settings, resource/environment identity and verified output files.
-Shared execution identities are stored once and referenced by those records.
-Changing batch size, CPU allocation or receipt timestamps can regroup jobs
-without recomputing valid native results. Relevant input or execution changes
-invalidate reuse. Collection checks every current contig exactly once.
+| Modules | Input per analysis invocation |
+| --- | --- |
+| antiSMASH, geNomad, MOB-suite, IntegronFinder, ISEScan, MinCED, MLST | Complete multi-record assembly |
+| AMRFinder | Complete assembly, proteins and GFF |
+| RGI | Complete proteins, or complete assembly when `input_type: contig` |
+| VFDB, BacMet | Complete proteins |
+| ICEscreen | Complete annotated GenBank |
+| PathogenFinder2 | Complete proteome embedding, then sample-level classification |
+| CRISPRCasFinder, after this update | Complete multi-record assembly |
+| DeepSafe | Selected candidate across six scheduled phases |
 
-Static executable/model checks happen once per executed batch. Workers no longer
-read the unused complete sample manifest for each contig. Parsing happens once
-per newly completed contig; a checksum-bound parsed sidecar is reused during
-collection after raw-output verification. Changing the parser or its relevant
-execution source invalidates that cache. Native arguments and evidence values
-are unchanged.
+RGI's `contig` input type does not mean one scheduled job per contig. Native
+programs can still loop over records internally. DeepSafe's six candidate phases
+are domains, phylogeny, patterns, profiles, motifs and placement; some record a
+skip without a native call. For 100 selected candidates these produce 600 phase
+jobs plus sample-level preparation and consolidation. That is a separate source
+of job volume, unaffected by whole-assembly CRISPR execution. Its contribution to
+elapsed runtime needs measurement before changing phase granularity.
 
-At size 32, 3,699 contigs produce 116 CRISPR batch jobs, plus preparation and
-collection. The same 3,699 native calls remain. The smaller step count measures
-scheduling granularity, not a 32-fold runtime improvement. AWARE remains a
-separate downstream candidate-admission policy.
+See the [native command builder](../workflow/lib/safety/native.py),
+[Extend rules](../workflow/rules/extend.smk) and
+[DeepSafe rules](../workflow/rules/deep.smk) for the execution boundaries.
+
+## Whole-assembly CRISPRCasFinder execution
+
+One `crisprcasfinder_assembly` job stages the complete multi-FASTA assembly with
+safe identifiers and invokes the pinned native program once per enabled isolate.
+The native program still processes records internally, including its individual
+Prodigal/MacSyFinder calls. There is no nested scheduler. This removes thousands
+of outer worker launches and scheduler jobs for fragmented inputs; it does not
+remove all record-level native work or establish an end-to-end runtime bound.
+
+`modules.crisprcasfinder.execution_scope` is `assembly`. An old `batch_size`
+setting is ignored and removed from effective configuration. Legacy batch helpers
+remain for historical fixture coverage but are not part of the active DAG.
+
+Verification requires exact input/output record coverage, matching sequences and
+lengths, per-record native artifacts and counts, and one matching aggregate count.
+Every actual MacSyFinder invocation has a separate isolation audit bound to its
+input and output. A missing, duplicated or failed record cannot silently become a
+negative result. The existing scientific parsers, source/model pins, thresholds
+and coordinate checks are retained. The old Snakefile's failure-suppression
+behaviour is not restored.
+
+A successful assembly publishes `safety/completion/crisprcasfinder.json` and a
+verified payload under `safety/results-cache/crisprcasfinder/`. The conventional
+`safety/native/crisprcasfinder` path points to that payload, including `parsed.json`.
+A matching completed assembly is reusable after receipt deletion. A failed
+assembly retains diagnostics and is rerun as a whole; old individual contig
+outputs are not promoted into a completed assembly result.
+
+The configured `timeout_seconds` now bounds the single whole-assembly native
+command, rather than one contig invocation. Its default remains 14,400 seconds
+(four hours). Adjust it explicitly if a measured assembly run requires a longer
+deadline. Heartbeats report elapsed time, not percentage completion. AWARE remains
+a separate downstream admission policy.
 
 ## Native results and scoped configuration
 
-Core native jobs publish `safety/completion/<module>.json`. Verified payloads
+Core native and CRISPR assembly jobs publish `safety/completion/<module>.json`. Verified payloads
 live in `safety/results-cache/<module>/<identity>/attempt-*/data`, with their
 ordinary `safety/native/` locations pointing to those payloads. Reuse checks
 sample inputs, the module configuration, relevant sources, the executable,
@@ -159,27 +194,46 @@ downloading again. Select verified old resource paths explicitly, using a
 separate receipt directory when the paths are under the old resource directory.
 The update does not recursively search disks or guess among database versions.
 
-Old CRISPR contig outputs have no complete per-contig execution identity. When
-recomputation is required, they are retained under `.previous-contigs/`; they are
-not labelled reusable solely because a parser accepts them. Subsequent batch
-retries use the new verified completion records. Allow an existing run to finish
-before adopting the update if avoiding this migration work is the priority.
+Old CRISPR contig outputs do not prove completion of the new whole-assembly
+invocation. On required execution, the prior native directory is preserved under
+`.previous-results/` beside its conventional location. Core native outputs made
+before the result store also need one recomputation when scheduled. Existing
+completed reports may be regenerated as execution/configuration sources change.
 
-The added parsed-cache identity can also require one recomputation of earlier
-batch records. Core native outputs created before the result store lack the new
-execution identity: on their next required execution, old directories are moved
-into `.previous-results/` beside their conventional location. They are preserved,
-but are not assumed to be reusable merely because they can be parsed.
+For an explicitly fresh run, archive selected `safety` folders after stopping the
+workflow and updating the checkout. The helper uses the same configuration merge
+and sample resolution as the workflow:
+
+```bash
+python scripts/archive_run_results.py --configfile study.yaml strict-cuda.yaml local-resources.yaml
+python scripts/archive_run_results.py --configfile study.yaml strict-cuda.yaml local-resources.yaml --apply
+```
+
+The first command is read-only. `--apply` renames each selected folder in place
+to `safety.before-<UTC timestamp>-<unique suffix>` and writes an archive journal.
+It refuses active workflow processes, overlapping/unsafe folders, inputs or
+resources inside a selected result folder, and absolute symlinks that would
+break on relocation. All selected folders are checked before the first rename.
+Missing result folders are skipped. A partial rename failure is recorded; files
+are never deleted. This is for Linux/WSL and is not a lock against independently
+started writers: do not launch another workflow during the operation.
+
+Annotations, configuration, repository resources and Conda environments are
+retained. Archived files still occupy disk space; renaming avoids a second copy.
+Historical reports can contain original absolute paths, so archives preserve
+files but are not automatically relocated runnable report bundles. Archiving all
+`safety` folders deliberately starts sample analyses fresh; it is not a normal
+resume or a promise to reuse their partial results. Do not archive again before
+an ordinary retry.
 
 Resume normal failed jobs with the same command and `--rerun-incomplete`. If a
 managed resource link alone was deleted, the workflow reports the exact outer
 receipt to move aside while stopped; the next preparation restores the link and
 receipt from the verified cache. If recorded payload files themselves are lost,
-restore the matching snapshot instead. Missing CRISPR native folders produce a
-targeted batch-receipt/collection repair instruction; verified sibling contigs
-are retained and reused.
+restore the matching snapshot instead. CRISPR assembly native links follow the same receipt recovery procedure as
+core native links below.
 
-For a deleted core native link, stop writers and move only its small scheduler
+For a deleted core or CRISPR assembly native link, stop writers and move only its small scheduler
 receipt aside; the next scheduled job verifies the saved payload and restores
 the link and receipt. Do not delete the result store. If payload bytes are
 missing or changed, verification stops with the affected path; restore the

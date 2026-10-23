@@ -126,7 +126,7 @@ def inspect_configuration(config, root, *, validate_inputs=False, verify_resourc
             row["modules"].append({"module": name, "action": decision["action"],
                 "reason": decision.get("reason"),
                 "settings": {key: settings[key] for key in
-                             ("threads", "memory_mb", "timeout_seconds", "gpus", "batch_size", "database")
+                             ("threads", "memory_mb", "timeout_seconds", "gpus", "execution_scope", "database")
                              if key in settings}})
         if validate_inputs:
             try:

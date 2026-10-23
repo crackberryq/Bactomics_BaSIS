@@ -192,7 +192,7 @@ snakemake --snakefile BaSIS.smk \
 
 Then repeat the normal run command. Unlocking removes a workflow lock; the subsequent run handles incomplete work. Snakemake can discard and rebuild an interrupted or failed Conda deployment. An arbitrary failure in a tool whose environment was fully deployed does not imply that the environment will be rebuilt. Do not routinely delete environments, result folders or Snakemake metadata, and do not add `--forceall` to a resume command.
 
-### Database preservation, job batching and restart checks
+### Database preservation, whole-assembly execution and restart checks
 
 Resource jobs publish small completion records. Prepared databases live in
 verified snapshots outside Snakemake's failed-output cleanup, and matching
@@ -202,24 +202,25 @@ sample policy code. Native command stdout and stderr are logged while running.
 geNomad additionally retains validated download archives, checks transfer length
 and gzip/tar integrity, and retries transient transfers up to three times.
 
-CRISPRCasFinder now groups 32 contigs into each scheduler job by default:
+CRISPRCasFinder now runs the complete assembly in **one native invocation and
+one scheduler job per enabled isolate**, restoring the execution granularity of
+the original Safety Extend Snakefile. For example, 4,986 contigs produce one
+CRISPR assembly job, followed by evidence normalization. Every input record must
+appear in the verified output. Pinned versions, native analysis settings and
+reporting thresholds are retained; failed or missing results cannot become
+negative findings.
 
-```yaml
-modules:
-  crisprcasfinder:
-    batch_size: 32
-```
+The native tool still processes records internally. This removes repeated outer
+launches and scheduler overhead; it does not promise a particular completion
+time. The old `modules.crisprcasfinder.batch_size` setting is ignored and removed
+from effective configuration. `execution_scope` is now `assembly`. AWARE
+continues to control later DeepSafe admission separately.
 
-Every contig still receives the same native call and output verification.
-Completed contigs have individual restart records and survive a later failure
-in their batch. For example, 3,699 contigs require 116 batch jobs plus preparation
-and collection; this reduces scheduler overhead, not the number of native
-analyses. AWARE continues to control later DeepSafe admission separately.
-
-Core native results also use verified snapshots, with failed-attempt diagnostics
-kept outside Snakemake cleanup. Module-specific configuration prevents a change
-to a downstream AWARE policy from rerunning unrelated upstream work. CRISPR
-workers check static resources once per batch and reuse verified parsed output.
+Core native and CRISPR assembly results use verified snapshots, with failed
+attempt diagnostics kept outside Snakemake cleanup. Module-specific
+configuration prevents a change to a downstream AWARE policy from rerunning
+unrelated upstream work. CRISPR retries reuse a matching completed assembly;
+a failed assembly is retried as a whole, with its diagnostics preserved.
 Configured command timeouts are enforced, with heartbeat and final-status logs;
 DeepSafe stages now use their configured CPU and memory allocations.
 
@@ -234,12 +235,15 @@ Use the same overlays as your run. Optional `--validate-inputs` and
 `--verify-resources` perform the more expensive read-only checks. Missing setup
 and invalid resources are reported separately.
 
-Read [resource and batch recovery](docs/RESOURCES_AND_BATCHES.md) before updating
+Read [resource and execution recovery](docs/RESOURCES_AND_BATCHES.md) before updating
 an existing run. Finish or stop the running workflow before changing its code.
 Older automatically prepared resources without sufficient preparation identity
 must be selected through explicit local paths; they are preserved. Existing
-CRISPR outputs without the new restart records may require one recomputation,
-with the previous files retained.
+per-contig CRISPR outputs are preserved but cannot be reused as a completed
+whole-assembly invocation. To start fresh, `scripts/archive_run_results.py`
+previews the selected result-folder renames; `--apply` archives them after
+checking that workflow processes have stopped. Keep the same ordered configuration
+overlays. Database and environment caches remain outside those result folders.
 
 ### Shared checkpoint storage and offline compaction
 
@@ -301,7 +305,7 @@ python scripts/preview_aware.py --isolate /absolute/path/to/isolate
 The report includes effective settings, qualifying/selected counts and separate
 admission/budget deferrals. `deep.aware.enabled: false` retains legacy admission.
 The existing candidate stages and compact checkpoint storage remain in use.
-CRISPR scheduling batches are separate from DeepSafe candidate stages;
+Whole-assembly CRISPR execution is separate from DeepSafe candidate stages;
 cross-sample sequence caching is not implemented.
 
 ## Interpretation and reproducibility

@@ -489,6 +489,7 @@ def main(argv=None):
     parser.add_argument("--embeddings")
     parser.add_argument("--manifest")
     parser.add_argument("--native")
+    parser.add_argument("--receipt")
     parser.add_argument("--contigs")
     parser.add_argument("--contig")
     parser.add_argument("--batch")
@@ -507,6 +508,12 @@ def main(argv=None):
     if args.threads is not None:
         config["threads"] = args.threads
     if args.stage == "normalize":
+        decision = full_config.get("module_decisions", {}).get(module, {})
+        if (module == "crisprcasfinder" and args.receipt
+                and decision.get("action", "run") == "run"
+                and config.get("enabled", True)):
+            from safety.result_store import verify_receipt
+            verify_receipt(args.receipt, Path(args.native).parent)
         write_json(args.output, normalize_saved(module, sample, full_config,
                    read_json(args.validation), args.native))
     elif args.stage == "embed":

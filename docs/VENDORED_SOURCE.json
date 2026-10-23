@@ -29,7 +29,7 @@
       "path": "workflow/vendor/basis/config.py",
       "source_sha256": "a8d16c33ba74f57062d206b4d23269689c2c11bf495971543ced54ad00f16374",
       "standalone_sha256": "a0972f0463c381275b73ba68ba828e351e00f4c5faee28ef53969f13be2d4a27",
-      "reason": "Retain AWARE admission settings and add the scheduling-only CRISPRCasFinder batch_size default of 32."
+      "reason": "Retain AWARE admission settings and the historical batch helper default. Standalone SafetyContext removes batch_size and selects whole-assembly CRISPR execution."
     }
   ],
   "removed_files": [
@@ -336,7 +336,7 @@
   },
   "infrastructure_update": {
     "base_commit": "caff6119959848ca23886ccdbf9006075db53c87",
-    "scope": "Durable resource snapshots, checked geNomad download archive reuse, live command logs, and bounded CRISPR scheduling with verified per-contig restart records.",
+    "scope": "Durable resource snapshots, checked geNomad download archive reuse, live command logs, module-scoped configuration, and whole-assembly CRISPR execution with verified durable results and stopped-run archiving.",
     "native_analysis_settings_changed": false,
     "added_helpers": [
       {

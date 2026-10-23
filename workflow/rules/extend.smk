@@ -1,12 +1,11 @@
 # Extend is split at the expensive HDF5 boundary; no nested Conda or scheduler.
-from safety.extend import read_json as extend_read_json
-
 PF2_CODE = [str(ROOT / path) for path in (
     "workflow/lib/safety/extend.py", "workflow/lib/safety/runtime.py",
     "workflow/vendor/basis/adapters/extend.py", "workflow/vendor/basis/inputs.py",
     "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py")]
 CCF_CODE = [str(ROOT / path) for path in (
-    "workflow/lib/safety/extend.py", "workflow/lib/safety/ccf_batches.py", "workflow/lib/safety/runtime.py",
+    "workflow/lib/safety/extend.py", "workflow/lib/safety/ccf_assembly.py",
+    "workflow/lib/safety/result_store.py", "workflow/lib/safety/runtime.py",
     "workflow/vendor/basis/adapters/crisprcasfinder.py", "workflow/vendor/basis/inputs.py",
     "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py")]
 
@@ -19,9 +18,32 @@ def extend_native(isolate, module):
     return Path(isolate) / "safety/native" / module
 
 
+VERIFIED_EXTEND_RECEIPTS = set()
+
+
+def extend_completion_receipt(isolate):
+    from safety.result_store import verify_receipt
+    receipt = Path(isolate) / "safety/completion/crisprcasfinder.json"
+    destination = extend_native(isolate, "crisprcasfinder")
+    key = (str(receipt), str(destination))
+    if receipt.is_file() and key not in VERIFIED_EXTEND_RECEIPTS:
+        verify_receipt(receipt, destination)
+        VERIFIED_EXTEND_RECEIPTS.add(key)
+    return str(receipt)
+
+
+def extend_completion_targets():
+    # Keep the receipt as a terminal target so deletion schedules verified cache
+    # recovery even when a completed report already exists.
+    return [extend_completion_receipt(isolate) for isolate in CTX.samples
+            if CTX.module_enabled(isolate, "crisprcasfinder")]
+
+
 def extend_normalization_inputs(w):
     if not CTX.module_enabled(w.isolate, w.extend_module):
         return []
+    if w.extend_module == "crisprcasfinder":
+        return [extend_completion_receipt(w.isolate)]
     return [str(extend_native(w.isolate, w.extend_module) / "parsed.json")]
 
 
@@ -146,64 +168,21 @@ rule pathogenfinder2_collect:
         """
 
 
-checkpoint crisprcasfinder_contigs:
+rule crisprcasfinder_assembly:
     input:
         setup=lambda w: ancient(CTX.setup_target(w.isolate)),
         sample=lambda w: extend_metadata(w.isolate, "sample.json"),
         config=lambda w: CTX.module_config_path(w.isolate, "crisprcasfinder"),
         assembly=lambda w: CTX.samples[w.isolate]["assembly"],
-        code=CCF_CODE
-    output:
-        contigs=directory("{isolate}/safety/work/crisprcasfinder/contigs")
-    params:
-        code=CODE_PATH,
-        python=PYTHON
-    log:
-        "{isolate}/safety/logs/crisprcasfinder.contigs.log"
-    message:
-        "Stage CRISPR/Cas contigs with reversible identifiers: {wildcards.isolate}"
-    shell:
-        r"""
-        mkdir -p "$(dirname {log:q})"
-        PYTHONPATH={params.code:q} {params.python:q} -m safety.extend ccf-prepare \
-            --sample {input.sample:q} --config {input.config:q} \
-            --output {output.contigs:q} > {log:q} 2>&1
-        """
-
-
-def ccf_contigs_directory(w):
-    return checkpoints.crisprcasfinder_contigs.get(isolate=w.isolate).output.contigs
-
-
-def ccf_batch_receipts(w):
-    from safety.ccf_batches import check_receipt_outputs, load_plan
-    folder = Path(ccf_contigs_directory(w))
-    _, plan = load_plan(folder)
-    native = extend_native(w.isolate, "crisprcasfinder")
-    receipts = []
-    for key, members in plan["batches"].items():
-        receipt = native / "batches" / (key + ".json")
-        check_receipt_outputs(receipt, members, native)
-        receipts.append(str(receipt))
-    return receipts
-
-
-rule crisprcasfinder_batch:
-    input:
-        setup=lambda w: ancient(CTX.setup_target(w.isolate)),
-        sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: CTX.module_config_path(w.isolate, "crisprcasfinder"),
-        contigs=ccf_contigs_directory,
         resources=lambda w: CTX.resource_inputs("crisprcasfinder"),
         code=CCF_CODE
     output:
-        receipt="{isolate}/safety/native/crisprcasfinder/batches/{ccf_batch}.json"
-    wildcard_constraints:
-        ccf_batch="CCB[0-9]+"
+        receipt="{isolate}/safety/completion/crisprcasfinder.json"
     params:
         code=CODE_PATH,
+        python=PYTHON,
         native=lambda w: str(extend_native(w.isolate, "crisprcasfinder")),
-        log_directory=lambda w: str(Path(w.isolate) / "safety/logs/crisprcasfinder")
+        store=lambda w: str(Path(w.isolate) / "safety/results-cache/crisprcasfinder")
     threads:
         lambda w: CTX.module_config(w.isolate, "crisprcasfinder").get("threads", 4)
     resources:
@@ -211,48 +190,18 @@ rule crisprcasfinder_batch:
     conda:
         CTX.env("crisprcasfinder")
     log:
-        "{isolate}/safety/logs/crisprcasfinder/batches/{ccf_batch}.log"
+        "{isolate}/safety/logs/crisprcasfinder.assembly.log"
     benchmark:
-        "{isolate}/safety/benchmarks/crisprcasfinder/batches/{ccf_batch}.tsv"
+        "{isolate}/safety/benchmarks/crisprcasfinder.assembly.tsv"
     message:
-        "Run and verify CRISPRCasFinder batch {wildcards.ccf_batch}: {wildcards.isolate}"
+        "Run and verify CRISPRCasFinder on the complete assembly: {wildcards.isolate}"
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        PYTHONPATH={params.code:q} python -m safety.extend ccf-batch \
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.ccf_assembly \
             --sample {input.sample:q} --config {input.config:q} \
-            --contigs {input.contigs:q} --batch {wildcards.ccf_batch:q} \
-            --native {params.native:q} --output {output.receipt:q} \
-            --log-directory {params.log_directory:q} \
-            --threads {threads} > {log:q} 2>&1
-        """
-
-
-rule crisprcasfinder_collect:
-    input:
-        sample=lambda w: extend_metadata(w.isolate, "sample.json"),
-        config=lambda w: CTX.module_config_path(w.isolate, "crisprcasfinder"),
-        contigs=ccf_contigs_directory,
-        batches=ccf_batch_receipts,
-        code=CCF_CODE
-    output:
-        "{isolate}/safety/native/crisprcasfinder/parsed.json"
-    params:
-        code=CODE_PATH,
-        python=PYTHON,
-        native=lambda w: str(extend_native(w.isolate, "crisprcasfinder"))
-    log:
-        "{isolate}/safety/logs/crisprcasfinder.collect.log"
-    message:
-        "Reconcile every CRISPR/Cas contig with the supplied assembly: {wildcards.isolate}"
-    shell:
-        r"""
-        mkdir -p "$(dirname {log:q})"
-        PYTHONPATH={params.code:q} {params.python:q} -m safety.extend ccf-collect \
-            --sample {input.sample:q} --config {input.config:q} \
-            --contigs {input.contigs:q} --native {params.native:q} \
-            --batch-receipts {input.batches:q} \
-            --output {output:q} > {log:q} 2>&1
+            --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
+            --threads {threads} --sources {input.code:q} > {log:q} 2>&1
         """
 
 
@@ -270,7 +219,9 @@ rule normalize_extend:
     params:
         code=CODE_PATH,
         python=PYTHON,
-        native=lambda w: str(extend_native(w.isolate, w.extend_module) / "parsed.json")
+        native=lambda w: str(extend_native(w.isolate, w.extend_module) / "parsed.json"),
+        receipt=lambda w: str(Path(w.isolate) / "safety/completion/crisprcasfinder.json")
+            if w.extend_module == "crisprcasfinder" else ""
     log:
         "{isolate}/safety/logs/{extend_module}.normalize.log"
     message:
@@ -281,5 +232,5 @@ rule normalize_extend:
         PYTHONPATH={params.code:q} {params.python:q} -m safety.extend normalize \
             --sample {input.sample:q} --config {input.config:q} \
             --validation {input.validation:q} --module {wildcards.extend_module:q} \
-            --native {params.native:q} --output {output:q} > {log:q} 2>&1
+            --native {params.native:q} --receipt {params.receipt:q} --output {output:q} > {log:q} 2>&1
         """

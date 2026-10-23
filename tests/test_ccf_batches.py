@@ -1,18 +1,16 @@
-"""Synthetic batching/restart contracts; no native tools or biological data."""
+"""Legacy batch-cache compatibility contracts; the scheduler uses whole assemblies.
+
+These helpers remain readable for old saved records and are not active workflow
+rules. No native tools or biological data are executed.
+"""
 from __future__ import annotations
 
 import copy
 import hashlib
-import importlib.util
 import json
-import os
 from pathlib import Path
-import re
-import shutil
-import subprocess
 import sys
 import tempfile
-import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -252,133 +250,6 @@ class ContigBatchTests(unittest.TestCase):
                      "--batch", "CCB000001", "--native", str(self.native),
                      "--output", str(self.receipt()), "--log-directory", str(self.logs)])
         self.assertTrue(self.receipt().is_file())
-
-
-@unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake required for scheduler acceptance")
-class ContigBatchSchedulerTests(unittest.TestCase):
-    def test_production_rules_batch_restart_preserves_completed_native_work(self):
-        fixture = ContigBatchTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
-        root = fixture.root
-        isolate = root / "isolate"
-        metadata = isolate / "safety/metadata"
-        fixture.config["modules"]["crisprcasfinder"].update(batch_size=2, threads=1, memory_mb=128)
-        extend.write_json(metadata / "sample.json", fixture.sample)
-        extend.write_json(metadata / "config.json", fixture.config)
-        extend.write_json(metadata / "setup.ready.json", {"status": "completed"})
-        env_file = root / "fixture-env.yml"
-        env_file.write_text("channels: []\ndependencies: []\n")
-        calls = root / "calls.jsonl"
-        allow = root / "allow-second"
-        worker = root / "fixture_worker.py"
-        worker.write_text(textwrap.dedent(f'''
-            import json, sys
-            from pathlib import Path
-            sys.path.insert(0, {str(ROOT / "tests")!r})
-            from test_ccf_batches import ContigBatchTests
-            from safety import extend
-            def fixture_runner(config, staged, safe, work, logfile, **kwargs):
-                with Path({str(calls)!r}).open("a") as handle:
-                    handle.write(json.dumps({{"contig": safe}}) + "\\n")
-                if safe == "CCF000002" and not Path({str(allow)!r}).exists():
-                    raise RuntimeError("synthetic native interruption")
-                fixture = ContigBatchTests()
-                fixture.calls = []
-                fixture.fail_on = None
-                return fixture.fake_contig(config, staged, safe, work, logfile, **kwargs)
-            def fixture_prepare(config):
-                return {{"settings": dict(config)}}
-            assert sys.argv[1:3] == ["-m", "safety.extend"]
-            extend.run_contig = fixture_runner
-            extend.prepare_ccf_execution = fixture_prepare
-            extend.main(sys.argv[3:])
-        '''))
-        binary = root / "bin/python"
-        write(binary, f"#!{sys.executable}\nimport runpy, sys\nsys.argv[0] = {str(worker)!r}\nrunpy.run_path({str(worker)!r}, run_name='__main__')\n")
-        binary.chmod(0o755)
-        rules = ROOT / "workflow/rules/extend.smk"
-        if os.environ.get("BASIS_TEST_NO_BENCHMARK") == "1":
-            # Same explicit local PID-namespace workaround as test_workflow;
-            # CI executes the production benchmark declarations unchanged.
-            lines, skipped = [], None
-            for line in rules.read_text().splitlines():
-                indent = len(line) - len(line.lstrip())
-                if re.match(r"\s*benchmark:", line):
-                    skipped = indent
-                    continue
-                if skipped is not None:
-                    if not line.strip() or indent > skipped:
-                        continue
-                    skipped = None
-                lines.append(line)
-            rules = root / "extend.smk"
-            rules.write_text("\n".join(lines) + "\n")
-        snakefile = root / "Snakefile"
-        parsed = isolate / "safety/native/crisprcasfinder/parsed.json"
-        snakefile.write_text(textwrap.dedent(f'''
-            import json, os, sys
-            from pathlib import Path
-            ROOT = Path({str(ROOT)!r})
-            sys.path[:0] = [str(ROOT / "workflow/lib"), str(ROOT / "workflow/vendor")]
-            CODE_PATH = os.pathsep.join([str(ROOT / "workflow/lib"), str(ROOT / "workflow/vendor")])
-            PYTHON = {str(binary)!r}
-            class FixtureContext:
-                samples = {{{str(isolate)!r}: {fixture.sample!r}}}
-                def setup_target(self, isolate):
-                    return str(Path(isolate) / "safety/metadata/setup.ready.json")
-                def module_config(self, isolate, module):
-                    return {fixture.config["modules"]["crisprcasfinder"]!r}
-                def module_config_path(self, isolate, module):
-                    return str(Path(isolate) / "safety/metadata/config.json")
-                def resource_inputs(self, module):
-                    return [{str(fixture.resource)!r}]
-                def env(self, module):
-                    return {str(env_file)!r}
-            CTX = FixtureContext()
-            rule all:
-                input: {str(parsed)!r}
-            include: {str(rules)!r}
-        '''))
-        environment = {**os.environ, "PATH": str(binary.parent) + os.pathsep + os.environ["PATH"]}
-        command = [sys.executable, "-m", "snakemake", "--snakefile", str(snakefile),
-                   "--directory", str(root), "--cores", "1", "--rerun-incomplete", "--printshellcmds"]
-        first = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=120)
-        self.assertNotEqual(first.returncode, 0, first.stdout + first.stderr)
-        native = isolate / "safety/native/crisprcasfinder"
-        complete = native / "CCF000001" / batches.COMPLETION
-        self.assertTrue(complete.is_file(), first.stdout + first.stderr)
-        prior = complete.read_bytes()
-        self.assertFalse((native / "batches/CCB000001.json").exists())
-        allow.touch()
-        second = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=120)
-        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
-        self.assertEqual(complete.read_bytes(), prior)
-        observed = [json.loads(line)["contig"] for line in calls.read_text().splitlines()]
-        self.assertEqual(observed.count("CCF000001"), 1)
-        self.assertEqual(observed.count("CCF000002"), 2)
-        self.assertEqual(observed.count("CCF000003"), 1)
-        self.assertEqual(len(list((native / "batches").glob("CCB*.json"))), 2)
-        payload = extend.read_json(parsed)
-        self.assertEqual(payload["metrics"]["assessed_contig_count"], 3)
-        self.assertEqual(payload["metrics"]["scheduler_batch_count"], 2)
-        third = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=120)
-        self.assertEqual(third.returncode, 0, third.stdout + third.stderr)
-        self.assertIn("Nothing to be done", third.stdout + third.stderr)
-        self.assertEqual(len(calls.read_text().splitlines()), 4)
-        shutil.rmtree(native / "CCF000001")
-        fourth = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=120)
-        self.assertNotEqual(fourth.returncode, 0)
-        self.assertIn("missing native output", fourth.stdout + fourth.stderr)
-        self.assertIn("CCB000001.json", fourth.stdout + fourth.stderr)
-        (native / "batches/CCB000001.json").unlink()
-        repaired = subprocess.run(command + ["--forcerun", "crisprcasfinder_collect"],
-                                  env=environment, text=True, capture_output=True, timeout=120)
-        self.assertEqual(repaired.returncode, 0, repaired.stdout + repaired.stderr)
-        repaired_calls = [json.loads(line)["contig"] for line in calls.read_text().splitlines()]
-        self.assertEqual(repaired_calls.count("CCF000001"), 2)
-        self.assertEqual(repaired_calls.count("CCF000002"), 2)
-        self.assertEqual(repaired_calls.count("CCF000003"), 1)
 
 
 if __name__ == "__main__":

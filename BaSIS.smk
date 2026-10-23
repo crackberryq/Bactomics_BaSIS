@@ -27,7 +27,7 @@ shell.executable("/bin/bash")
 # Default terminal output is Snakemake's own readable job progress. Tool output
 # stays in per-rule logs. Add -p explicitly when debugging command lines.
 rule all:
-    input: lambda w: CTX.report_targets() + native_completion_targets()
+    input: lambda w: CTX.report_targets() + native_completion_targets() + extend_completion_targets()
     default_target: True
 
 include: str(ROOT / "workflow/rules/setup.smk")

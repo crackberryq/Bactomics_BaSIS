@@ -113,10 +113,13 @@ class SafetyContext:
                     _positive_seconds(section[key], name + "." + key)
             section["command_prefix"] = []
         cfg["modules"]["pathogenfinder2"]["enabled"] &= self.extend_enabled
-        batch_size = cfg["modules"]["crisprcasfinder"].get("batch_size", 32)
-        if _positive(batch_size, "crisprcasfinder.batch_size") > 1024:
-            raise ValueError("crisprcasfinder.batch_size must be between 1 and 1024")
-        cfg["modules"]["crisprcasfinder"]["batch_size"] = batch_size
+        ccf = cfg["modules"]["crisprcasfinder"]
+        if ccf.get("execution_scope", "assembly") != "assembly":
+            raise ValueError("crisprcasfinder.execution_scope must be assembly")
+        ccf["execution_scope"] = "assembly"
+        # Older overlays may contain a scheduler batch size. The active rule now
+        # runs the complete assembly; this setting no longer affects execution.
+        ccf.pop("batch_size", None)
         cfg["deep"].setdefault("executables", {})["iqtree"] = "iqtree2"
         resources = supplied.get("resources", {})
         if not isinstance(resources, dict) or resources.get("policy", "auto") not in {"auto", "manual"}:
