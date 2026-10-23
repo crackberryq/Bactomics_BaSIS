@@ -18,6 +18,19 @@ def extend_native(isolate, module):
     return Path(isolate) / "safety/native" / module
 
 
+def extend_result_store(isolate, module):
+    from safety.storage import native_result_store
+    selected = native_result_store(ROOT, config, isolate, module)
+    receipt = Path(isolate) / "safety/completion" / (module + ".json")
+    if receipt.is_file():
+        # Placement changes must not strand a completed cache and rerun native
+        # work. Existing DAG receipt checks still verify the payload contents.
+        from safety.result_store import _record
+        row = _record(receipt, destination=extend_native(isolate, module))
+        return str(Path(row["payload_root"]).parents[2])
+    return str(selected)
+
+
 VERIFIED_EXTEND_RECEIPTS = set()
 
 
@@ -182,7 +195,7 @@ rule crisprcasfinder_assembly:
         code=CODE_PATH,
         python=PYTHON,
         native=lambda w: str(extend_native(w.isolate, "crisprcasfinder")),
-        store=lambda w: str(Path(w.isolate) / "safety/results-cache/crisprcasfinder")
+        store=lambda w: extend_result_store(w.isolate, "crisprcasfinder")
     threads:
         lambda w: CTX.module_config(w.isolate, "crisprcasfinder").get("threads", 4)
     resources:

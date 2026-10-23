@@ -245,6 +245,19 @@ previews the selected result-folder renames; `--apply` archives them after
 checking that workflow processes have stopped. Keep the same ordered configuration
 overlays. Database and environment caches remain outside those result folders.
 
+### Linux result storage for WSL
+
+When samples live under `/mnt/c`, retaining and verifying thousands of CRISPR
+output files there can dominate runtime after the native command has finished.
+The optional `storage.native_results_directory` setting places new CRISPR
+payloads on the Linux filesystem while retaining sample-facing receipts and
+links. Existing completed results keep their recorded stores.
+
+See [Linux storage and recovery](docs/LOCAL_RESULTS_RECOVERY.md) for the overlay
+and stopped-workflow recovery of completed native output still retained in
+`/tmp`. Recovery uses the existing verification checks and does not rerun native
+analysis or delete the original files.
+
 ### Shared checkpoint storage and offline compaction
 
 DeepSafe now stores shared JSON context, retrieval audit data and planning metadata
