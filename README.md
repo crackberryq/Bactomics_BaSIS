@@ -258,6 +258,19 @@ and stopped-workflow recovery of completed native output still retained in
 `/tmp`. Recovery uses the existing verification checks and does not rerun native
 analysis or delete the original files.
 
+### CRISPR array boundary review
+
+A saved native array can report an end one base beyond its final repeat while
+all repeat/spacer intervals remain contiguous and match the assembly. BaSIS
+preserves both bounds and flags that array for review; it does not silently
+correct coordinates. The report retains incomplete scope. Other endpoint,
+continuity and sequence discrepancies remain errors.
+
+See [saved CRISPR result revalidation](docs/CCF_BOUNDARY_RECOVERY.md) to reuse
+the completed native run rejected by the older exact-endpoint check. The helper
+also migrates matching completed samples to avoid recomputing them solely
+because the parser changed.
+
 ### Explicitly skipped IntegronFinder records
 
 When IntegronFinder exits successfully but explicitly skips a record after an

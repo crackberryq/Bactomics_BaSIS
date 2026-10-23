@@ -458,7 +458,7 @@ def collect_ccf(sample, config, contigs, native, verified_parsed=None):
         artifacts.append(str(work))
     arrays = [f for f in findings if f["attributes"]["feature_type"] == "array"]
     complete = all(v["status"] == "completed" for v in statuses.values())
-    return {"findings": findings, "artifacts": artifacts,
+    return ccf._mark_boundary_reviews({"findings": findings, "artifacts": artifacts,
         "interpretation": "detected" if findings else ("not_detected" if complete else "inconclusive"),
         "metrics": {"crisprcasfinder_version": ccf.VERSION, "source_sha256": ccf.SOURCE_SHA256,
             "macsyfinder_version": ccf.MACSYFINDER_VERSION, "casfinder_models_version": ccf.CAS_MODELS_VERSION,
@@ -476,7 +476,7 @@ def collect_ccf(sample, config, contigs, native, verified_parsed=None):
         "notes": ["CRISPR/Cas predictions describe genomic context, not activity, pathogenicity or organism safety.",
                   "Upstream circular topology is an algorithm setting, not confirmed assembly topology.",
                   "Short-contig unordered candidates are retained without asserting typed systems.",
-                  "No predicted CDS means Cas was not assessed; it does not establish Cas absence."]}
+                  "No predicted CDS means Cas was not assessed; it does not establish Cas absence."]})
 
 
 def main(argv=None):
