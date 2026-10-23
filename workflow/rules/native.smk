@@ -18,10 +18,13 @@ def native_input_paths(w, module):
 def native_parser_sources(module):
     group = ("amr" if module in {"amrfinder", "rgi", "vfdb", "bacmet"} else
              "minced" if module == "minced" else "typing_defense" if module == "mlst" else "context")
-    return [str(ROOT / "workflow/lib/safety" / name) for name in
+    sources = [str(ROOT / "workflow/lib/safety" / name) for name in
             ("native.py", "native_execution.py", "result_store.py", "runtime.py")] + [
             str(ROOT / "workflow/vendor/basis/adapters" / (group + ".py")),
             str(ROOT / "workflow/vendor/basis/inputs.py")]
+    if module == "integronfinder":
+        sources.append(str(ROOT / "workflow/lib/safety/integron.py"))
+    return sources
 
 
 def native_completion_receipt(isolate, module):
@@ -379,7 +382,7 @@ rule integronfinder:
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
-        PYTHONPATH={params.code:q} {params.python:q} -m safety.native_execution \
+        PYTHONPATH={params.code:q} {params.python:q} -m safety.integron \
             --module integronfinder --sample {input.sample:q} --config {input.config:q} \
             --native {params.native:q} --receipt {output.receipt:q} --store {params.store:q} \
             --threads {threads} --sources {input.parser:q} > {log:q} 2>&1

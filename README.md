@@ -258,6 +258,18 @@ and stopped-workflow recovery of completed native output still retained in
 `/tmp`. Recovery uses the existing verification checks and does not rerun native
 analysis or delete the original files.
 
+### Explicitly skipped IntegronFinder records
+
+When IntegronFinder exits successfully but explicitly skips a record after an
+empty-protein-file warning, BaSIS retains the assessed records and marks the
+skipped record **not assessed**. The evidence and report retain incomplete scope;
+a skipped record is never counted as a negative result. Unexplained omissions,
+conflicting summaries, unsupported skips and native errors remain failures.
+
+See [saved IntegronFinder result recovery](docs/INTEGRON_RECOVERY.md) to revalidate
+an existing attempt rejected by the older summary-coverage check without running
+the native command again. Native search settings are unchanged.
+
 ### Shared checkpoint storage and offline compaction
 
 DeepSafe now stores shared JSON context, retrieval audit data and planning metadata
