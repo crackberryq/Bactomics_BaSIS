@@ -355,5 +355,18 @@
       "No cross-sample sequence cache",
       "No measured native-runtime speedup or biological calibration"
     ]
+  },
+  "json_serialization_update": {
+    "base_commit": "f66dfedd46da05ae79bf769e7e6fada91270d4d1",
+    "scope": "Reject report dictionary keys that collide after the existing string conversion; retain prior key spellings, container conversions, and scientific interpretation.",
+    "native_analysis_settings_changed": false,
+    "scientific_settings_changed": false,
+    "files": [
+      {
+        "path": "workflow/vendor/basis/report.py",
+        "base_sha256": "823c27e0cc02cb3fe04329273a46bb664e6a046e0d55e65d8075a33f4b60e03e",
+        "updated_sha256": "cb7121bed2885e0a2535dd7958daeec8c67e5bfc52d60aea1ae0d2ed4207306c"
+      }
+    ]
   }
 }

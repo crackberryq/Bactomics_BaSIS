@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -20,10 +21,59 @@ LOCATIONS = (("context",), ("state", "internal"),
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
 
 
+def json_value(value):
+    """Return the JSON representation before sorting keys or computing hashes.
+
+    JSON object keys are strings. Sorting Python numeric keys before converting
+    them sorts 2 before 10, while a subsequent JSON read sorts "10" before "2".
+    Normalize once, and reject ambiguous keys instead of silently losing data.
+    Values retain the existing tuple/list and ``default=str`` JSON semantics.
+    This is a serialization boundary, not a change to analysis results.
+    """
+    active = set()
+
+    def convert(item, location):
+        if isinstance(item, (dict, list, tuple)):
+            marker = id(item)
+            if marker in active:
+                raise ValueError("Circular JSON value at " + location)
+            active.add(marker)
+            try:
+                if isinstance(item, dict):
+                    result = {}
+                    for key, child in item.items():
+                        if isinstance(key, str):
+                            name = str.__str__(key)
+                        elif key is None or isinstance(key, (int, float)):
+                            name = json.dumps(key, allow_nan=False)
+                        else:
+                            raise TypeError("Unsupported JSON object key at " + location)
+                        if name in result:
+                            raise ValueError("JSON object key collision at " + location + ": " + repr(name))
+                        result[name] = convert(child, location + "[" + repr(name) + "]")
+                    return result
+                return [convert(child, location + "[" + str(index) + "]")
+                        for index, child in enumerate(item)]
+            finally:
+                active.remove(marker)
+        if isinstance(item, float) and not math.isfinite(item):
+            raise ValueError("Invalid JSON number at " + location)
+        if item is None or isinstance(item, (str, int, float)):
+            return item
+        return str(item)
+
+    return convert(value, "$")
+
+
 def logical_digest(value):
-    """Preserve the v1 digest exactly without a second full JSON string."""
+    """Hash JSON values; preserve existing string-key v1/v2 digests exactly."""
+    return _json_digest(json_value(value))
+
+
+def _json_digest(value):
+    """Stream a digest of normalized or strictly decoded JSON, without copying."""
     result = hashlib.sha256()
-    encoder = json.JSONEncoder(sort_keys=True, default=str, allow_nan=False)
+    encoder = json.JSONEncoder(sort_keys=True, allow_nan=False)
     for chunk in encoder.iterencode(value):
         result.update(chunk.encode("utf-8"))
     return result.hexdigest()
@@ -128,7 +178,7 @@ def read_document(path, shared_cache=None, raw=None):
         value = shared_cache.get(cache_key) if shared_cache is not None else None
         if value is None:
             value = read_raw(target)
-            if logical_digest(value) != reference["sha256"]:
+            if _json_digest(value) != reference["sha256"]:
                 raise ValueError("Shared state checksum mismatch: " + str(target))
             if _signature(target) != before:
                 raise ValueError("Shared state changed while reading: " + str(target))
@@ -152,7 +202,8 @@ def read_document(path, shared_cache=None, raw=None):
 
 
 def _dump(stream, value, *, indent=None):
-    json.dump(value, stream, sort_keys=True, default=str, allow_nan=False, indent=indent)
+    # write_document normalizes once before any digest or object publication.
+    json.dump(value, stream, sort_keys=True, allow_nan=False, indent=indent)
     stream.write("\n")
     stream.flush()
     os.fsync(stream.fileno())
@@ -182,14 +233,14 @@ def _grant_read_access(path, source_stat):
 
 
 def _publish_object(directory, value, source_stat=None):
-    digest = logical_digest(value)
+    digest = _json_digest(value)
     target = directory / (digest + ".json")
     if directory.is_symlink() or target.is_symlink():
         raise ValueError("Shared state object/store must not be a symlink")
     directory.mkdir(parents=True, exist_ok=True)
     sync_directory(directory.parent)
     if target.exists():
-        if logical_digest(read_raw(target)) != digest:
+        if _json_digest(read_raw(target)) != digest:
             raise ValueError("Existing shared state checksum mismatch: " + str(target))
         _grant_read_access(target, source_stat)
         sync_directory(directory)
@@ -205,7 +256,7 @@ def _publish_object(directory, value, source_stat=None):
         try:
             os.link(temporary, target)
         except FileExistsError:
-            if logical_digest(read_raw(target)) != digest:
+            if _json_digest(read_raw(target)) != digest:
                 raise ValueError("Concurrent shared state checksum mismatch: " + str(target))
             _grant_read_access(target, source_stat)
         sync_directory(directory)
@@ -226,9 +277,12 @@ def write_document(path, document, *, preserve_stat=None, before_replace=None):
         raise ValueError("Workflow state must not be a symlink")
     if document.get("schema") != LEGACY_SCHEMA or "shared_objects" in document:
         raise ValueError("Expected a hydrated v1 workflow state")
-    if logical_digest(document["context"]) != document.get("context_sha256"):
+    # Check the whole document before publishing any objects. Hash and persist
+    # the same JSON representation, including unknown metadata fields.
+    document = json_value(document)
+    if _json_digest(document["context"]) != document.get("context_sha256"):
         raise ValueError("DeepSafe context changed: " + str(path))
-    original_digest = logical_digest(document)
+    original_digest = _json_digest(document)
     compact = dict(document)
     compact["state"] = dict(document["state"])
     compact["schema"] = COMPACT_SCHEMA
@@ -252,7 +306,7 @@ def write_document(path, document, *, preserve_stat=None, before_replace=None):
             temporary = Path(stream.name)
             _dump(stream, compact, indent=2)
         # Includes every unknown metadata field and all original results.
-        if logical_digest(read_document(temporary)) != original_digest:
+        if _json_digest(read_document(temporary)) != original_digest:
             raise ValueError("Compact workflow state failed lossless roundtrip")
         if preserve_stat is not None:
             if (temporary.stat().st_uid, temporary.stat().st_gid) != (preserve_stat.st_uid, preserve_stat.st_gid):

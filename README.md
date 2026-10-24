@@ -294,6 +294,12 @@ the shared object files are required checkpoint data, not disposable caches.
 Missing objects stop dependency loading when the saved state is required;
 altered shared data fails checksum verification before a worker consumes it.
 
+Checkpoint hashes and writes normalize JSON keys consistently, including nested
+numeric-key mappings. Colliding keys fail explicitly instead of overwriting
+values. Existing valid v1/v2 state hashes remain compatible. See the
+[JSON serialization audit](docs/JSON_SERIALIZATION_AUDIT.md) for regression
+coverage, remaining related risks, and source-invalidation limits when resuming.
+
 For an existing run with large repeated JSON states, stop all writers, update the
 checkout, and use the offline compactor. Substitute the isolate directory:
 

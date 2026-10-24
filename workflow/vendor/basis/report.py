@@ -47,7 +47,13 @@ def _esc(value):
 def _jsonable(value):
     """Normalize serializable containers without mutating their originals."""
     if isinstance(value, dict):
-        return {str(k): _jsonable(v) for k, v in value.items()}
+        result = {}
+        for key, item in value.items():
+            name = str(key)
+            if name in result:
+                raise ValueError("Report JSON keys collide after string conversion: " + repr(name))
+            result[name] = _jsonable(item)
+        return result
     if isinstance(value, (list, tuple, set)):
         return [_jsonable(v) for v in value]
     if isinstance(value, Path):

@@ -22,7 +22,7 @@ from basis.deep_candidate_jobs import (
 )
 from .deep_resources import (load_discovered_inputs, resolve_profile_resources,
                              snapshot_resources, verify_resources)
-from .state_storage import logical_digest, read_document, write_document
+from .state_storage import json_value, logical_digest, read_document, write_document
 
 SCHEMA = "basis-snakemake-deep-state-v1"
 PHASES = ("domains", "phylogeny", "patterns", "profiles", "motifs", "placement")
@@ -36,7 +36,7 @@ def write(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True, default=str,
+    temporary.write_text(json.dumps(json_value(value), indent=2, sort_keys=True,
                                     allow_nan=False) + "\n")
     os.replace(temporary, path)
 
