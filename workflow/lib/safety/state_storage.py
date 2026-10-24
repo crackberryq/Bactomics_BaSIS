@@ -160,6 +160,28 @@ def _signature(path):
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
+def _read_verified_object(path, digest, shared_cache=None, *, label="Shared state"):
+    """Reuse only disk-verified values whose file signature is unchanged."""
+    before = _signature(path)
+    cache_key = (str(path), digest, before)
+    if shared_cache is not None and cache_key in shared_cache:
+        value = shared_cache[cache_key]
+        if _signature(path) != before:
+            raise ValueError("Shared state changed while reading: " + str(path))
+        return value
+    value = read_raw(path)
+    if _json_digest(value) != digest:
+        raise ValueError(label + " checksum mismatch: " + str(path))
+    if _signature(path) != before:
+        raise ValueError("Shared state changed while reading: " + str(path))
+    if shared_cache is not None:
+        # A small per-invocation cache; no cross-run trust of a digest.
+        if len(shared_cache) >= 8:
+            shared_cache.pop(next(iter(shared_cache)))
+        shared_cache[cache_key] = value
+    return value
+
+
 def read_document(path, shared_cache=None, raw=None):
     """Hydrate either storage version to the exact logical v1 document."""
     if raw is None:
@@ -173,20 +195,7 @@ def read_document(path, shared_cache=None, raw=None):
     if raw.get("schema") != COMPACT_SCHEMA:
         raise ValueError("Unrecognized workflow state: " + str(path))
     for reference, target in _references(path, raw):
-        before = _signature(target)
-        cache_key = (str(target), reference["sha256"], before)
-        value = shared_cache.get(cache_key) if shared_cache is not None else None
-        if value is None:
-            value = read_raw(target)
-            if _json_digest(value) != reference["sha256"]:
-                raise ValueError("Shared state checksum mismatch: " + str(target))
-            if _signature(target) != before:
-                raise ValueError("Shared state changed while reading: " + str(target))
-            if shared_cache is not None:
-                # A small per-invocation cache; no cross-run trust of a digest.
-                if len(shared_cache) >= 8:
-                    shared_cache.pop(next(iter(shared_cache)))
-                shared_cache[cache_key] = value
+        value = _read_verified_object(target, reference["sha256"], shared_cache)
         container = raw
         for part in reference["location"][:-1]:
             container = container.get(part)
@@ -232,7 +241,7 @@ def _grant_read_access(path, source_stat):
         os.fsync(handle.fileno())
 
 
-def _publish_object(directory, value, source_stat=None):
+def _publish_object(directory, value, source_stat=None, *, verified_cache=None):
     digest = _json_digest(value)
     target = directory / (digest + ".json")
     if directory.is_symlink() or target.is_symlink():
@@ -240,8 +249,8 @@ def _publish_object(directory, value, source_stat=None):
     directory.mkdir(parents=True, exist_ok=True)
     sync_directory(directory.parent)
     if target.exists():
-        if _json_digest(read_raw(target)) != digest:
-            raise ValueError("Existing shared state checksum mismatch: " + str(target))
+        _read_verified_object(target, digest, verified_cache,
+                              label="Existing shared state")
         _grant_read_access(target, source_stat)
         sync_directory(directory)
         return target, digest
@@ -256,8 +265,8 @@ def _publish_object(directory, value, source_stat=None):
         try:
             os.link(temporary, target)
         except FileExistsError:
-            if _json_digest(read_raw(target)) != digest:
-                raise ValueError("Concurrent shared state checksum mismatch: " + str(target))
+            _read_verified_object(target, digest, verified_cache,
+                                  label="Concurrent shared state")
             _grant_read_access(target, source_stat)
         sync_directory(directory)
         return target, digest
@@ -288,6 +297,10 @@ def write_document(path, document, *, preserve_stat=None, before_replace=None):
     compact["schema"] = COMPACT_SCHEMA
     compact["shared_objects"] = []
     directory = store_directory(path)
+    # Existing objects were already read from disk during publication. Reuse
+    # those verified values for this write's roundtrip only. Permission changes
+    # during offline migration can alter ctime, so that path keeps fresh reads.
+    verified_cache = {} if preserve_stat is None else None
     for location in LOCATIONS:
         container = compact
         for part in location[:-1]:
@@ -295,7 +308,8 @@ def write_document(path, document, *, preserve_stat=None, before_replace=None):
         if location[-1] not in container:
             continue
         value = container.pop(location[-1])
-        target, digest = _publish_object(directory, value, preserve_stat)
+        target, digest = _publish_object(directory, value, preserve_stat,
+                                         verified_cache=verified_cache)
         compact["shared_objects"].append({"location": list(location), "sha256": digest,
             "path": os.path.relpath(target, path.parent)})
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -306,7 +320,7 @@ def write_document(path, document, *, preserve_stat=None, before_replace=None):
             temporary = Path(stream.name)
             _dump(stream, compact, indent=2)
         # Includes every unknown metadata field and all original results.
-        if _json_digest(read_document(temporary)) != original_digest:
+        if _json_digest(read_document(temporary, shared_cache=verified_cache)) != original_digest:
             raise ValueError("Compact workflow state failed lossless roundtrip")
         if preserve_stat is not None:
             if (temporary.stat().st_uid, temporary.stat().st_gid) != (preserve_stat.st_uid, preserve_stat.st_gid):
