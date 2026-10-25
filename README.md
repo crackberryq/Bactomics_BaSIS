@@ -1,13 +1,15 @@
-# BaSIS · standalone Snakemake workflow
+# BaSIS AWARE · standalone Snakemake workflow
 
-**Version 0.4.0a1 — development alpha.** BaSIS collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
+**Version 0.4.0a1 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
 
 This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
 
 The [acceptance checklist](docs/ACCEPTANCE.md) distinguishes completed software
 checks from the native integration evidence still required before beta promotion.
-The installation command below selects `snakemake-standalone`; changes in an open
-pull request are not included until they have been integrated into that branch.
+The release branch is `basis-aware`, and the product name is **BaSIS AWARE**,
+consistent with **HybAs AWARE**. See the [0.4.0a1 release notes](docs/RELEASE_0.4.0a1.md).
+The installation command below selects `basis-aware`; use `--branch v0.4.0a1`
+instead to check out the fixed alpha release.
 
 ## Install the workflow controller
 
@@ -16,7 +18,7 @@ Use Linux or WSL2 with Conda available. The controller environment runs Snakemak
 ```bash
 mkdir -p ~/bactomics &&
 cd ~/bactomics &&
-git clone --branch snakemake-standalone --single-branch \
+git clone --branch basis-aware --single-branch \
   https://github.com/crackberryq/Bactomics_BaSIS.git BaSIS-snakemake &&
 cd BaSIS-snakemake &&
 conda env create --file environment.yml &&

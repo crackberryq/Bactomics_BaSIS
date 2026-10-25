@@ -1,12 +1,12 @@
 cff-version: 1.2.0
-message: If you use BaSIS, cite this software and the underlying tools and databases used in your run.
+message: If you use BaSIS AWARE, cite this software and the underlying tools and databases used in your run.
 type: software
-title: 'BaSIS: Bacterial Adaptive Safety Investigation System'
+title: 'BaSIS AWARE: Bacterial Adaptive Safety Investigation System'
 authors:
   - family-names: Goldstein
     given-names: Jimi
     orcid: https://orcid.org/0000-0002-7829-0090
 version: 0.4.0a1
-date-released: 2026-10-19
+date-released: 2026-10-25
 repository-code: https://github.com/crackberryq/Bactomics_BaSIS
 license: MIT

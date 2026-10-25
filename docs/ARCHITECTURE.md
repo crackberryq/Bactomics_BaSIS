@@ -1,6 +1,6 @@
 # Standalone workflow architecture
 
-BaSIS 0.4.0a1 uses a directly runnable `BaSIS.smk`, organized in the style of HybAs. The workflow checkout contains code, recipes and shared prepared resources. Each isolate contains its own `safety/` result bundle. Existing annotation files are inputs and are not overwritten.
+BaSIS AWARE 0.4.0a1 uses a directly runnable `BaSIS.smk`, organized in the style of HybAs. The workflow checkout contains code, recipes and shared prepared resources. Each isolate contains its own `safety/` result bundle. Existing annotation files are inputs and are not overwritten.
 
 ## Execution ownership
 
