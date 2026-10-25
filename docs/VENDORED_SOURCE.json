@@ -452,5 +452,35 @@
     "admission_criteria_changed": false,
     "candidate_ordering_changed": false,
     "decision_margin_selection_implemented": false
+  },
+  "release_readiness_reporting_update": {
+    "base_commit": "0755fca3ad55cbb46c46b9ca74d3fa53f1d12e6f",
+    "scope": "Qualify child completion by parent execution in reports and exports; retain raw records and counts. Scope shared summary dependencies to finalization and rendering.",
+    "native_analysis_settings_changed": false,
+    "scientific_settings_changed": false,
+    "admission_criteria_changed": false,
+    "candidate_ordering_changed": false,
+    "files": [
+      {
+        "path": "workflow/vendor/basis/deep_reporting.py",
+        "base_sha256": "2e410fbc8f9914ff2abd572ce9b621b69b2c58430ca4b42e0f80edb2e65fd263",
+        "updated_sha256": "ba3f6674a8c22923dfa625a52f95df37d5ea61948ca274c366510fc2ed784456"
+      },
+      {
+        "path": "workflow/vendor/basis/report_dashboard.py",
+        "base_sha256": "123ff66fc8c23b33ee9d3e2f09eb39cbdc7999854470618ac0a737987544b29d",
+        "updated_sha256": "c618b06916f82257b83c5333bde2cb7676a41a231c849bd6d9c38883ba7f17d9"
+      },
+      {
+        "path": "workflow/vendor/basis/report_deep_workflow.py",
+        "base_sha256": "7a8aad89dc87fbb2f95cb5028d4826a6738bf2fada48e4e48a89d99cf1debe01",
+        "updated_sha256": "a8e6c3451a8edc1c50e48a154f934f36bcee7e52a79faffd9b420044653f6718"
+      },
+      {
+        "path": "workflow/vendor/basis/run_summary.py",
+        "base_sha256": "894132450d5adf72f94b96e3ee73ce352902f162b02431698604731f2d47fca1",
+        "updated_sha256": "acba1a20f6efad948f6e72d71288a22f6aa7ab5898971a634618583969cdff06"
+      }
+    ]
   }
 }

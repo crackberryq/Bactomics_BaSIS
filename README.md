@@ -4,6 +4,11 @@
 
 This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
 
+The [acceptance checklist](docs/ACCEPTANCE.md) distinguishes completed software
+checks from the native integration evidence still required before beta promotion.
+The installation command below selects `snakemake-standalone`; changes in an open
+pull request are not included until they have been integrated into that branch.
+
 ## Install the workflow controller
 
 Use Linux or WSL2 with Conda available. The controller environment runs Snakemake; the Snakefile deploys the selected biological tool environments itself.
@@ -37,7 +42,7 @@ Start from the checkout:
 cd ~/bactomics/BaSIS-snakemake &&
 conda activate basis-snake &&
 snakemake --snakefile BaSIS.smk \
-  --config isolate=/home/jimi/bactomics/isolate2 \
+  --config "isolate=$HOME/bactomics/isolate2" \
   --use-conda --cores 4 --resources mem_mb=20000 gpu=0 \
   --rerun-incomplete
 ```
@@ -47,13 +52,14 @@ This command prepares the requested tools and resources before any sample analys
 The main report is:
 
 ```text
-/home/jimi/bactomics/isolate2/safety/report.html
+~/bactomics/isolate2/safety/report.html
 ```
 
-From Windows Explorer on the `Ubuntu-22.04` WSL distribution:
+From Windows Explorer, replace `<distribution>` with your WSL distribution name
+and `<user>` with your Linux username:
 
 ```text
-\\wsl.localhost\Ubuntu-22.04\home\jimi\bactomics\isolate2\safety\report.html
+\\wsl.localhost\<distribution>\home\<user>\bactomics\isolate2\safety\report.html
 ```
 
 Screening results are written to `safety/report.html`. When DeepSafe is enabled,
@@ -203,7 +209,7 @@ After a failure or shutdown, rerun the **same command** with `--rerun-incomplete
 
 ```bash
 snakemake --snakefile BaSIS.smk \
-  --config isolate=/home/jimi/bactomics/isolate2 --unlock
+  --config "isolate=$HOME/bactomics/isolate2" --unlock
 ```
 
 Then repeat the normal run command. Unlocking removes a workflow lock; the subsequent run handles incomplete work. Snakemake can discard and rebuild an interrupted or failed Conda deployment. An arbitrary failure in a tool whose environment was fully deployed does not imply that the environment will be rebuilt. Do not routinely delete environments, result folders or Snakemake metadata, and do not add `--forceall` to a resume command.

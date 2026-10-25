@@ -87,6 +87,13 @@ to allow independent ready jobs to continue. It does not bypass a failed
 prerequisite. A later explicit `screening_reports` invocation can finish the
 screening report when its own required evidence is available.
 
+The completion-summary helper, `deep_reporting.py`, is tracked by finalization
+and report rendering. With other inputs unchanged, future edits only to this
+helper refresh those outputs without invalidating earlier DeepSafe stages. The
+update introducing this dependency change also edits the shared `safety.deep`
+worker, so upgrading to it can still schedule earlier work. Inspect the upgrade
+with `--dry-run`; do not assume every report-related update is a render-only run.
+
 ## Render only from saved evidence
 
 The `safety.reporting` CLI reads saved JSON and artifacts and writes report files.
@@ -150,6 +157,17 @@ noncompleted parent remains visibly provisional; successful child output does
 not make its parent complete. This requires an existing valid DeepSafe evidence
 record, and does not synthesize one from an interrupted directory. The normal
 Snakemake target may still require completion of its upstream jobs.
+
+Completion summaries retain `completed_selected_candidates` and
+`recorded_selected_execution` as the raw child-execution count and status. When
+the recorded selected status is `completed` but the parent did not complete, or
+its status is missing, `selected_execution` is `provisional`.
+`accepted_completed_selected_candidates` counts completed child executions under
+a completed parent; `provisional_completed_selected_candidates` counts those
+under a noncompleted or missing parent. These fields describe execution only:
+"accepted" is not a judgement about biological function. Candidate and stage
+badges qualify such completion as provisional and retain the recorded execution
+and enclosing status in their tooltip.
 
 Completion describes the requested computational scope. Neither report issues a
 scientific safety verdict, confirms a resistance phenotype, or authorizes field

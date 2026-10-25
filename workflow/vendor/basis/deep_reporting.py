@@ -1,16 +1,46 @@
 """Reporting-only summaries; never infer function from database labels."""
 
+
+def parent_execution(record):
+    """Read recorded aliases without assuming missing parents succeeded."""
+    value = record.get('execution_status', record.get('execution', record.get('status')))
+    if isinstance(value, dict):
+        value = value.get('status')
+    return str(value) if value is not None else 'not_recorded'
+
+
+def effective_execution(recorded, *parents):
+    """Qualify retained completion; leave recorded failures and holds intact."""
+    if recorded == 'completed' and any(parent != 'completed' for parent in parents):
+        return 'provisional'
+    return recorded
+
+
+def qualify_completion_summary(saved, execution):
+    """Keep raw child counts beside their parent-qualified completion state."""
+    result = dict(saved)
+    recorded = saved.get('recorded_selected_execution', saved.get('selected_execution', 'not_recorded'))
+    selected = saved.get('selected_candidates')
+    completed = saved.get('completed_selected_candidates')
+    result.update(parent_execution=execution, recorded_selected_execution=recorded,
+                  selected_execution=effective_execution(recorded, execution),
+                  accepted_completed_selected_candidates=completed if execution == 'completed' else 0,
+                  provisional_completed_selected_candidates=0 if execution == 'completed' else completed)
+    if selected == 0 and execution in {'failed', 'blocked', 'not_started'}:
+        result['selected_execution'] = execution
+    return result
+
 def completion_summary(record):
     candidates = record.get('candidates', [])
     selected = [c for c in candidates if c.get('selected')]
     completed = sum(c.get('execution') == 'completed' for c in selected)
-    return {'selected_candidates': len(selected), 'completed_selected_candidates': completed,
-            'selected_execution': (record.get('execution_status') if not selected and record.get('execution_status') in {'failed', 'blocked', 'not_started'} else
-                                   'not_requested' if not selected else
+    saved = {'selected_candidates': len(selected), 'completed_selected_candidates': completed,
+            'selected_execution': ('not_requested' if not selected else
                                    'completed' if completed == len(selected) else 'incomplete'),
             'deferred_candidates': sum(c.get('execution') == 'deferred' for c in candidates),
             'upstream_incomplete': record.get('upstream_incomplete', []),
             'interpretation': 'Execution completion does not establish function or organism safety.'}
+    return qualify_completion_summary(saved, parent_execution(record))
 
 
 def tree_reference_summary(candidate):

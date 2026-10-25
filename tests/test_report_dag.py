@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -53,6 +55,7 @@ class IndependentReportDagTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="basis-report-dag-")
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name)
+        self.workflow_root = ROOT
         self.isolate = self.work / "synthetic"
         self.safety = self.isolate / "safety"
         self.sample = {"sample_id": "synthetic", "input_mode": "external", "taxon": ""}
@@ -73,7 +76,7 @@ class IndependentReportDagTests(unittest.TestCase):
     def snakefile(self, enabled=True, *, empty=False):
         path = self.work / "Snakefile"
         samples = [] if empty else [str(self.isolate)]
-        report_rules = ROOT / "workflow/rules/report.smk"
+        report_rules = self.workflow_root / "workflow/rules/report.smk"
         if os.environ.get("BASIS_TEST_NO_BENCHMARK") == "1":
             # Same explicit local fallback as test_workflow: some test hosts
             # expose child PIDs outside the mounted /proc namespace. CI uses
@@ -93,8 +96,8 @@ class IndependentReportDagTests(unittest.TestCase):
             report_rules.write_text("\n".join(lines) + "\n", encoding="utf-8")
         path.write_text(
             "from pathlib import Path\nimport sys\n"
-            f"ROOT = Path({str(ROOT)!r})\nPYTHON = sys.executable\n"
-            f"CODE_PATH = {str(ROOT / 'workflow/lib') + ':' + str(ROOT / 'workflow/vendor')!r}\n"
+            f"ROOT = Path({str(self.workflow_root)!r})\nPYTHON = sys.executable\n"
+            f"CODE_PATH = {str(self.workflow_root / 'workflow/lib') + ':' + str(self.workflow_root / 'workflow/vendor')!r}\n"
             "class Context:\n"
             f"    deep_enabled = {enabled!r}\n"
             f"    samples = {samples!r}\n"
@@ -162,6 +165,48 @@ class IndependentReportDagTests(unittest.TestCase):
         self.assertTrue(report.is_file())
         self.assertFalse((self.safety / "report.html").exists())
         self.assertIn("Provisional", report.read_text())
+
+    def test_summary_helper_edit_refreshes_saved_evidence_report_directly(self):
+        isolated = self.work / "isolated-workflow"
+        (isolated / "workflow/rules").mkdir(parents=True)
+        for name in ("lib", "vendor"):
+            shutil.copytree(ROOT / "workflow" / name, isolated / "workflow" / name,
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        shutil.copy2(ROOT / "workflow/rules/report.smk",
+                     isolated / "workflow/rules/report.smk")
+        self.workflow_root = isolated
+        self.write("evidence/deepsafe.json", {
+            "sample_id": "synthetic", "module": "deepsafe", "execution_status": "failed",
+            "reason": "synthetic parent failure", "findings": [], "metrics": {}, "artifacts": [],
+            "complete": False, "candidates": [{
+                "candidate_id": "synthetic-candidate", "protein_id": "P1", "selected": True,
+                "execution": "completed", "analyses": {}}]})
+        inputs = {
+            path: (hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns)
+            for path in self.safety.rglob("*.json")
+        }
+        first = self.snake("followup_reports")
+        self.assertEqual(first.returncode, 0, first.stdout[-6000:])
+        unchanged = self.snake("--dry-run", "followup_reports")
+        self.assertEqual(unchanged.returncode, 0, unchanged.stdout[-6000:])
+        self.assertIn("Nothing to be done", unchanged.stdout)
+        report = self.safety / "deepsafe-report/report.html"
+        before = report.stat().st_mtime_ns
+        helper = isolated / "workflow/vendor/basis/deep_reporting.py"
+        helper.write_text(helper.read_text() + "\n# Synthetic reporting-only source revision.\n")
+        changed = self.snake("--dry-run", "followup_reports")
+        self.assertEqual(changed.returncode, 0, changed.stdout[-6000:])
+        self.assertIn("safety_deep_report", changed.stdout)
+        self.assertNotIn("Nothing to be done", changed.stdout)
+        refreshed = self.snake("followup_reports")
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout[-6000:])
+        self.assertGreater(report.stat().st_mtime_ns, before)
+        for path, expected in inputs.items():
+            self.assertEqual((hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns),
+                             expected, str(path))
+        resumed = self.snake("--dry-run", "followup_reports")
+        self.assertEqual(resumed.returncode, 0, resumed.stdout[-6000:])
+        self.assertIn("Nothing to be done", resumed.stdout)
 
     def test_enabled_default_dag_requests_both_bundles(self):
         self.write("evidence/deepsafe.json", {"synthetic": True})

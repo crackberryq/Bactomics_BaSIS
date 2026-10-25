@@ -100,6 +100,21 @@ class SavedFollowupDagTests(unittest.TestCase):
     def save_review_config(self):
         self.review_config.write_text(yaml.safe_dump(self.supplied), encoding="utf-8")
 
+    def isolate_workflow_sources(self):
+        """Permit source edits without touching the checkout or shared symlinks."""
+        source = self.workflow_root
+        isolated = self.work / "isolated-workflow"
+        (isolated / "workflow/rules").mkdir(parents=True)
+        shutil.copy2(source / "Followup.smk", isolated / "Followup.smk")
+        for name in ("lib", "vendor"):
+            shutil.copytree(ROOT / "workflow" / name, isolated / "workflow" / name,
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        (isolated / "envs").symlink_to(ROOT / "envs", target_is_directory=True)
+        for name in ("deep.smk", "report.smk"):
+            shutil.copy2(source / "workflow/rules" / name, isolated / "workflow/rules" / name)
+        self.workflow_root = isolated
+        return isolated / "workflow/vendor/basis/deep_reporting.py"
+
     def snapshot(self):
         return {str(path): (hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns)
                 for path in self.safety.rglob("*") if path.is_file()}
@@ -170,6 +185,69 @@ class SavedFollowupDagTests(unittest.TestCase):
         result = json.loads((self.safety / "evidence/deepsafe.json").read_text())
         self.assertEqual(result["commands"], [])
         self.assertEqual(result["effective_config"]["maximum_candidates"], 4)
+
+    def test_summary_helper_edit_refreshes_only_finalization_and_report(self):
+        helper = self.isolate_workflow_sources()
+        original = self.snapshot()
+        first = self.snake()
+        self.assertEqual(first.returncode, 0, first.stdout[-12000:])
+        self.assert_retained(original)
+        upstream = {
+            name: identity for name, identity in self.snapshot().items()
+            if ("/deepsafe/states/" in name and not name.endswith("/finalize.json"))
+            or "/deepsafe/review/" in name
+            or "/deepsafe/native/prepare/" in name
+        }
+        self.assertTrue(upstream)
+        evidence = self.safety / "evidence/deepsafe.json"
+        report = self.safety / "deepsafe-report/report.html"
+        old_outputs = {path: path.stat().st_mtime_ns for path in (evidence, report)}
+        helper.write_text(helper.read_text() + "\n# Synthetic reporting-only source revision.\n")
+
+        preview = self.snake("--dry-run")
+        self.assertEqual(preview.returncode, 0, preview.stdout[-12000:])
+        self.assertIn("safety_deep_finalize", preview.stdout)
+        self.assertIn("safety_deep_report", preview.stdout)
+        for rule in ("capture_followup_review", "safety_deep_resource_inputs",
+                     "safety_deep_prepare", "safety_deep_candidate", "safety_deep_references",
+                     "safety_deep_tree_plan", "safety_deep_placement_plan"):
+            self.assertNotIn(rule, preview.stdout, preview.stdout[-12000:])
+        refreshed = self.snake()
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout[-12000:])
+        self.assert_retained(original)
+        self.assert_retained(upstream)
+        for path, previous_time in old_outputs.items():
+            self.assertGreater(path.stat().st_mtime_ns, previous_time, str(path))
+        self.assertEqual(json.loads(evidence.read_text())["commands"], [])
+        complete = self.snapshot()
+        resumed = self.snake("--dry-run")
+        self.assertEqual(resumed.returncode, 0, resumed.stdout[-6000:])
+        self.assertIn("Nothing to be done", resumed.stdout)
+        self.assert_retained(complete)
+
+    def test_candidate_rules_exclude_summary_helper_but_consumers_track_it(self):
+        helper = self.isolate_workflow_sources()
+        inventory = self.work / "declared-sources.json"
+        snakefile = self.workflow_root / "Followup.smk"
+        with snakefile.open("a") as stream:
+            stream.write(
+                "\nrule inspect_declared_sources:\n"
+                f"    output: {str(inventory)!r}\n"
+                "    run:\n"
+                "        names = ('safety_deep_prepare', 'safety_deep_candidate', "
+                "'safety_deep_references', 'safety_deep_tree_plan', "
+                "'safety_deep_placement_plan', 'safety_deep_finalize', 'safety_deep_report')\n"
+                "        Path(output[0]).write_text(json.dumps({name: "
+                "list(workflow.get_rule(name).input.source) for name in names}))\n")
+        result = self.snake("--", "inspect_declared_sources")
+        self.assertEqual(result.returncode, 0, result.stdout[-12000:])
+        sources = json.loads(inventory.read_text())
+        for rule, paths in sources.items():
+            if rule in {"safety_deep_finalize", "safety_deep_report"}:
+                self.assertIn(str(helper), paths, rule)
+            else:
+                self.assertNotIn(str(helper), paths, rule)
+        self.assertFalse((self.safety / "deepsafe").exists())
 
 
 if __name__ == "__main__":

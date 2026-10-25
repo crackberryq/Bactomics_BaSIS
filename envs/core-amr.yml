@@ -1,4 +1,4 @@
-# Starting recipe, not a solved platform lockfile. See docs/INSTALL.md.
+# Starting recipe, not a solved platform lockfile. See docs/ACCEPTANCE.md.
 name: basis-core-amr
 channels:
   - conda-forge

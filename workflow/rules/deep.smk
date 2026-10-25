@@ -6,15 +6,20 @@ from safety.deep_resources import config_input_paths, load_discovered_inputs
 from safety.state_storage import object_paths
 
 
-def safety_deep_sources():
+def safety_deep_sources(*, finalization=False):
     # Analysis helpers affect analysis jobs. HTML rendering code deliberately
     # does not: refreshing the report must not invalidate native analyses.
     names = ("deep.py", "deep_stages.py", "deep_candidate_jobs.py", "deep_trees.py",
              "deep_alignment_review.py", "deep_consolidation.py", "deep_decisions.py",
-             "deep_reporting.py", "references.py", "motifs.py", "prosite.py",
+             "references.py", "motifs.py", "prosite.py",
              "prosite_profiles.py", "placement.py", "placement_panels.py",
              "placement_native.py", "placement_scoring.py", "placement_diagnostics.py",
              "candidate_labels.py", "deep_workflow.py", "aware.py")
+    # Completion/reference summaries are consumed during finalization, not by
+    # the preceding analyses. Keep their provenance without rerunning those
+    # analyses when only summary formatting or status semantics change.
+    if finalization:
+        names += ("deep_reporting.py",)
     return [str(ROOT / "workflow/lib/safety/deep.py"),
             str(ROOT / "workflow/lib/safety/state_storage.py"),
             str(ROOT / "workflow/lib/safety/deep_resources.py"),
@@ -197,7 +202,7 @@ rule safety_deep_finalize:
     input:
         parent=lambda wc: safety_deep_state(wc.isolate + "/safety/deepsafe/states/placement-plan.json"),
         candidates=lambda wc: safety_deep_targets(wc, "placement"),
-        source=safety_deep_sources()
+        source=safety_deep_sources(finalization=True)
     output:
         state="{isolate}/safety/deepsafe/states/finalize.json",
         evidence="{isolate}/safety/evidence/deepsafe.json",

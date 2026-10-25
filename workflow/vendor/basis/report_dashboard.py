@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .report_assets import CSS, JS
+from .deep_reporting import effective_execution
 from .report_links import candidate_anchor, candidate_section_anchor
 from .report_navigation import (SECTIONS, candidate_entry, render_navigator,
                                 render_comparators, render_candidate_files)
@@ -68,8 +69,17 @@ def num(x):
 
 def badge(value, tone=None):
     tone = tone or {'completed': 'ok', 'failed': 'bad', 'unknown': 'warn', 'blocked': 'warn', 'not_started': 'warn',
-                    'not_assessed': 'neutral', 'not_detected': 'neutral'}.get(str(value), 'info')
+                    'provisional': 'warn', 'not_assessed': 'neutral', 'not_detected': 'neutral'}.get(str(value), 'info')
     return '<span class="badge ' + tone + '">' + esc(human(value)) + '</span>'
+
+
+def execution_badge(recorded, *parents):
+    """Show completion only when its enclosing executions completed."""
+    effective = effective_execution(recorded, *parents)
+    if effective == 'provisional':
+        detail = 'Recorded execution: ' + human(recorded) + '; enclosing execution: ' + ', '.join(human(parent) for parent in parents)
+        return '<span title="' + esc(detail) + '">' + badge(effective) + '</span>'
+    return badge(effective)
 
 
 def table(heads, rows, ident=''):
@@ -193,7 +203,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     search, title_note = entry['search_text'] + ' ' + workflow_search_terms(c), entry['label']
     def section_open(name):
         return '<div class="candidate-section" id="' + candidate_section_anchor(sid, ident, name) + '" tabindex="-1"><h4>' + esc(SECTIONS[name]) + '</h4>'
-    result = '<details class="candidate" id="' + candidate_anchor(sid, ident) + '" data-protein="' + esc(ident) + '" data-search="' + esc(search) + '" data-sample="' + esc(sid) + '" data-queue="' + esc(queue) + '" data-interpretation="' + esc(interpretation) + '"><summary><div class="candidate-title"><strong>' + esc(ident) + '</strong><span>' + esc(title_note) + '</span></div><div class="candidate-meta">' + badge(QUEUES.get(queue, human(queue))) + badge(c.get('execution', 'unknown')) + '</div></summary><div class="candidate-body">'
+    result = '<details class="candidate" id="' + candidate_anchor(sid, ident) + '" data-protein="' + esc(ident) + '" data-search="' + esc(search) + '" data-sample="' + esc(sid) + '" data-queue="' + esc(queue) + '" data-interpretation="' + esc(interpretation) + '"><summary><div class="candidate-title"><strong>' + esc(ident) + '</strong><span>' + esc(title_note) + '</span></div><div class="candidate-meta">' + badge(QUEUES.get(queue, human(queue))) + execution_badge(c.get('execution', 'unknown'), parent_execution) + '</div></summary><div class="candidate-body">'
     result += '<nav class="candidate-section-nav" aria-label="Candidate evidence sections">' + ''.join(link('#' + entry['sections'][k], title, 'button') for k, title in SECTIONS.items()) + '</nav>' + section_open('overview')
     if c.get('protein_id') and c.get('contig') and c.get('start'):
         result += '<button class="button" data-locus-sample="' + esc(sid) + '" data-locus-protein="' + esc(c['protein_id']) + '">Show genomic neighborhood ↗</button>'
@@ -201,7 +211,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     refs = c.get('references') or []
     unique = {v['sequence_sha256'] for v in refs if isinstance(v, dict) and v.get('sequence_sha256')}
     result += '<div class="mini-stats">' + stat('Protein length', num((c.get('query') or {}).get('length')), 'amino acids') + stat('Comparator records', str(len(refs)), str(len(unique)) + ' unique sequences with hashes') + stat('Recorded features', str(len(features)), 'accepted domain / motif intervals') + '</div>'
-    result += '<h4>Analysis coverage</h4>' + '<div class="layer-grid">' + ''.join('<div><span>' + esc(title) + '</span>' + badge((analyses.get(k) or {}).get('status', 'not_assessed')) + '</div>' for k, title in LAYERS.items()) + '</div>'
+    result += '<h4>Analysis coverage</h4>' + '<div class="layer-grid">' + ''.join('<div><span>' + esc(title) + '</span>' + execution_badge((analyses.get(k) or {}).get('status', 'not_assessed'), parent_execution, c.get('execution')) + '</div>' for k, title in LAYERS.items()) + '</div>'
     result += candidate_workflow_details(c, parent_execution)
     if not completed_evidence:
         result += '<p class="callout">Candidate or parent execution is not completed. Retained evidence is provisional; accepted feature maps and tree views are withheld.</p>'
@@ -222,7 +232,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     tree_summary = summary.get('tree_summary') or {}
     runs = tree_summary.get('runs') or tree.get('runs') or []
     result += '</div>' + section_open('trees')
-    result += '<h4>Phylogenetic follow-up</h4><p>' + badge(tree.get('status', 'not_assessed')) + ' ' + esc(human(tree.get('reason', 'not recorded'))) + '</p>'
+    result += '<h4>Phylogenetic follow-up</h4><p>' + execution_badge(tree.get('status', 'not_assessed'), parent_execution, c.get('execution')) + ' ' + esc(human(tree.get('reason', 'not recorded'))) + '</p>'
     if runs and completed_evidence:
         result += table(['Run', 'Model', 'SH-aLRT', 'UFBoot', 'Reference annotations on query side'], [(esc(v.get('name')), esc(v.get('selected_model', v.get('model'))), esc(v.get('sh_alrt')), esc(v.get('ufboot')), '<br>'.join(esc(str(x.get('accession')) + ' · ' + str(x.get('review_status'))) for x in v.get('query_side_references', [])) or 'See candidate evidence') for v in runs])
         result += '<p class="small muted">Support describes a tree split, not a functional classification. Reference annotations retain their recorded review status.</p>'
