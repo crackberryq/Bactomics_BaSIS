@@ -233,7 +233,7 @@ class ContextTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "configured together"):
             SafetyContext(cfg, ROOT)
 
-    def test_scientific_thresholds_and_selection_budgets_preserve_rc_defaults(self):
+    def test_context_preserves_declared_analysis_settings_and_workload_limits(self):
         row = self.annotation("defaults")
         context = self.context([row])
         old = default_config()

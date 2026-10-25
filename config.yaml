@@ -8,6 +8,7 @@ memory_mb: 20000
 extend: true
 deep:
   enabled: true
+  maximum_candidates: 5  # Per-sample computing ceiling after deduplication; never a target.
   aware:
     enabled: true
     preset: auto-medium  # auto-strict | auto-medium | auto-loose

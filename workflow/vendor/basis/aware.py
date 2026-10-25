@@ -234,7 +234,7 @@ def select(records, config, sample, policy):
     from .deep import _flatten, evidence_priority, taxonomy_review
     from .candidate_labels import refresh_candidate_labels
     limits = {}
-    for key, default, minimum in (("maximum_candidates", 40, 1),
+    for key, default, minimum in (("maximum_candidates", 5, 1),
                                   ("maximum_exploratory_candidates", 20, 0),
                                   ("maximum_attention_candidates", 5, 0)):
         value = config.get(key, default)
@@ -366,5 +366,5 @@ def audit(candidates, records, config):
     return {"schema": VERSION, "effective_policy": policy, "counts": counts,
             "by_tool": by_tool, "by_queue": by_queue, "deferral_reasons": dict(reasons),
             "budget": {k: config.get(k, default) for k, default in (
-                ("maximum_candidates", 40), ("maximum_exploratory_candidates", 20), ("maximum_attention_candidates", 5))},
+                ("maximum_candidates", 5), ("maximum_exploratory_candidates", 20), ("maximum_attention_candidates", 5))},
             "sequence_count_note": "Unique sequences are an inventory, not a claim of cross-sample computation reuse."}

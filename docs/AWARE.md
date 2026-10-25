@@ -10,6 +10,20 @@ do not become qualifying evidence because several tools reported them.
 
 Standard standalone executions now default to `deep.aware.preset: auto-medium`.
 The default is merged even when an older study YAML has no `aware` section.
+The total follow-up budget now defaults to **five unique candidates per sample**
+(`deep.maximum_candidates: 5`). It applies after identity reconciliation and
+admission. It is a computing ceiling, never a quota: fewer qualifying records
+produce fewer jobs, and no qualifying records produce no selected-candidate jobs.
+An explicit study configuration can override this budget; existing saved results
+are not changed by updating the software.
+
+Unselected/deferred records remain visible as **Requires attention**, with their
+recorded execution state and admission or budget reason. This is a workflow flag;
+it does not assert a biological concern or erase an existing screening call.
+The smaller budget does not change admission or ordering, and does not implement
+or claim selection by proximity to a tool's decision boundary. That would require
+a separately justified, method-specific review policy and the relevant evidence.
+
 Set `deep.aware.enabled: false` explicitly to retain legacy admission. Low-level
 legacy API calls without an AWARE block retain legacy behavior; saved historical
 evidence is never reinterpreted by report rendering.

@@ -129,6 +129,12 @@ parent `safety` directory; arbitrary external artifact roots are rejected.
 
 ## Status and interpretation
 
+The follow-up budget defaults to five unique candidates per sample. Unselected
+records remain in a **Requires attention** section with their recorded execution
+state and the reason they were deferred. A budget deferral means follow-up was
+not scheduled; it is not a negative screening result. See [AWARE](AWARE.md) for
+the independent admission policy and configuration overrides.
+
 The reports preserve requested, disabled, not assessed, incomplete and failed
 states. A disabled or unassessed module is not a negative finding. The screening
 renderer rejects failed, blocked or not-started requested screening evidence

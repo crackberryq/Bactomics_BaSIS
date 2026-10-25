@@ -406,5 +406,36 @@
         "updated_sha256": "2b8133c994e007bdfb06e1e2fb5a751a1299bc42f13f5caa076796b1ef24a9f5"
       }
     ]
+  },
+  "followup_budget_update": {
+    "base_commit": "734e1ae5a85a17443e1d6fe3a22fc953c09b1a97",
+    "scope": "Default to five unique follow-up candidates per sample and label retained unselected records Requires attention with their original reasons and execution states.",
+    "default_workload_limit_changed": true,
+    "native_analysis_settings_changed": false,
+    "admission_criteria_changed": false,
+    "candidate_ordering_changed": false,
+    "decision_margin_selection_implemented": false,
+    "files": [
+      {
+        "path": "workflow/vendor/basis/aware.py",
+        "base_sha256": "caf8517e26014431c48ebe405fddb21cfb7b92dea5e7950831cb2fe2ad58c486",
+        "updated_sha256": "b287a0e029b749e3aea13c91ea1ff324b8e9f12890f321e63eb197c31e8fd10b"
+      },
+      {
+        "path": "workflow/vendor/basis/config.py",
+        "base_sha256": "a0972f0463c381275b73ba68ba828e351e00f4c5faee28ef53969f13be2d4a27",
+        "updated_sha256": "9e93c9bbb80f183722a5a7f876839ef4be0cc8df2d113a49c707bf38bd679c5e"
+      },
+      {
+        "path": "workflow/vendor/basis/deep.py",
+        "base_sha256": "470122171efe282137cda367b08ee2847440026687d1fc7e9e27a303458aa956",
+        "updated_sha256": "3fff44f338030edf8129ce8ffe4290f098e1567c09679e8bd2e8413c2402e392"
+      },
+      {
+        "path": "workflow/vendor/basis/report_dashboard.py",
+        "base_sha256": "6f03f3b59950a27c525648ef759966a6252d1f56624bbebe26555f779253f873",
+        "updated_sha256": "123ff66fc8c23b33ee9d3e2f09eb39cbdc7999854470618ac0a737987544b29d"
+      }
+    ]
   }
 }

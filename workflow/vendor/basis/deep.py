@@ -116,7 +116,7 @@ def select_candidates(records: list[dict], config: dict, sample: dict | None = N
 
 def _select_candidates_legacy(records: list[dict], config: dict, sample: dict | None = None) -> list[dict]:
     budgets = {}
-    for key, default, minimum in (("maximum_candidates", 40, 1),
+    for key, default, minimum in (("maximum_candidates", 5, 1),
                                   ("maximum_attention_candidates", 5, 0),
                                   ("maximum_exploratory_candidates", 20, 0)):
         value = config.get(key, default)

@@ -319,9 +319,15 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     # deferred candidates are exported, not repeated thousands of times in HTML.
     selected = [(sid, c) for sid, c in candidates if c.get('selected', 'selected' not in c)]
     deferred = [(sid, c) for sid, c in candidates if c.get('selected') is False]
-    deferred_rows = [dict(sample_id=sid, candidate_id=c.get('candidate_id'), protein_id=c.get('protein_id'), selection_queue=c.get('selection_queue'), execution=c.get('execution'), reason=c.get('reason')) for sid, c in deferred]
+    deferred_rows = [dict(sample_id=sid, candidate_id=c.get('candidate_id'), protein_id=c.get('protein_id'),
+                          selection_queue=c.get('selection_queue'), execution=c.get('execution'), reason=c.get('reason'),
+                          selected=False, review_status='Requires attention',
+                          followup_status=('Follow-up not performed' if c.get('execution') in {'deferred', 'not_started'}
+                                           else 'Recorded follow-up status: ' + human(c.get('execution'))))
+                     for sid, c in deferred]
     if deep_enabled:
-        r._write_tsv(outdir / 'deferred-candidates.tsv', ['sample_id','candidate_id','protein_id','selection_queue','execution','reason'], deferred_rows)
+        r._write_tsv(outdir / 'deferred-candidates.tsv', ['sample_id','candidate_id','protein_id','selection_queue','execution','reason',
+                                                       'selected','review_status','followup_status'], deferred_rows)
     requested = [v for v in combined if record_requested(v, run)]
     requested_count = len(requested) + missing_requested_count(run, combined)
     omitted = [v for v in combined if v not in requested]
@@ -344,7 +350,7 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     all_done = requested_count > 0 and completed == requested_count
     headline = ('Requested modules completed' if not selected else 'Selected analyses completed') if all_done and done == len(selected) and not run.get('engine_error') else 'Execution review required'
     hero = '<header class="hero"><div><p class="eyebrow">' + esc(hero_eyebrow) + '</p><h1>' + hero_title + '</h1><p>' + hero_intro + '</p><div class="hero-meta">' + badge(headline, 'ok' if all_done and done == len(selected) else 'warn') + '<span>' + esc(_date(run.get('finished_at'))) + '</span></div></div><div class="hero-art" aria-hidden="true"><svg viewBox="0 0 250 210"><g fill="none" stroke="#60d4c4" stroke-width="1.5" opacity=".65"><circle cx="125" cy="105" r="82"/><circle cx="125" cy="105" r="65" stroke-dasharray="5 9"/><ellipse cx="125" cy="105" rx="37" ry="82" transform="rotate(35 125 105)"/><path d="M49 75L172 40 192 130 91 174 49 75 192 130M91 174L172 40"/></g><g fill="#abf0df"><circle cx="49" cy="75" r="6"/><circle cx="172" cy="40" r="8"/><circle cx="192" cy="130" r="5"/><circle cx="91" cy="174" r="7"/></g><text x="125" y="112" text-anchor="middle" fill="white" font-size="29" font-family="sans-serif">BaSIS</text></svg></div></header>'
-    candidate_stats = (stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'Unavailable' if selection_unavailable else 'None selected', 'completed DeepSafe analyses' if selected else 'candidate selection unavailable — inspect execution issues' if selection_unavailable else 'no selected-candidate analyses requested') + stat('Deferred candidates', num(len(deferred)), 'retained for later exploratory review')) if deep_enabled else ''
+    candidate_stats = (stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'Unavailable' if selection_unavailable else 'None selected', 'completed DeepSafe analyses' if selected else 'candidate selection unavailable — inspect execution issues' if selection_unavailable else 'no selected-candidate analyses requested') + stat('Requires attention', num(len(deferred)), 'not selected for this follow-up run · reasons retained')) if deep_enabled else ''
     overview = hero + '<div class="stats">' + stat('Requested modules', f'{completed} / {requested_count}', 'completed execution · explicit exclusions omitted; holds retained') + candidate_stats + stat('Execution failures', num(failed), 'failed or unknown requested module records') + '</div>'
     deferred_note = num(len(deferred)) + ' candidates remain deferred. ' if deep_enabled else ''
     overview += '<div class="callout"><strong>Execution and interpretation are separate.</strong><p>Recorded overall scope: ' + esc(human(run.get('completeness'))) + '. ' + deferred_note + 'Completed analyses do not establish protein function or organism safety.</p></div>'
@@ -471,7 +477,12 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
         selected_execution = 'unavailable — DeepSafe ' + states
     elif not selected and not (run.get('options') or {}).get('deep'):
         selected_execution = 'not requested — no candidates selected'
-    deep = '<div class="panel"><div class="panel-head"><div><h3>Deep family assessment</h3><p class="muted">' + str(len(selected)) + ' selected candidates · ' + str(q['native_screen']) + ' from core screens · ' + str(q['ml_attention']) + ' from ML attention</p></div>' + link('deferred-candidates.tsv','Deferred queue · TSV') + '</div><p>Selected execution: <strong>' + selected_execution + '</strong>. Biological interpretations and review holds remain attached to each candidate.</p>'
+    deep = '<div class="panel"><div class="panel-head"><div><h3>Deep family assessment</h3><p class="muted">' + str(len(selected)) + ' selected candidates · ' + str(q['native_screen']) + ' from core screens · ' + str(q['ml_attention']) + ' from ML attention</p></div>' + link('deferred-candidates.tsv','Requires attention · TSV') + '</div><p>Selected execution: <strong>' + selected_execution + '</strong>. Biological interpretations and review holds remain attached to each candidate.</p>'
+    if deferred:
+        reasons = Counter(str(c.get('reason') or 'reason_not_recorded') for _, c in deferred)
+        deep += '<div class="callout"><strong>Requires attention: ' + num(len(deferred)) + ' records</strong><p>These records were not selected for this follow-up run. The export marks unstarted or deferred work as “Follow-up not performed” and retains any other recorded execution status. This is a workflow review flag, not a biological conclusion.</p><details><summary>Recorded reasons</summary><ul>'
+        deep += ''.join('<li>' + esc(human(reason)) + ': ' + num(count) + '</li>' for reason, count in sorted(reasons.items()))
+        deep += '</ul></details></div>'
     deep += '<div class="filters"><label>Search candidates<input id="candidate-search" type="search" placeholder="Protein, annotation, domain…"></label><label>Origin<select id="queue-filter"><option value="">All queues</option>' + ''.join('<option value="' + esc(k) + '">' + esc(QUEUES.get(k,human(k))) + '</option>' for k in sorted(q)) + '</select></label><label>Sample<select id="sample-filter"><option value="">All samples</option>' + ''.join('<option value="' + esc(k) + '">' + esc(k) + '</option>' for k in sids) + '</select></label><label>Interpretation<select id="interpretation-filter"><option value="">All interpretations</option>' + ''.join('<option value="' + esc(k) + '">' + esc(human(k)) + '</option>' for k in sorted({str((c.get('assessment') or {}).get('interpretation', c.get('interpretation','unresolved'))) for _,c in selected})) + '</select></label></div><div class="panel-head"><p id="candidate-count" class="small muted" aria-live="polite">' + str(len(selected)) + ' candidates</p><div><button class="button" data-action="expand-candidates">Expand visible</button> <button class="button" data-action="collapse-candidates">Collapse all</button></div></div></div><p id="candidate-empty" class="empty" hidden>No candidates match these filters.</p>'
     placement_views, placement_links = {}, {}
     for sid, c in selected:
