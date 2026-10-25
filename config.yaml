@@ -7,7 +7,7 @@ threads: 4
 memory_mb: 20000
 extend: true
 deep:
-  enabled: true
+  enabled: false  # Screening first; follow-up is an explicit opt-in.
   maximum_candidates: 5  # Per-sample computing ceiling after deduplication; never a target.
   aware:
     enabled: true

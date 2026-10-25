@@ -437,5 +437,20 @@
         "updated_sha256": "123ff66fc8c23b33ee9d3e2f09eb39cbdc7999854470618ac0a737987544b29d"
       }
     ]
+  },
+  "reviewed_followup_update": {
+    "base_commit": "6fb6092e6404140ca34a20ba1cda1f8f25826c32",
+    "description": "Disable follow-up by default and add a separate saved-screening entry point with explicit opt-in and prerequisite verification.",
+    "changed_files": [
+      {
+        "path": "workflow/vendor/basis/config.py",
+        "sha256": "7a882b5a7466bd78328ed39b8e0844c0eb79d849b18bb9e195d0a325be6dd7c7"
+      }
+    ],
+    "automatic_followup_default_changed": true,
+    "native_analysis_settings_changed": false,
+    "admission_criteria_changed": false,
+    "candidate_ordering_changed": false,
+    "decision_margin_selection_implemented": false
   }
 }

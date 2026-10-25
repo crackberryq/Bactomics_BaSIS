@@ -79,7 +79,7 @@ class SafetyContext:
             deep = {"enabled": deep}
         if not isinstance(deep, dict):
             raise ValueError("deep must be a mapping")
-        self.deep_enabled = _bool(deep.get("enabled", True), "deep.enabled")
+        self.deep_enabled = _bool(deep.get("enabled", False), "deep.enabled")
         cfg = default_config()
         for row in cfg["modules"].values():
             row.update(enabled=True, threads=self.threads)

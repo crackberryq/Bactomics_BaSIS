@@ -43,7 +43,7 @@ def default_config() -> dict:
             "validation_mode": "research", "execution": {"cores": 8, "memory_mb": 32000, "gpus": 0,
                                                          "environment_backend": "auto", "conda_prefix": None},
             "modules": modules, "sample_module_overrides": {},
-            "deep": {"motifs": True, "motif_rules": None, "prosite_snapshot": None, "prosite_profiles": False, "profiles_dir": None, "reference_fasta": None, "reference_metadata": None,
+            "deep": {"enabled": False, "motifs": True, "motif_rules": None, "prosite_snapshot": None, "prosite_profiles": False, "profiles_dir": None, "reference_fasta": None, "reference_metadata": None,
                      "reference_search_tool": "blastp", "maximum_candidates": 5,
                      "aware": {"enabled": True, "preset": "auto-medium", "tools": {}, "queues": {}},
                      "maximum_attention_candidates": 20, "attention_queue_for_mixed_evidence": False, "maximum_exploratory_candidates": 20,

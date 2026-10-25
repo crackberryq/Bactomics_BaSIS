@@ -42,7 +42,7 @@ snakemake --snakefile BaSIS.smk \
   --rerun-incomplete
 ```
 
-This command prepares the requested tools and resources before any sample analysis can start. Completed outputs remain reusable on subsequent invocations. The default uses CPU execution, including PathogenFinder2; see GPU configuration below if a compatible NVIDIA GPU is available.
+This command prepares the requested tools and resources before any sample analysis can start. DeepSafe is disabled by default: review the screening report before requesting follow-up. Completed outputs remain reusable on subsequent invocations. The default uses CPU execution, including PathogenFinder2; see GPU configuration below if a compatible NVIDIA GPU is available.
 
 The main report is:
 
@@ -63,6 +63,13 @@ corresponding bundle. Screening rendering does not wait for DeepSafe analysis,
 although enabled resources still share the setup barrier. See
 [separate reports and saved-evidence rendering](docs/REPORT_SEPARATION.md) for
 commands, disabled/provisional states and navigation behavior.
+
+For follow-up that must never schedule screening, use the separate
+[`Followup.smk` entry point](docs/REVIEWED_FOLLOWUP.md) after reviewing a completed
+screening report. It verifies saved inputs and stops on missing or stale
+prerequisites. Its configuration starts disabled; editing a file does not start
+a run. Existing explicit `deep.enabled: true` overlays still enable integrated
+follow-up in `BaSIS.smk`.
 
 Keep the `safety` folder intact: the reports link to its evidence files, native outputs and exported tree views.
 
@@ -94,7 +101,7 @@ threads: 4
 memory_mb: 20000
 extend: true
 deep:
-  enabled: true
+  enabled: false
 ```
 
 For other layouts, set `samples: config/samples.tsv`. CSV, TSV and `.xlsx` sample sheets are supported; Excel uses the active worksheet. Start with [config/samples.example.tsv](config/samples.example.tsv). `sample_id` and/or `isolate_dir` identify each sample; `assembly`, `proteins`, `gff` and optional `genbank` can override annotation discovery. Unique sample identities and isolate directories are required.

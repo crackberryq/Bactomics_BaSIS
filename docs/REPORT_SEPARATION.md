@@ -18,6 +18,10 @@ bundle is not a self-contained replacement for its referenced analysis files.
 
 ## Workflow targets
 
+DeepSafe is disabled by default. For an explicit follow-up that cannot rebuild
+screening inputs, use [Followup.smk](REVIEWED_FOLLOWUP.md). The targets below
+belong to the integrated `BaSIS.smk` workflow and can build upstream work.
+
 Run from the checkout with the same configuration files and resource limits as
 the original run. For example, with a study configuration named `my-study.yaml`:
 
@@ -161,3 +165,8 @@ or malformed counterparts receive no link.
 This check does not add a dependency between reports. If the other report appears
 later, re-render the first report to refresh its navigation; an existing report
 does not automatically update. The two report paths remain usable directly.
+
+Reviewed `Followup.smk` executions deliberately use a separate effective
+configuration. Its hash differs from the original screening configuration, so
+the optional matching-configuration cross-link is absent. Both report paths
+remain valid, and `safety/deepsafe/review/config.json` records the source snapshot.

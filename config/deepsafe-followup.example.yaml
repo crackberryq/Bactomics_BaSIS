@@ -1,0 +1,14 @@
+# Copy and review the saved screening report before explicitly enabling.
+# Use with Followup.smk, not BaSIS.smk. One isolate per invocation.
+# Paths are relative to the repository containing Followup.smk.
+deep:
+  enabled: false
+  maximum_candidates: 5
+# Other settings inherit the saved screening configuration. No threshold
+# sentinel disables analysis, and native screening settings cannot be changed.
+
+# Optional existing verified resource receipts from an earlier setup.
+# Missing resources stop this entry point; it has no database preparation rule.
+resource_receipts: []
+# threads: 4
+# memory_mb: 8000

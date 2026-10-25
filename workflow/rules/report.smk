@@ -15,66 +15,67 @@ def safety_report_evidence(wildcards):
     return list(CTX.evidence_targets(wildcards.isolate))
 
 
-rule screening_reports:
-    input: lambda w: CTX.screening_report_targets()
-    message: "Screening reports from saved native evidence"
-
+if not getattr(CTX, "followup_only", False):
+    rule screening_reports:
+        input: lambda w: CTX.screening_report_targets()
+        message: "Screening reports from saved native evidence"
 
 rule followup_reports:
     input: lambda w: CTX.followup_report_targets()
     message: "Separate DeepSafe reports from saved follow-up evidence"
 
 
-rule safety_report:
-    input:
-        sample="{isolate}/safety/metadata/sample.json",
-        config="{isolate}/safety/metadata/config.json",
-        evidence=safety_report_evidence,
-        source=REPORTING_SOURCE,
-    output:
-        html="{isolate}/safety/report.html",
-        evidence="{isolate}/safety/evidence.json",
-        findings="{isolate}/safety/tables/findings.tsv",
-        recommendations="{isolate}/safety/tables/recommendations.tsv",
-        scope="{isolate}/safety/tables/module-scope.tsv",
-        summary_tsv="{isolate}/safety/tables/run-summary.tsv",
-        summary_json="{isolate}/safety/metadata/run-summary.json",
-        methods="{isolate}/safety/metadata/methods.txt",
-        navigation="{isolate}/safety/metadata/report-navigation.json",
-        artifacts="{isolate}/safety/metadata/report-artifacts.json",
-        files_html="{isolate}/safety/metadata/files.html",
-        files_json="{isolate}/safety/metadata/files.json",
-        cff="{isolate}/safety/metadata/citations/CITATION.cff",
-        bib="{isolate}/safety/metadata/citations/BaSIS.bib",
-        ris="{isolate}/safety/metadata/citations/BaSIS.ris",
-        citation="{isolate}/safety/metadata/citations/CITATION.txt",
-        data=directory("{isolate}/safety/report-data"),
-    params:
-        python=PYTHON,
-        code=CODE_PATH,
-        root=lambda wc: f"{wc.isolate}/safety",
-    threads: 1
-    priority: 20
-    resources:
-        mem_mb=2000
-    log:
-        "{isolate}/safety/logs/report.log"
-    benchmark:
-        "{isolate}/safety/benchmarks/report.tsv"
-    message:
-        "Render screening report: {wildcards.isolate}/safety/report.html"
-    shell:
-        "PYTHONPATH={params.code:q} {params.python:q} -m safety.reporting "
-        "--sample {input.sample:q} --config {input.config:q} "
-        "--evidence {input.evidence:q} --outdir {params.root:q} "
-        "--view screening --evidence-root {params.root:q} > {log:q} 2>&1"
-
+if not getattr(CTX, "followup_only", False):
+    rule safety_report:
+        input:
+            sample="{isolate}/safety/metadata/sample.json",
+            config="{isolate}/safety/metadata/config.json",
+            evidence=safety_report_evidence,
+            source=REPORTING_SOURCE,
+        output:
+            html="{isolate}/safety/report.html",
+            evidence="{isolate}/safety/evidence.json",
+            findings="{isolate}/safety/tables/findings.tsv",
+            recommendations="{isolate}/safety/tables/recommendations.tsv",
+            scope="{isolate}/safety/tables/module-scope.tsv",
+            summary_tsv="{isolate}/safety/tables/run-summary.tsv",
+            summary_json="{isolate}/safety/metadata/run-summary.json",
+            methods="{isolate}/safety/metadata/methods.txt",
+            navigation="{isolate}/safety/metadata/report-navigation.json",
+            artifacts="{isolate}/safety/metadata/report-artifacts.json",
+            files_html="{isolate}/safety/metadata/files.html",
+            files_json="{isolate}/safety/metadata/files.json",
+            cff="{isolate}/safety/metadata/citations/CITATION.cff",
+            bib="{isolate}/safety/metadata/citations/BaSIS.bib",
+            ris="{isolate}/safety/metadata/citations/BaSIS.ris",
+            citation="{isolate}/safety/metadata/citations/CITATION.txt",
+            data=directory("{isolate}/safety/report-data"),
+        params:
+            python=PYTHON,
+            code=CODE_PATH,
+            root=lambda wc: f"{wc.isolate}/safety",
+        threads: 1
+        priority: 20
+        resources:
+            mem_mb=2000
+        log:
+            "{isolate}/safety/logs/report.log"
+        benchmark:
+            "{isolate}/safety/benchmarks/report.tsv"
+        message:
+            "Render screening report: {wildcards.isolate}/safety/report.html"
+        shell:
+            "PYTHONPATH={params.code:q} {params.python:q} -m safety.reporting "
+            "--sample {input.sample:q} --config {input.config:q} "
+            "--evidence {input.evidence:q} --outdir {params.root:q} "
+            "--view screening --evidence-root {params.root:q} > {log:q} 2>&1"
 
 if CTX.deep_enabled:
     rule safety_deep_report:
         input:
             sample="{isolate}/safety/metadata/sample.json",
-            config="{isolate}/safety/metadata/config.json",
+            config=lambda w: CTX.followup_config_path(w.isolate) if hasattr(CTX, "followup_config_path")
+                else w.isolate + "/safety/metadata/config.json",
             evidence=lambda w: list(CTX.evidence_targets(w.isolate)) + [
                 f"{w.isolate}/safety/evidence/deepsafe.json"],
             source=REPORTING_SOURCE,

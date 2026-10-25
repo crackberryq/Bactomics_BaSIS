@@ -322,6 +322,12 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
         raise ValueError("DeepSafe report output must not be a symlink")
     sample, sample_sha256 = _read_snapshot(sample_path)
     config, config_sha256 = _read_snapshot(config_path)
+    review = config.get("followup_review")
+    if review is not None:
+        for source in review["sources"]:
+            path = Path(source["path"])
+            if not path.is_file() or _sha(path) != source["sha256"]:
+                raise ValueError("Saved screening input changed after review: " + str(path))
     run, records, deep_records = aggregate(sample, config, evidence_paths, view=view)
     from basis.report_scope import deep_requested, validate_report_output_paths
     include_deep = deep_requested(run, deep_records)

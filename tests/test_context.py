@@ -246,7 +246,7 @@ class ContextTests(unittest.TestCase):
                 self.assertEqual(context.config["modules"][module][key], old["modules"][module][key])
 
     def test_setup_only_inventory_prepares_all_requested_tools_without_samples(self):
-        context = SafetyContext({"isolates": [], "resources": {
+        context = SafetyContext({"isolates": [], "deep": {"enabled": True}, "resources": {
             "directory": str(self.resource_root), "policy": "auto"}}, ROOT)
         self.assertEqual(context.samples, {})
         specs = context.resource_specs()

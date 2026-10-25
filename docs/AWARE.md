@@ -8,7 +8,10 @@ do not become qualifying evidence because several tools reported them.
 
 ## Configuration
 
-Standard standalone executions now default to `deep.aware.preset: auto-medium`.
+DeepSafe is disabled by default (`deep.enabled: false`). After explicit opt-in,
+the existing admission policy defaults to `deep.aware.preset: auto-medium`.
+See [reviewed follow-up](REVIEWED_FOLLOWUP.md) for a separate entry point that
+consumes saved screening inputs without scheduling screening jobs.
 The default is merged even when an older study YAML has no `aware` section.
 The total follow-up budget now defaults to **five unique candidates per sample**
 (`deep.maximum_candidates: 5`). It applies after identity reconciliation and
