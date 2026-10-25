@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from urllib.parse import quote, urlsplit
 
 from .report_links import candidate_anchor, candidate_section_anchor
 
@@ -53,9 +52,11 @@ def candidate_entry(sid, c, parent, outdir):
 
 def write_navigation_index(run, deep_records, outdir):
     from .report import _sample_id
+    from .report_scope import deep_requested
+    include_deep = deep_requested(run, deep_records)
     outdir = Path(outdir)
     entries = [candidate_entry(_sample_id(rec), c, rec, outdir)
-               for rec in deep_records for c in rec.get('candidates', []) or []
+               for rec in (deep_records if include_deep else []) for c in rec.get('candidates', []) or []
                if isinstance(c, dict) and c.get('sample_id') in (None, '', _sample_id(rec))
                and c.get('selected', 'selected' not in c)]
     path = outdir / 'report-navigation.json'
@@ -77,7 +78,11 @@ def render_navigator(entries):
         links = ' '.join(link('#' + e['sections'][k], SECTIONS[k], 'text-link')
                          for k in ('motifs', 'trees', 'placement', 'references', 'files'))
         cells = [esc(e['sample_id']), link('#' + e['anchor'], e['protein_id'], 'text-link') +
-                 '<p class="small muted">' + esc(e['label']) + '</p>', badge(e['execution']) +
+                 '<p class="small muted">' + esc(e['label']) + '</p>',
+                 (badge(e['execution']) if e.get('parent_execution') == 'completed' else
+                  badge('Provisional', 'warn') + '<p class="small muted">' +
+                  esc('Parent execution: ' + human(e.get('parent_execution')) +
+                      '; recorded candidate execution: ' + human(e.get('execution'))) + '</p>') +
                  '<p class="small">' + esc(human(e['interpretation'])) + '</p>',
                  esc(reason) + '<p class="small muted">' + esc(human(e['followup'])) + '</p>',
                  '<div class="evidence-shortcuts">' + links + '</div>']
@@ -111,6 +116,7 @@ def render_comparators(c, outdir, key):
 
 
 def render_candidate_files(c, outdir, key, raw):
+    from .report import _artifact_link
     from .report_dashboard import esc, table, link, export_json
     body = '<div class="downloads">' + link(raw, 'Complete candidate evidence · JSON')
     for name, data in [('analyses', c.get('analyses') or {}), ('comparators', c.get('references') or []),
@@ -132,19 +138,11 @@ def render_candidate_files(c, outdir, key, raw):
         for name in names:
             add((analyses.get(layer) or {}).get(name))
     rows = []
-    root = Path(outdir).resolve()
     for value in paths:
-        href = None
+        href = _artifact_link(value, outdir)
         state = 'Unavailable in this report bundle; saved location only'
-        try:
-            if not urlsplit(value).scheme and '\\' not in value:
-                p = Path(value)
-                p = (p if p.is_absolute() else root / p).resolve()
-                if p.is_relative_to(root) and p.is_file():
-                    href = quote(p.relative_to(root).as_posix(), safe='/')
-                    state = 'Local file; contents not revalidated by reporting'
-        except (OSError, ValueError):
-            pass
+        if href:
+            state = 'Local file; contents not revalidated by reporting'
         rows.append((link(href, value, 'text-link') if href else esc(value), esc(state)))
     if rows:
         body += '<details class="evidence-list"><summary>Recorded file locations (' + str(len(rows)) + ')</summary>' + table(['Recorded path', 'Availability'], rows) + '</details>'

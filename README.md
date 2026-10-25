@@ -1,6 +1,6 @@
 # BaSIS · standalone Snakemake workflow
 
-**Version 0.4.0a1 — development alpha.** BaSIS collects bacterial genomic screening evidence and focused DeepSafe follow-up in an offline report. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
+**Version 0.4.0a1 — development alpha.** BaSIS collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
 
 This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
 
@@ -56,7 +56,15 @@ From Windows Explorer on the `Ubuntu-22.04` WSL distribution:
 \\wsl.localhost\Ubuntu-22.04\home\jimi\bactomics\isolate2\safety\report.html
 ```
 
-Keep the `safety` folder intact: the main report links to its evidence files, native outputs and exported tree views.
+Screening results are written to `safety/report.html`. When DeepSafe is enabled,
+its follow-up is written separately to `safety/deepsafe-report/report.html`.
+Use the `screening_reports` or `followup_reports` workflow target to request the
+corresponding bundle. Screening rendering does not wait for DeepSafe analysis,
+although enabled resources still share the setup barrier. See
+[separate reports and saved-evidence rendering](docs/REPORT_SEPARATION.md) for
+commands, disabled/provisional states and navigation behavior.
+
+Keep the `safety` folder intact: the reports link to its evidence files, native outputs and exported tree views.
 
 ## Prepare first, then run
 
@@ -109,7 +117,7 @@ family definition does not require writing a new Snakefile or a gene-specific
 runner. Existing selection budgets, sequence checks, reference eligibility and
 interpretation gates still apply.
 
-The main report's **Family workflow coverage** section shows the matched profile
+The DeepSafe report's **Family workflow coverage** section shows the matched profile
 and placement panel, ambiguous or unmatched routing, each recorded analysis
 status, and the reasons an analysis was held. Candidate links open the existing
 evidence and tree sections. The JSON and TSV downloads contain **all** candidates,
@@ -145,8 +153,8 @@ files. Such changes refresh DeepSafe; reporting-only edits refresh the report.
 Completed upstream native analyses have no dependency on these new helpers.
 Do not modify source resources or pull code updates during an active run.
 
-Coverage exports are `safety/metadata/deep-workflow.json` and
-`safety/metadata/deep-workflow.tsv`. The final DeepSafe evidence also contains the
+Coverage exports are `safety/deepsafe-report/metadata/deep-workflow.json` and
+`safety/deepsafe-report/metadata/deep-workflow.tsv`. The final DeepSafe evidence also contains the
 same candidate workflow records and the configured family inventory. Reports
 remain offline and do not launch analyses or download references.
 
@@ -169,8 +177,9 @@ Run that configuration with `--resources mem_mb=20000 gpu=1`. Requesting GPU exe
 
 | Location | Contents |
 |---|---|
-| `<isolate>/safety/report.html` | Main offline report and evidence navigation |
-| `<isolate>/safety/evidence.json` | Consolidated machine-readable evidence |
+| `<isolate>/safety/report.html` | Screening report and native evidence navigation |
+| `<isolate>/safety/evidence.json` | Consolidated machine-readable screening evidence |
+| `<isolate>/safety/deepsafe-report/` | Separate DeepSafe report, exports and report provenance when enabled |
 | `<isolate>/safety/native/` | Native tool outputs, including reusable embeddings |
 | `<isolate>/safety/completion/` and `results-cache/` | Core completion receipts, verified payloads and retained failed attempts |
 | `<isolate>/safety/deepsafe/` | Selected-candidate stages, native outputs and state |

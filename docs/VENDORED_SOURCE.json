@@ -368,5 +368,43 @@
         "updated_sha256": "cb7121bed2885e0a2535dd7958daeec8c67e5bfc52d60aea1ae0d2ed4207306c"
       }
     ]
+  },
+  "report_separation_update": {
+    "base_commit": "778da9a5f7ab7adef8752246f05f3027e0f0317a",
+    "scope": "Separate saved screening and follow-up reports; preserve source evidence and provisional parent status, constrain report output paths, and link only existing matching source snapshots.",
+    "native_analysis_settings_changed": false,
+    "scientific_settings_changed": false,
+    "files": [
+      {
+        "path": "workflow/vendor/basis/report.py",
+        "base_sha256": "cb7121bed2885e0a2535dd7958daeec8c67e5bfc52d60aea1ae0d2ed4207306c",
+        "updated_sha256": "85c9a958f26a8f5a16325d4da5a138d3b1d936db25bd51eb6e8ade1799ce6ceb"
+      },
+      {
+        "path": "workflow/vendor/basis/report_dashboard.py",
+        "base_sha256": "ff8d9e4d8439175c949b93ab5cf2f286993e12d93478b43d7bda7bd42972c8b7",
+        "updated_sha256": "6f03f3b59950a27c525648ef759966a6252d1f56624bbebe26555f779253f873"
+      },
+      {
+        "path": "workflow/vendor/basis/report_evidence_views.py",
+        "base_sha256": "86b20103597fdc18de6134f6c5573489d09e9f757286e595f78c25be2a7ee435",
+        "updated_sha256": "2396aea196ade27e0bc367006c79fe42470b61eec117a259a570e1937bcee3f2"
+      },
+      {
+        "path": "workflow/vendor/basis/report_genome.py",
+        "base_sha256": "f857fbef914c73fd9f22292449263eac34ec71cdfcdea45c7ac646f47d7194ac",
+        "updated_sha256": "5a97ce3a50f2ddf69bd1698b7759f2ae71aa4e4ab98a74e1d7c09cf19e25d007"
+      },
+      {
+        "path": "workflow/vendor/basis/report_navigation.py",
+        "base_sha256": "ff3af0c51a22d5fc42a3fcca149ac55f071422a091c5fa35e7a90b162d085793",
+        "updated_sha256": "a11ec01e6a2d97943bfe8c45b1a80e74163dcd297d2d63de9ca7366eec5ed7d9"
+      },
+      {
+        "path": "workflow/vendor/basis/report_scope.py",
+        "base_sha256": null,
+        "updated_sha256": "2b8133c994e007bdfb06e1e2fb5a751a1299bc42f13f5caa076796b1ef24a9f5"
+      }
+    ]
   }
 }
