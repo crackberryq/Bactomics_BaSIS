@@ -233,7 +233,7 @@ class ContextTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "configured together"):
             SafetyContext(cfg, ROOT)
 
-    def test_scientific_thresholds_and_selection_budgets_preserve_rc_defaults(self):
+    def test_context_preserves_declared_analysis_settings_and_workload_limits(self):
         row = self.annotation("defaults")
         context = self.context([row])
         old = default_config()
@@ -246,7 +246,7 @@ class ContextTests(unittest.TestCase):
                 self.assertEqual(context.config["modules"][module][key], old["modules"][module][key])
 
     def test_setup_only_inventory_prepares_all_requested_tools_without_samples(self):
-        context = SafetyContext({"isolates": [], "resources": {
+        context = SafetyContext({"isolates": [], "deep": {"enabled": True}, "resources": {
             "directory": str(self.resource_root), "policy": "auto"}}, ROOT)
         self.assertEqual(context.samples, {})
         specs = context.resource_specs()

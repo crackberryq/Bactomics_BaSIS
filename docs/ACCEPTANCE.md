@@ -16,11 +16,19 @@ The native and independent biological validation stages have **not** been comple
 
 ## Local software checks
 
-From the checkout, with `basis-snake` active:
+From the checkout, with `basis-snake` active, install the test dependencies before
+running the full software suite:
 
 ```bash
+python -m pip install -r requirements-test.txt
 python -m unittest discover -s tests -v
 ```
+
+`requirements-test.txt` includes `h5py`, which the workflow-controller environment
+does not require for normal orchestration. Without it, HDF5-specific tests can be
+skipped; a successful run with skipped tests is not the same coverage as the full
+CI suite. Record the test count and skips alongside the commit and dependency
+versions. This test setup does not install the native analysis environments.
 
 The orchestration fixtures use clearly synthetic annotations and temporary fake tools. They run Snakemake directly and deliberately test failure recovery. They are not reported as native biological validation.
 
@@ -52,8 +60,39 @@ Check these outcomes:
 - A second unchanged invocation reports no work to do. Its native output hashes and modification times remain unchanged.
 - Report refresh with unchanged analysis inputs does not repeat native analyses.
 - Selected candidate completion, deferred scope and interpretation holds remain separately visible.
+- A separately requested `Followup.smk` run completes its configured follow-up
+  scope while preserving the saved screening files and their modification times.
+  Record whether any candidates were actually processed; a zero-candidate run
+  does not exercise native follow-up execution.
+- An interrupted invocation resumes without repeating successful unchanged jobs.
+  Already prepared, unchanged resources are reused without downloading them again.
 
 A failed pilot should be diagnosed from the named Snakemake rule and its log. Do not delete successful outputs or change scientific thresholds merely to obtain a green report.
+
+## Beta promotion gate
+
+This gate is **pending**. Passing software CI or updating the checklist does not
+complete the native acceptance work.
+
+- Integrate the release changes into the documented installation branch and
+  record the exact release commit. Installation instructions, version metadata
+  and release notes must describe that same build.
+- Resolve confirmed user-visible correctness defects and retain regression tests.
+- Preserve clean-install and native pilot evidence for each platform and
+  configuration advertised as tested. Untested configurations remain explicit.
+- Verify setup, screening, both report bundles, opt-in follow-up, unchanged rerun,
+  interruption recovery and reuse of existing resources as described above.
+- Record hardware, operating system, storage location, elapsed time, peak memory
+  and disk use. State known limitations rather than promising an unmeasured
+  end-to-end runtime.
+- Publish the validation bundle and clearly label optional follow-up as
+  experimental, including its resource and family-coverage limits.
+
+Independent scientific validation can continue during a clearly labelled research
+beta. Any accuracy or functional-interpretation claims require their own supporting
+evidence. Stable promotion additionally needs broader native compatibility and
+input coverage, a reproducible environment/resource baseline, and external user
+acceptance; the number of passing software tests alone does not establish these.
 
 ## Reproducible validation bundle
 

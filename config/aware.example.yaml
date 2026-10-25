@@ -42,6 +42,6 @@ deep:
   # Existing independent controls still apply:
   # include_stress: true                # needed for BacMet stress follow-up
   # include_exploratory: true           # also requires queues.exploratory: true
-  # maximum_candidates: 100            # ceiling; never a target to fill
+  # maximum_candidates: 5              # per-sample ceiling; never a target to fill
   # maximum_exploratory_candidates: 20
   # maximum_attention_candidates: 20

@@ -1,8 +1,13 @@
 # BaSIS · standalone Snakemake workflow
 
-**Version 0.4.0a1 — development alpha.** BaSIS collects bacterial genomic screening evidence and focused DeepSafe follow-up in an offline report. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
+**Version 0.4.0a1 — development alpha.** BaSIS collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
 
 This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
+
+The [acceptance checklist](docs/ACCEPTANCE.md) distinguishes completed software
+checks from the native integration evidence still required before beta promotion.
+The installation command below selects `snakemake-standalone`; changes in an open
+pull request are not included until they have been integrated into that branch.
 
 ## Install the workflow controller
 
@@ -37,26 +42,42 @@ Start from the checkout:
 cd ~/bactomics/BaSIS-snakemake &&
 conda activate basis-snake &&
 snakemake --snakefile BaSIS.smk \
-  --config isolate=/home/jimi/bactomics/isolate2 \
+  --config "isolate=$HOME/bactomics/isolate2" \
   --use-conda --cores 4 --resources mem_mb=20000 gpu=0 \
   --rerun-incomplete
 ```
 
-This command prepares the requested tools and resources before any sample analysis can start. Completed outputs remain reusable on subsequent invocations. The default uses CPU execution, including PathogenFinder2; see GPU configuration below if a compatible NVIDIA GPU is available.
+This command prepares the requested tools and resources before any sample analysis can start. DeepSafe is disabled by default: review the screening report before requesting follow-up. Completed outputs remain reusable on subsequent invocations. The default uses CPU execution, including PathogenFinder2; see GPU configuration below if a compatible NVIDIA GPU is available.
 
 The main report is:
 
 ```text
-/home/jimi/bactomics/isolate2/safety/report.html
+~/bactomics/isolate2/safety/report.html
 ```
 
-From Windows Explorer on the `Ubuntu-22.04` WSL distribution:
+From Windows Explorer, replace `<distribution>` with your WSL distribution name
+and `<user>` with your Linux username:
 
 ```text
-\\wsl.localhost\Ubuntu-22.04\home\jimi\bactomics\isolate2\safety\report.html
+\\wsl.localhost\<distribution>\home\<user>\bactomics\isolate2\safety\report.html
 ```
 
-Keep the `safety` folder intact: the main report links to its evidence files, native outputs and exported tree views.
+Screening results are written to `safety/report.html`. When DeepSafe is enabled,
+its follow-up is written separately to `safety/deepsafe-report/report.html`.
+Use the `screening_reports` or `followup_reports` workflow target to request the
+corresponding bundle. Screening rendering does not wait for DeepSafe analysis,
+although enabled resources still share the setup barrier. See
+[separate reports and saved-evidence rendering](docs/REPORT_SEPARATION.md) for
+commands, disabled/provisional states and navigation behavior.
+
+For follow-up that must never schedule screening, use the separate
+[`Followup.smk` entry point](docs/REVIEWED_FOLLOWUP.md) after reviewing a completed
+screening report. It verifies saved inputs and stops on missing or stale
+prerequisites. Its configuration starts disabled; editing a file does not start
+a run. Existing explicit `deep.enabled: true` overlays still enable integrated
+follow-up in `BaSIS.smk`.
+
+Keep the `safety` folder intact: the reports link to its evidence files, native outputs and exported tree views.
 
 ## Prepare first, then run
 
@@ -86,7 +107,7 @@ threads: 4
 memory_mb: 20000
 extend: true
 deep:
-  enabled: true
+  enabled: false
 ```
 
 For other layouts, set `samples: config/samples.tsv`. CSV, TSV and `.xlsx` sample sheets are supported; Excel uses the active worksheet. Start with [config/samples.example.tsv](config/samples.example.tsv). `sample_id` and/or `isolate_dir` identify each sample; `assembly`, `proteins`, `gff` and optional `genbank` can override annotation discovery. Unique sample identities and isolate directories are required.
@@ -109,7 +130,7 @@ family definition does not require writing a new Snakefile or a gene-specific
 runner. Existing selection budgets, sequence checks, reference eligibility and
 interpretation gates still apply.
 
-The main report's **Family workflow coverage** section shows the matched profile
+The DeepSafe report's **Family workflow coverage** section shows the matched profile
 and placement panel, ambiguous or unmatched routing, each recorded analysis
 status, and the reasons an analysis was held. Candidate links open the existing
 evidence and tree sections. The JSON and TSV downloads contain **all** candidates,
@@ -145,8 +166,8 @@ files. Such changes refresh DeepSafe; reporting-only edits refresh the report.
 Completed upstream native analyses have no dependency on these new helpers.
 Do not modify source resources or pull code updates during an active run.
 
-Coverage exports are `safety/metadata/deep-workflow.json` and
-`safety/metadata/deep-workflow.tsv`. The final DeepSafe evidence also contains the
+Coverage exports are `safety/deepsafe-report/metadata/deep-workflow.json` and
+`safety/deepsafe-report/metadata/deep-workflow.tsv`. The final DeepSafe evidence also contains the
 same candidate workflow records and the configured family inventory. Reports
 remain offline and do not launch analyses or download references.
 
@@ -169,8 +190,9 @@ Run that configuration with `--resources mem_mb=20000 gpu=1`. Requesting GPU exe
 
 | Location | Contents |
 |---|---|
-| `<isolate>/safety/report.html` | Main offline report and evidence navigation |
-| `<isolate>/safety/evidence.json` | Consolidated machine-readable evidence |
+| `<isolate>/safety/report.html` | Screening report and native evidence navigation |
+| `<isolate>/safety/evidence.json` | Consolidated machine-readable screening evidence |
+| `<isolate>/safety/deepsafe-report/` | Separate DeepSafe report, exports and report provenance when enabled |
 | `<isolate>/safety/native/` | Native tool outputs, including reusable embeddings |
 | `<isolate>/safety/completion/` and `results-cache/` | Core completion receipts, verified payloads and retained failed attempts |
 | `<isolate>/safety/deepsafe/` | Selected-candidate stages, native outputs and state |
@@ -187,7 +209,7 @@ After a failure or shutdown, rerun the **same command** with `--rerun-incomplete
 
 ```bash
 snakemake --snakefile BaSIS.smk \
-  --config isolate=/home/jimi/bactomics/isolate2 --unlock
+  --config "isolate=$HOME/bactomics/isolate2" --unlock
 ```
 
 Then repeat the normal run command. Unlocking removes a workflow lock; the subsequent run handles incomplete work. Snakemake can discard and rebuild an interrupted or failed Conda deployment. An arbitrary failure in a tool whose environment was fully deployed does not imply that the environment will be rebuilt. Do not routinely delete environments, result folders or Snakemake metadata, and do not add `--forceall` to a resume command.

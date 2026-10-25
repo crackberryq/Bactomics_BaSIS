@@ -178,6 +178,8 @@ def _gc_bins(sequence):
 def build_genome_data(run, samples, records, deep_records):
     """Build a compact, sample-isolated payload without altering source objects."""
     from .inputs import read_cds, read_fasta
+    from .report_scope import deep_requested
+    include_deep = deep_requested(run, deep_records) and run.get("report_view") != "screening"
     sample_map = {_sample_id(s): s for s in samples if isinstance(s, dict)}
     combined = [r for r in list(records) + list(deep_records) if isinstance(r, dict)]
     by_sample = defaultdict(list)
@@ -386,6 +388,8 @@ def build_genome_data(run, samples, records, deep_records):
         counts = Counter(region["track"] for region in regions.values())
         tracks = []
         for track, label, modules in TRACKS:
+            if track == "selected" and not include_deep:
+                continue
             relevant = [r for r in current if _module(r) in modules]
             if track == "crispr":
                 # These are alternative array workflows; an explicitly

@@ -58,7 +58,7 @@ def workflow_search_terms(candidate):
 
 
 def candidate_workflow_details(candidate, parent_status="not_assessed"):
-    from .report_dashboard import badge, esc, human, kv, table
+    from .report_dashboard import badge, esc, execution_badge, human, kv, table
 
     value = recorded_workflow(candidate)
     body = '<div class="workflow-coverage"><h4>Automated workflow coverage</h4>'
@@ -90,8 +90,8 @@ def candidate_workflow_details(candidate, parent_status="not_assessed"):
             body += '<p class="small"><strong>' + esc(title) + ':</strong> ' + esc(', '.join(map(str, values))) + '</p>'
     stages = [stage for stage in _values(value.get("stages")) if isinstance(stage, dict)]
     if stages:
-        body += table(['Workflow stage', 'Recorded status', 'Recorded reason'], [
-            (esc(human(stage.get("name"))), badge(stage.get("status", "not_recorded")),
+        body += table(['Workflow stage', 'Effective status', 'Recorded reason'], [
+            (esc(human(stage.get("name"))), execution_badge(stage.get("status", "not_recorded"), parent_status, candidate.get("execution")),
              esc(human(stage.get("reason")))) for stage in stages])
     else:
         body += '<p class="empty">Workflow stage coverage: not recorded.</p>'
@@ -120,7 +120,7 @@ def _relative_href(value):
 def render_workflow_overview(selected_pairs, deep_records, exported_files=None):
     """Render all selected routing records and link existing evidence sections."""
     from .report import _execution, _sample_id
-    from .report_dashboard import badge, esc, human, link, stat
+    from .report_dashboard import badge, esc, execution_badge, human, link, stat
 
     selected_pairs = list(selected_pairs)
     parents = {id(candidate): record for record in deep_records
@@ -183,8 +183,8 @@ def render_workflow_overview(selected_pairs, deep_records, exported_files=None):
             panel_cell += '<p class="small">Routing: ' + esc(human(placement["route_status"])) + '</p>'
         if not placement.get("panel_id") and _values(placement.get("matched_panels")):
             panel_cell += '<p class="small muted">Matched: ' + esc(', '.join(map(str, placement["matched_panels"]))) + '</p>'
-        execution = badge(candidate.get("execution", "not_recorded"))
         parent = parents.get(id(candidate))
+        execution = execution_badge(candidate.get("execution", "not_recorded"), _execution(parent or {}))
         if parent is None or _execution(parent) != "completed":
             execution += '<p class="small">Parent execution: ' + esc(human(_execution(parent or {}))) + '</p>'
         if value and value.get("followup"):

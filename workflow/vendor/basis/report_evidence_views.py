@@ -216,8 +216,33 @@ def _tree_cell(candidate):
                  "Recorded tree execution complete; " + str(assessment.get("interpretation", "interpretation requires review")))
 
 
-def render_evidence_matrix(selected_pairs, records):
-    """Return a searchable matrix of recorded evidence for selected candidates."""
+def _parent_evidence_state(candidate, sample_id, candidate_records):
+    """Keep saved follow-up provisional until its own parent completed."""
+    from .report import _execution, _sample_id
+
+    parent = (candidate_records or {}).get(id(candidate))
+    if not isinstance(parent, dict) or not parent:
+        reason = "Parent execution not recorded"
+    elif _sample_id(parent) != sample_id:
+        reason = "Parent sample does not match this candidate"
+    else:
+        status = _execution(parent)
+        if status == "completed":
+            return None, ""
+        reason = "Parent execution: " + status.replace("_", " ")
+    detail = (reason + "; candidate execution: " + str(candidate.get("execution") or "not recorded")
+              + ". Retained follow-up evidence is provisional, not successful completion.")
+    return _chip("Provisional", "hold", detail), reason
+
+
+def render_evidence_matrix(selected_pairs, records, candidate_records=None):
+    """Render saved evidence with the same parent-completion gate as details.
+
+    ``candidate_records`` maps object identity to the originating parent record;
+    repeated candidate identifiers in different samples must not share status.
+    Missing parents leave follow-up provisional. Independent source calls retain
+    the execution status of their own native records.
+    """
     pairs = [(str(sid), c) for sid, c in selected_pairs
              if isinstance(c, dict) and c.get("selected") is not False]
     states = _module_states(records)
@@ -227,8 +252,12 @@ def render_evidence_matrix(selected_pairs, records):
         protein = str(c.get("protein_id") or c.get("candidate_id") or "Unmapped protein")
         queue = str(c.get("selection_queue") or "unrecorded")
         cells = [_source_cell(sid, c, module, states) for module in ("amrfinder", "rgi", "vfdb", "bacmet")]
-        cells += [_layer_cell(c, name) for name in ("domains", "motifs", "prosite_patterns", "prosite_profiles")]
-        cells += [_reference_cell(c), _taxon_cell(c), _tree_cell(c)]
+        parent_cell, parent_note = _parent_evidence_state(c, sid, candidate_records)
+        if parent_cell is not None:
+            cells += [parent_cell] * 7
+        else:
+            cells += [_layer_cell(c, name) for name in ("domains", "motifs", "prosite_patterns", "prosite_profiles")]
+            cells += [_reference_cell(c), _taxon_cell(c), _tree_cell(c)]
         # Weak labels are deliberately absent from search/headlines and source cells.
         source_labels = [str(f.get("gene", "")) for f in _items(c.get("source_evidence"))
                          if isinstance(f, dict) and not _weak(f) and "completed" in
@@ -236,13 +265,14 @@ def render_evidence_matrix(selected_pairs, records):
         search = " ".join([sid, protein, queue] + source_labels).lower()
         rows.append(f'<tr data-eve-row data-eve-queue="{_esc(queue)}" data-eve-search="{_esc(search)}">'
                     f'<th scope="row">{_link(sid, protein)}<small>{_esc(sid)} · {_esc(queue.replace("_", " "))}</small>'
+                    + (f'<small class="eve-parent-status">{_esc(parent_note)}</small>' if parent_note else '') +
                     f'{_locus(sid, protein)}</th>' + "".join(f"<td>{cell}</td>" for cell in cells) + '</tr>')
     headers = ("Protein / queue", "AMRFinder", "RGI", "VFDB", "BacMet · stress", "Pfam domains", "Custom motifs",
                "PROSITE patterns", "PROSITE profiles", "Comparators", "Taxon scope", "Phylogeny")
     options = ''.join(f'<option value="{_esc(q)}">{_esc(q.replace("_", " "))}</option>' for q in queues)
     legend = ''.join(_chip(label, state) for label, state in [
         ("Recorded match", "hit"), ("No match", "none"), ("No applicable rule", "na"),
-        ("Not assessed", "unknown"), ("Review hold", "hold"), ("Failed", "failed")])
+        ("Not assessed", "unknown"), ("Provisional", "hold"), ("Review hold", "hold"), ("Failed", "failed")])
     return ('<div class="eve-view eve-matrix-view">'
             '<p class="section-intro">Compare the evidence behind each selected protein. Cells describe recorded results '
             'and analysis coverage, not hazard, confidence scores, or independent votes.</p>'
@@ -259,6 +289,7 @@ def render_evidence_matrix(selected_pairs, records):
             '<p class="eve-empty" data-eve-empty hidden>No proteins match these filters.</p>'
             '<p class="eve-footnote">Hover a cell for its recorded status details. “No match” applies only to the completed '
             'analysis and its configured thresholds. Missing taxonomy review does not establish model applicability. '
+            'Follow-up evidence remains provisional when its parent execution did not complete or is not recorded. '
             'BacMet cells describe biocide/metal-associated homology; they do not establish expressed tolerance or antibiotic resistance. '
             'Open a protein to inspect the underlying evidence.</p></div>')
 
@@ -281,10 +312,10 @@ def _attention_plot(scores, scale):
     return ''.join(parts)
 
 
-def render_attention_explorer(records, selected_pairs):
+def render_attention_explorer(records, selected_pairs, *, show_deep=True):
     """Return recorded PF2 nominations, including those not selected by DeepSafe."""
     selected = {(str(sid), str(c.get("protein_id"))): c for sid, c in selected_pairs
-                if isinstance(c, dict) and c.get("selected") is not False}
+                if show_deep and isinstance(c, dict) and c.get("selected") is not False}
     groups = []
     for record in records:
         if (record.get("module") or record.get("tool")) != "pathogenfinder2":
@@ -314,13 +345,16 @@ def render_attention_explorer(records, selected_pairs):
             scores = _items(a.get("model_attention_sums"))
             details = ', '.join(f'M{i+1}: {_fmt(value)}' for i, value in enumerate(scores)) or "Member scores not recorded"
             plot = _attention_plot(scores, scale) if scores else '<span class="eve-muted">Not recorded</span>'
-            state = 'Not selected for DeepSafe'
-            if candidate is not None:
-                state = 'DeepSafe: ' + str(candidate.get("execution") or "not assessed")
+            state = ''
+            if show_deep:
+                state = 'Not selected for DeepSafe'
+                if candidate is not None:
+                    state = 'DeepSafe: ' + str(candidate.get("execution") or "not assessed")
+            state_html = f'<small>{_esc(state)}</small>' if state else ''
             evidence_id = str(f.get("finding_id") or f.get("id") or "ID not recorded")
             rows.append(f'<tr data-eve-attention-row data-eve-attention-search="{_esc((sid + " " + protein).lower())}">'
                         f'<td>{rank}</td><th scope="row">{_link(sid, protein, candidate is not None)}'
-                        f'<small>{_esc(state)}</small>{_locus(sid, protein)}</th>'
+                        f'{state_html}{_locus(sid, protein)}</th>'
                         f'<td class="eve-numeric">{maximum}</td><td class="eve-numeric">{mean}</td>'
                         f'<td>{plot}<details class="eve-score-details"><summary>Member values</summary>'
                         f'<p>{_esc(details)}</p><p class="eve-evidence-id">Evidence: {_esc(evidence_id)}</p></details></td></tr>')

@@ -236,6 +236,8 @@ def invoke(document, action, native, threads, runner, candidate=None, children=(
 
 
 def evidence_record(document):
+    from basis.deep_reporting import completion_summary
+
     context, state = document["context"], document["state"]
     payload = copy.deepcopy(state["payload"])
     upstream = [record["module"] for record in context["records"]
@@ -249,7 +251,9 @@ def evidence_record(document):
                    finished_at=datetime.now(timezone.utc).isoformat())
     if upstream:
         payload["complete"] = False
-    payload["completion_summary"]["upstream_incomplete"] = upstream
+    # Finalization creates child-only state before the enclosing module has a
+    # recorded status. Qualify the summary only after adding that status here.
+    payload["completion_summary"] = completion_summary(payload)
     return payload
 
 

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .report_assets import CSS, JS
+from .deep_reporting import effective_execution
 from .report_links import candidate_anchor, candidate_section_anchor
 from .report_navigation import (SECTIONS, candidate_entry, render_navigator,
                                 render_comparators, render_candidate_files)
@@ -68,8 +69,17 @@ def num(x):
 
 def badge(value, tone=None):
     tone = tone or {'completed': 'ok', 'failed': 'bad', 'unknown': 'warn', 'blocked': 'warn', 'not_started': 'warn',
-                    'not_assessed': 'neutral', 'not_detected': 'neutral'}.get(str(value), 'info')
+                    'provisional': 'warn', 'not_assessed': 'neutral', 'not_detected': 'neutral'}.get(str(value), 'info')
     return '<span class="badge ' + tone + '">' + esc(human(value)) + '</span>'
+
+
+def execution_badge(recorded, *parents):
+    """Show completion only when its enclosing executions completed."""
+    effective = effective_execution(recorded, *parents)
+    if effective == 'provisional':
+        detail = 'Recorded execution: ' + human(recorded) + '; enclosing execution: ' + ', '.join(human(parent) for parent in parents)
+        return '<span title="' + esc(detail) + '">' + badge(effective) + '</span>'
+    return badge(effective)
 
 
 def table(heads, rows, ident=''):
@@ -193,7 +203,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     search, title_note = entry['search_text'] + ' ' + workflow_search_terms(c), entry['label']
     def section_open(name):
         return '<div class="candidate-section" id="' + candidate_section_anchor(sid, ident, name) + '" tabindex="-1"><h4>' + esc(SECTIONS[name]) + '</h4>'
-    result = '<details class="candidate" id="' + candidate_anchor(sid, ident) + '" data-protein="' + esc(ident) + '" data-search="' + esc(search) + '" data-sample="' + esc(sid) + '" data-queue="' + esc(queue) + '" data-interpretation="' + esc(interpretation) + '"><summary><div class="candidate-title"><strong>' + esc(ident) + '</strong><span>' + esc(title_note) + '</span></div><div class="candidate-meta">' + badge(QUEUES.get(queue, human(queue))) + badge(c.get('execution', 'unknown')) + '</div></summary><div class="candidate-body">'
+    result = '<details class="candidate" id="' + candidate_anchor(sid, ident) + '" data-protein="' + esc(ident) + '" data-search="' + esc(search) + '" data-sample="' + esc(sid) + '" data-queue="' + esc(queue) + '" data-interpretation="' + esc(interpretation) + '"><summary><div class="candidate-title"><strong>' + esc(ident) + '</strong><span>' + esc(title_note) + '</span></div><div class="candidate-meta">' + badge(QUEUES.get(queue, human(queue))) + execution_badge(c.get('execution', 'unknown'), parent_execution) + '</div></summary><div class="candidate-body">'
     result += '<nav class="candidate-section-nav" aria-label="Candidate evidence sections">' + ''.join(link('#' + entry['sections'][k], title, 'button') for k, title in SECTIONS.items()) + '</nav>' + section_open('overview')
     if c.get('protein_id') and c.get('contig') and c.get('start'):
         result += '<button class="button" data-locus-sample="' + esc(sid) + '" data-locus-protein="' + esc(c['protein_id']) + '">Show genomic neighborhood ↗</button>'
@@ -201,7 +211,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     refs = c.get('references') or []
     unique = {v['sequence_sha256'] for v in refs if isinstance(v, dict) and v.get('sequence_sha256')}
     result += '<div class="mini-stats">' + stat('Protein length', num((c.get('query') or {}).get('length')), 'amino acids') + stat('Comparator records', str(len(refs)), str(len(unique)) + ' unique sequences with hashes') + stat('Recorded features', str(len(features)), 'accepted domain / motif intervals') + '</div>'
-    result += '<h4>Analysis coverage</h4>' + '<div class="layer-grid">' + ''.join('<div><span>' + esc(title) + '</span>' + badge((analyses.get(k) or {}).get('status', 'not_assessed')) + '</div>' for k, title in LAYERS.items()) + '</div>'
+    result += '<h4>Analysis coverage</h4>' + '<div class="layer-grid">' + ''.join('<div><span>' + esc(title) + '</span>' + execution_badge((analyses.get(k) or {}).get('status', 'not_assessed'), parent_execution, c.get('execution')) + '</div>' for k, title in LAYERS.items()) + '</div>'
     result += candidate_workflow_details(c, parent_execution)
     if not completed_evidence:
         result += '<p class="callout">Candidate or parent execution is not completed. Retained evidence is provisional; accepted feature maps and tree views are withheld.</p>'
@@ -222,7 +232,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     tree_summary = summary.get('tree_summary') or {}
     runs = tree_summary.get('runs') or tree.get('runs') or []
     result += '</div>' + section_open('trees')
-    result += '<h4>Phylogenetic follow-up</h4><p>' + badge(tree.get('status', 'not_assessed')) + ' ' + esc(human(tree.get('reason', 'not recorded'))) + '</p>'
+    result += '<h4>Phylogenetic follow-up</h4><p>' + execution_badge(tree.get('status', 'not_assessed'), parent_execution, c.get('execution')) + ' ' + esc(human(tree.get('reason', 'not recorded'))) + '</p>'
     if runs and completed_evidence:
         result += table(['Run', 'Model', 'SH-aLRT', 'UFBoot', 'Reference annotations on query side'], [(esc(v.get('name')), esc(v.get('selected_model', v.get('model'))), esc(v.get('sh_alrt')), esc(v.get('ufboot')), '<br>'.join(esc(str(x.get('accession')) + ' · ' + str(x.get('review_status'))) for x in v.get('query_side_references', [])) or 'See candidate evidence') for v in runs])
         result += '<p class="small muted">Support describes a tree split, not a functional classification. Reference annotations retain their recorded review status.</p>'
@@ -255,7 +265,7 @@ def _candidate(c, sid, outdir, deep_record=None, placement_view=''):
     return result
 
 
-def _extend(record, outdir, raw):
+def _extend(record, outdir, raw, *, deep_enabled=True):
     r = _helpers()
     metrics = record.get('metrics') or {}
     status = r._execution(record)
@@ -268,7 +278,8 @@ def _extend(record, outdir, raw):
         body += '<div class="model-result"><div><span class="stat-label">Native model prediction</span><h4 class="model-label">' + esc(metrics.get('native_phenotype', 'Label not recorded')) + '</h4><p class="muted">Model output; no organism-level safety verdict.</p></div><div class="model-score"><strong>' + f'{prediction:.5f}' + '</strong><span>ensemble mean · SD ' + (f'{sd:.5f}' if _number(sd) else 'not recorded') + '</span></div></div>'
     else:
         body += '<p class="callout">No completed model prediction is available. Any retained scores remain provisional.</p>'
-    body += '<div class="mini-stats">' + stat('Proteins assessed', num(metrics.get('input_protein_count')) if valid else '—', 'full supplied proteome') + stat('Attention coverage', num(metrics.get('attention_protein_count')) if valid else '—', 'proteins with recorded scores') + stat('DeepSafe nominations', num(metrics.get('attention_selected_count')) if valid else '—', 'attention-ranked candidates') + '</div>'
+    nominations = stat('DeepSafe nominations', num(metrics.get('attention_selected_count')) if valid else '—', 'attention-ranked candidates') if deep_enabled else ''
+    body += '<div class="mini-stats">' + stat('Proteins assessed', num(metrics.get('input_protein_count')) if valid else '—', 'full supplied proteome') + stat('Attention coverage', num(metrics.get('attention_protein_count')) if valid else '—', 'proteins with recorded scores') + nominations + '</div>'
     scores = metrics.get('ensemble_member_scores') or []
     if valid and scores:
         body += '<h4>Individual model scores</h4><div class="model-bars">'
@@ -286,6 +297,12 @@ def _extend(record, outdir, raw):
 
 
 def render_dashboard(run, samples, records, deep_records, findings, recommendations, outdir):
+    from .report_scope import deep_requested
+    deep_enabled = deep_requested(run, deep_records)
+    view = run.get('report_view', 'combined')
+    if view not in {'screening', 'deep', 'combined'}:
+        raise ValueError('Unknown report_view: ' + str(view))
+    show_screening = view != 'deep'
     from .report_genome import build_genome_data
     from .report_explorer import render_genome_explorer
     from .report_explorer_assets import CSS as GENOME_CSS, JS as GENOME_JS
@@ -312,25 +329,41 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     # deferred candidates are exported, not repeated thousands of times in HTML.
     selected = [(sid, c) for sid, c in candidates if c.get('selected', 'selected' not in c)]
     deferred = [(sid, c) for sid, c in candidates if c.get('selected') is False]
-    deferred_rows = [dict(sample_id=sid, candidate_id=c.get('candidate_id'), protein_id=c.get('protein_id'), selection_queue=c.get('selection_queue'), execution=c.get('execution'), reason=c.get('reason')) for sid, c in deferred]
-    r._write_tsv(outdir / 'deferred-candidates.tsv', ['sample_id','candidate_id','protein_id','selection_queue','execution','reason'], deferred_rows)
+    deferred_rows = [dict(sample_id=sid, candidate_id=c.get('candidate_id'), protein_id=c.get('protein_id'),
+                          selection_queue=c.get('selection_queue'), execution=c.get('execution'), reason=c.get('reason'),
+                          selected=False, review_status='Requires attention',
+                          followup_status=('Follow-up not performed' if c.get('execution') in {'deferred', 'not_started'}
+                                           else 'Recorded follow-up status: ' + human(c.get('execution'))))
+                     for sid, c in deferred]
+    if deep_enabled:
+        r._write_tsv(outdir / 'deferred-candidates.tsv', ['sample_id','candidate_id','protein_id','selection_queue','execution','reason',
+                                                       'selected','review_status','followup_status'], deferred_rows)
     requested = [v for v in combined if record_requested(v, run)]
     requested_count = len(requested) + missing_requested_count(run, combined)
     omitted = [v for v in combined if v not in requested]
     completed = sum(r._execution(v) == 'completed' for v in requested)
     failed = sum(r._execution(v) in {'failed','unknown'} for v in requested)
-    done = sum(c.get('execution') == 'completed' for _, c in selected)
+    done = sum(c.get('execution') == 'completed'
+               and r._execution(candidate_records.get(id(c), {})) == 'completed'
+               for _, c in selected)
     selection_unavailable = not selected and any(r._execution(rec) in {'failed', 'blocked', 'not_started'} for rec in deep_records)
     sids = sorted({r._sample_id(v) for v in combined} | {str(s.get('sample_id','unknown')) for s in samples})
     q = Counter(c.get('selection_queue','exploratory') for _, c in selected)
     branding = '<svg width="34" height="34" viewBox="0 0 36 36" aria-hidden="true"><rect width="36" height="36" rx="10" fill="#1ba9a0"/><path d="M10 10h9a5 5 0 0 1 0 10h-9m0-5h11a5 5 0 0 1 0 10H10V10" fill="none" stroke="white" stroke-width="2.4"/></svg>'
-    nav = ''.join('<a class="nav-link" href="#' + ident + '"><span>' + number + '</span>' + title + '</a>' for ident,number,title in [('overview','01','Overview'),('inputs','02','Inputs & scope'),('genome','03','Genome explorer'),('evidence-matrix','04','Evidence matrix'),('screens','05','Core screens'),('extend','06','Extend · ML'),('deep','07','DeepSafe'),('recommendations','08','Review priorities'),('provenance','09','Provenance')])
-    start = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>BaSIS · Genomic evidence report</title><style>' + CSS + '</style></head><body><a class="skip-link" href="#overview">Skip to report</a><div class="app"><aside class="sidebar"><a class="brand" href="#overview">' + branding + '<span>BaSIS<small>BACTOMICS ENVIRONMENT</small></span></a><div class="sidebar-caption">GENOMIC EVIDENCE REPORT</div><nav aria-label="Report sections">' + nav + '</nav><div class="sidebar-bottom"><span class="status-dot"></span> Offline report<small>Version ' + esc(run.get('version')) + '<br>Research screening evidence</small></div></aside><main class="main"><div class="topbar"><span>Bactomics <span class="muted">/</span> BaSIS <span class="muted">/ Genomic assessment</span></span><div class="topbar-actions"><a class="button" href="#deep-navigator">Evidence navigator</a><a class="button" href="#citation">Cite BaSIS</a><button class="button" data-action="print">Print / Save PDF</button></div></div>'
+    nav = ''.join('<a class="nav-link" href="#' + ident + '"><span>' + number + '</span>' + title + '</a>' for ident,number,title in [('overview','01','Overview'),('inputs','02','Inputs & scope'),('genome','03','Genome explorer'),('evidence-matrix','04','Evidence matrix'),('screens','05','Core screens'),('extend','06','Extend · ML'),('deep','07','DeepSafe'),('recommendations','08','Review priorities'),('provenance','09','Provenance')] if (deep_enabled or ident not in {'deep', 'evidence-matrix'}) and (show_screening or ident not in {'screens', 'extend'}))
+    navigator = link('#deep-navigator', 'Evidence navigator') if deep_enabled else link('#screens', 'Screening calls')
+    report_title = {'screening': 'Screening report', 'deep': 'DeepSafe follow-up report'}.get(view, 'Genomic evidence report')
+    hero_eyebrow = {'screening': 'CORE SCREENING · MODEL INSIGHT', 'deep': 'DEEPSAFE · FOCUSED FOLLOW-UP'}.get(view, 'CORE SCREENING · DEEP EVIDENCE · MODEL INSIGHT')
+    hero_title = esc(report_title) if view != 'combined' else 'Genomic evidence,<br>ready for review.'
+    hero_intro = {'screening': 'Inspect native screening calls and model outputs,<br class="desktop-only"> with their recorded scope and limitations.', 'deep': 'Inspect saved follow-up analyses and source context,<br class="desktop-only"> and review what remains unresolved.'}.get(view, 'Trace the screening calls, inspect focused analyses,<br class="desktop-only"> and see exactly what remains unresolved.')
+    start = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>BaSIS · ' + esc(report_title) + '</title><style>' + CSS + '</style></head><body><a class="skip-link" href="#overview">Skip to report</a><div class="app"><aside class="sidebar"><a class="brand" href="#overview">' + branding + '<span>BaSIS<small>BACTOMICS ENVIRONMENT</small></span></a><div class="sidebar-caption">' + esc(report_title.upper()) + '</div><nav aria-label="Report sections">' + nav + '</nav><div class="sidebar-bottom"><span class="status-dot"></span> Offline report<small>Version ' + esc(run.get('version')) + '<br>Research screening evidence</small></div></aside><main class="main"><div class="topbar"><span>Bactomics <span class="muted">/</span> BaSIS <span class="muted">/ Genomic assessment</span></span><div class="topbar-actions">' + navigator + '<a class="button" href="#citation">Cite BaSIS</a><button class="button" data-action="print">Print / Save PDF</button></div></div>'
     all_done = requested_count > 0 and completed == requested_count
     headline = ('Requested modules completed' if not selected else 'Selected analyses completed') if all_done and done == len(selected) and not run.get('engine_error') else 'Execution review required'
-    hero = '<header class="hero"><div><p class="eyebrow">CORE SCREENING · DEEP EVIDENCE · MODEL INSIGHT</p><h1>Genomic evidence,<br>ready for review.</h1><p>Trace the screening calls, inspect focused analyses,<br class="desktop-only"> and see exactly what remains unresolved.</p><div class="hero-meta">' + badge(headline, 'ok' if all_done and done == len(selected) else 'warn') + '<span>' + esc(_date(run.get('finished_at'))) + '</span></div></div><div class="hero-art" aria-hidden="true"><svg viewBox="0 0 250 210"><g fill="none" stroke="#60d4c4" stroke-width="1.5" opacity=".65"><circle cx="125" cy="105" r="82"/><circle cx="125" cy="105" r="65" stroke-dasharray="5 9"/><ellipse cx="125" cy="105" rx="37" ry="82" transform="rotate(35 125 105)"/><path d="M49 75L172 40 192 130 91 174 49 75 192 130M91 174L172 40"/></g><g fill="#abf0df"><circle cx="49" cy="75" r="6"/><circle cx="172" cy="40" r="8"/><circle cx="192" cy="130" r="5"/><circle cx="91" cy="174" r="7"/></g><text x="125" y="112" text-anchor="middle" fill="white" font-size="29" font-family="sans-serif">BaSIS</text></svg></div></header>'
-    overview = hero + '<div class="stats">' + stat('Requested modules', f'{completed} / {requested_count}', 'completed execution · explicit exclusions omitted; holds retained') + stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'Unavailable' if selection_unavailable else 'None selected', 'completed DeepSafe analyses' if selected else 'candidate selection unavailable — inspect execution issues' if selection_unavailable else 'no selected-candidate analyses requested') + stat('Deferred candidates', num(len(deferred)), 'retained for later exploratory review') + stat('Execution failures', num(failed), 'failed or unknown requested module records') + '</div>'
-    overview += '<div class="callout"><strong>Execution and interpretation are separate.</strong><p>Recorded overall scope: ' + esc(human(run.get('completeness'))) + '. ' + num(len(deferred)) + ' candidates remain deferred. Completed analyses do not establish protein function or organism safety.</p></div>'
+    hero = '<header class="hero"><div><p class="eyebrow">' + esc(hero_eyebrow) + '</p><h1>' + hero_title + '</h1><p>' + hero_intro + '</p><div class="hero-meta">' + badge(headline, 'ok' if all_done and done == len(selected) else 'warn') + '<span>' + esc(_date(run.get('finished_at'))) + '</span></div></div><div class="hero-art" aria-hidden="true"><svg viewBox="0 0 250 210"><g fill="none" stroke="#60d4c4" stroke-width="1.5" opacity=".65"><circle cx="125" cy="105" r="82"/><circle cx="125" cy="105" r="65" stroke-dasharray="5 9"/><ellipse cx="125" cy="105" rx="37" ry="82" transform="rotate(35 125 105)"/><path d="M49 75L172 40 192 130 91 174 49 75 192 130M91 174L172 40"/></g><g fill="#abf0df"><circle cx="49" cy="75" r="6"/><circle cx="172" cy="40" r="8"/><circle cx="192" cy="130" r="5"/><circle cx="91" cy="174" r="7"/></g><text x="125" y="112" text-anchor="middle" fill="white" font-size="29" font-family="sans-serif">BaSIS</text></svg></div></header>'
+    candidate_stats = (stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'Unavailable' if selection_unavailable else 'None selected', 'completed DeepSafe analyses' if selected else 'candidate selection unavailable — inspect execution issues' if selection_unavailable else 'no selected-candidate analyses requested') + stat('Requires attention', num(len(deferred)), 'not selected for this follow-up run · reasons retained')) if deep_enabled else ''
+    overview = hero + '<div class="stats">' + stat('Requested modules', f'{completed} / {requested_count}', 'completed execution · explicit exclusions omitted; holds retained') + candidate_stats + stat('Execution failures', num(failed), 'failed or unknown requested module records') + '</div>'
+    deferred_note = num(len(deferred)) + ' candidates remain deferred. ' if deep_enabled else ''
+    overview += '<div class="callout"><strong>Execution and interpretation are separate.</strong><p>Recorded overall scope: ' + esc(human(run.get('completeness'))) + '. ' + deferred_note + 'Completed analyses do not establish protein function or organism safety.</p></div>'
     failed_resources = [item for item in run.get('resource_preparation', [])
                         if item.get('status') in {'failed', 'blocked', 'not_started'}]
     failed_records = [rec for rec in requested if r._execution(rec) in {'failed', 'blocked', 'not_started', 'unknown'}]
@@ -392,14 +425,18 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     overview += '<div class="grid-2"><article class="panel"><p class="eyebrow">SAMPLE CONTEXT</p><h3>' + esc(', '.join(sids) or 'No samples supplied') + '</h3>'
     for sample in samples:
         overview += '<p><strong>' + esc(sample.get('sample_id')) + '</strong> · ' + r._sample_taxon_label(sample) + '</p>'
-    overview += '<p class="small muted">Declared taxonomy and HybAs read-based targets are recorded separately.</p><a href="#provenance">Inspect sample provenance →</a></article><article class="panel"><p class="eyebrow">FOCUSED FOLLOW-UP</p><h3>How candidates reached DeepSafe</h3><div class="queue-summary">'
-    for name in ['native_screen','ml_attention','exploratory']:
-        overview += '<div><span>' + esc(QUEUES[name]) + '</span><strong>' + str(q[name]) + '</strong></div>'
-    overview += '</div><p class="small muted">Queues are deduplicated candidate selections, not counts of hazards.</p></article></div>'
+    overview += '<p class="small muted">Declared taxonomy and HybAs read-based targets are recorded separately.</p><a href="#provenance">Inspect sample provenance →</a></article>'
+    if deep_enabled:
+        overview += '<article class="panel"><p class="eyebrow">FOCUSED FOLLOW-UP</p><h3>How candidates reached DeepSafe</h3><div class="queue-summary">'
+        for name in ['native_screen','ml_attention','exploratory']:
+            overview += '<div><span>' + esc(QUEUES[name]) + '</span><strong>' + str(q[name]) + '</strong></div>'
+        overview += '</div><p class="small muted">Queues are deduplicated candidate selections, not counts of hazards.</p></article>'
+    overview += '</div>'
     content = section('overview', '01', 'Assessment overview', 'A concise account of this run and its evidence coverage.', overview)
     content += section('inputs', '02', 'Inputs and module scope', 'Input provenance, recorded exclusions and holds for each sample.', render_sample_scope(run, samples, combined, NAMES))
     content += section('genome', '03', 'Genome explorer', 'Locate findings, inspect neighboring genes and follow each candidate into its evidence.', render_genome_explorer(genome_data))
-    content += section('evidence-matrix', '04', 'Candidate evidence matrix', 'Compare analysis coverage and review holds across selected proteins.', render_evidence_matrix(selected, records))
+    if deep_enabled:
+        content += section('evidence-matrix', '04', 'Candidate evidence matrix', 'Compare analysis coverage and review holds across selected proteins.', render_evidence_matrix(selected, records, candidate_records))
     core = [v for v in records if r._module(v) not in {'pathogenfinder2','pf2'} and v in requested]
     screenrows = []
     for rec in core:
@@ -437,11 +474,12 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     if len(display) > 250:
         screens += '<p class="callout">Showing the first 250 review records. Download all findings to inspect the complete set.</p>'
     screens += '</article>'
-    content += section('screens','05','Core screening evidence','Complementary screens, with source calls kept distinct from validated function.',screens)
-    models = [v for v in records if r._module(v) in {'pathogenfinder2','pf2'}]
-    extend = ''.join(_extend(v,outdir,raw_paths[id(v)]) for v in models) or '<p class="panel empty">Extend was not requested or no model record was supplied.</p>'
-    extend += render_attention_explorer(records, selected)
-    content += section('extend','06','Extend · model insight','The native prediction, ensemble variation and attention coverage in one place.',extend)
+    if show_screening:
+        content += section('screens','05','Core screening evidence','Complementary screens, with source calls kept distinct from validated function.',screens)
+        models = [v for v in records if r._module(v) in {'pathogenfinder2','pf2'}]
+        extend = ''.join(_extend(v,outdir,raw_paths[id(v)], deep_enabled=deep_enabled) for v in models) or '<p class="panel empty">Extend was not requested or no model record was supplied.</p>'
+        extend += render_attention_explorer(records, selected, show_deep=deep_enabled)
+        content += section('extend','06','Extend · model insight','The native prediction, ensemble variation and attention coverage in one place.',extend)
     selected_execution = str(done) + ' / ' + str(len(selected)) + ' completed' if selected else 'no candidates selected'
     if not selected and any(r._execution(rec) in {'failed', 'blocked', 'not_started'} for rec in deep_records):
         states = ', '.join(sorted({human(r._execution(rec)) for rec in deep_records
@@ -449,7 +487,12 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
         selected_execution = 'unavailable — DeepSafe ' + states
     elif not selected and not (run.get('options') or {}).get('deep'):
         selected_execution = 'not requested — no candidates selected'
-    deep = '<div class="panel"><div class="panel-head"><div><h3>Deep family assessment</h3><p class="muted">' + str(len(selected)) + ' selected candidates · ' + str(q['native_screen']) + ' from core screens · ' + str(q['ml_attention']) + ' from ML attention</p></div>' + link('deferred-candidates.tsv','Deferred queue · TSV') + '</div><p>Selected execution: <strong>' + selected_execution + '</strong>. Biological interpretations and review holds remain attached to each candidate.</p>'
+    deep = '<div class="panel"><div class="panel-head"><div><h3>Deep family assessment</h3><p class="muted">' + str(len(selected)) + ' selected candidates · ' + str(q['native_screen']) + ' from core screens · ' + str(q['ml_attention']) + ' from ML attention</p></div>' + link('deferred-candidates.tsv','Requires attention · TSV') + '</div><p>Selected execution: <strong>' + selected_execution + '</strong>. Biological interpretations and review holds remain attached to each candidate.</p>'
+    if deferred:
+        reasons = Counter(str(c.get('reason') or 'reason_not_recorded') for _, c in deferred)
+        deep += '<div class="callout"><strong>Requires attention: ' + num(len(deferred)) + ' records</strong><p>These records were not selected for this follow-up run. The export marks unstarted or deferred work as “Follow-up not performed” and retains any other recorded execution status. This is a workflow review flag, not a biological conclusion.</p><details><summary>Recorded reasons</summary><ul>'
+        deep += ''.join('<li>' + esc(human(reason)) + ': ' + num(count) + '</li>' for reason, count in sorted(reasons.items()))
+        deep += '</ul></details></div>'
     deep += '<div class="filters"><label>Search candidates<input id="candidate-search" type="search" placeholder="Protein, annotation, domain…"></label><label>Origin<select id="queue-filter"><option value="">All queues</option>' + ''.join('<option value="' + esc(k) + '">' + esc(QUEUES.get(k,human(k))) + '</option>' for k in sorted(q)) + '</select></label><label>Sample<select id="sample-filter"><option value="">All samples</option>' + ''.join('<option value="' + esc(k) + '">' + esc(k) + '</option>' for k in sids) + '</select></label><label>Interpretation<select id="interpretation-filter"><option value="">All interpretations</option>' + ''.join('<option value="' + esc(k) + '">' + esc(human(k)) + '</option>' for k in sorted({str((c.get('assessment') or {}).get('interpretation', c.get('interpretation','unresolved'))) for _,c in selected})) + '</select></label></div><div class="panel-head"><p id="candidate-count" class="small muted" aria-live="polite">' + str(len(selected)) + ' candidates</p><div><button class="button" data-action="expand-candidates">Expand visible</button> <button class="button" data-action="collapse-candidates">Collapse all</button></div></div></div><p id="candidate-empty" class="empty" hidden>No candidates match these filters.</p>'
     placement_views, placement_links = {}, {}
     for sid, c in selected:
@@ -467,7 +510,8 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     deep = render_aware(deep_records) + render_workflow_overview(selected, deep_records, run.get('deep_workflow_artifacts')) + render_placement_overview(selected, deep_records, tree_links=placement_links) + render_motif_overview(selected, deep_records) + deep
     if not selected:
         deep += '<p class="panel empty">No selected candidate evidence supplied.</p>'
-    content += section('deep','07','DeepSafe · focused review','Inspect domains, motifs, comparator gaps, bounded trees and reference-panel placement.',deep)
+    if deep_enabled:
+        content += section('deep','07','DeepSafe · focused review','Inspect domains, motifs, comparator gaps, bounded trees and reference-panel placement.',deep)
     recs = ''
     for i, rec in enumerate(recommendations):
         ids = rec.get('evidence_ids') or []
@@ -478,7 +522,8 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
         if rec.get('missing_comparison_groups'):
             recs += '<p class="small">Comparator gaps: ' + esc(', '.join(rec['missing_comparison_groups'])) + '</p>'
         recs += '<div class="panel-head"><span class="small muted">' + num(len(ids)) + ' linked source IDs · ' + esc(human(rec.get('provided_phenotype_status'))) + '</span>' + link(recraw,'Trace evidence','text-link') + '</div></article>'
-    recs = '<div class="callout"><strong>Review questions, not completed experiments.</strong><p>Recommendations reflect source findings and recorded DeepSafe holds. Laboratory assessments require an applicable question and organism-specific interpretation.</p></div><div class="grid-2">' + recs + '</div>'
+    priority_scope = 'source findings and recorded DeepSafe holds' if deep_enabled else 'source findings and recorded screening limitations'
+    recs = '<div class="callout"><strong>Review questions, not completed experiments.</strong><p>Recommendations reflect ' + priority_scope + '. Laboratory assessments require an applicable question and organism-specific interpretation.</p></div><div class="grid-2">' + recs + '</div>'
     if not recommendations:
         recs += '<p class="panel empty">No finding-specific follow-up was generated. This does not establish that no further assessment is needed.</p>'
     content += section('recommendations','08','Priorities for assessment','Resolve model applicability and comparator gaps before interpreting affected findings.',recs)

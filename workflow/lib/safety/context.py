@@ -79,7 +79,7 @@ class SafetyContext:
             deep = {"enabled": deep}
         if not isinstance(deep, dict):
             raise ValueError("deep must be a mapping")
-        self.deep_enabled = _bool(deep.get("enabled", True), "deep.enabled")
+        self.deep_enabled = _bool(deep.get("enabled", False), "deep.enabled")
         cfg = default_config()
         for row in cfg["modules"].values():
             row.update(enabled=True, threads=self.threads)
@@ -368,7 +368,17 @@ class SafetyContext:
         return [str(Path(isolate) / "safety/evidence" / (name + ".json"))
                 for name in ALL_MODULES if self.decisions[isolate][name]["action"] != "disabled"]
 
-    def report_targets(self):
+    def screening_report_targets(self):
         if not self.samples:
             raise ValueError("No samples selected. Use the setup target to install only, or supply isolates/samples.")
         return [str(Path(isolate) / "safety/report.html") for isolate in self.samples]
+
+    def followup_report_targets(self):
+        if not self.samples:
+            raise ValueError("No samples selected. Use the setup target to install only, or supply isolates/samples.")
+        if not self.deep_enabled:
+            return []
+        return [str(Path(isolate) / "safety/deepsafe-report/report.html") for isolate in self.samples]
+
+    def report_targets(self):
+        return self.screening_report_targets() + self.followup_report_targets()

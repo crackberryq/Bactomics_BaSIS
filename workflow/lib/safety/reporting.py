@@ -36,11 +36,16 @@ RELOCATIONS = {
 STATUSES = {"completed", "failed", "blocked", "not_started", "not_assessed", "not_requested"}
 
 
-def _read(path: Path) -> dict:
-    value = json.loads(path.read_text(encoding="utf-8"))
+def _read_snapshot(path: Path) -> tuple[dict, str]:
+    contents = path.read_bytes()
+    value = json.loads(contents.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"Expected a JSON object: {path}")
-    return value
+    return value, hashlib.sha256(contents).hexdigest()
+
+
+def _read(path: Path) -> dict:
+    return _read_snapshot(path)[0]
 
 
 def _sha(path: Path) -> str:
@@ -75,7 +80,7 @@ def _decision(module: str, record: dict, config: dict, sid: str) -> dict:
         return copy.deepcopy(value)
     requested = module in config.get("requested_modules", []) or _enabled((config.get("modules") or {}).get(module))
     if module == "deepsafe":
-        requested = _enabled(config.get("deep", {}))
+        requested = _enabled(config["deep"]) if "deep" in config else True
     # Evidence supplied by an explicit report invocation is requested by default
     # unless the configured module is explicitly disabled.
     if module not in (config.get("modules") or {}) and module != "deepsafe":
@@ -86,24 +91,49 @@ def _decision(module: str, record: dict, config: dict, sid: str) -> dict:
             "reason": record.get("reason") or ("requested" if requested else "module_disabled")}
 
 
-def aggregate(sample: dict, config: dict, paths: list[Path]) -> tuple[dict, list[dict], list[dict]]:
+def _view_config(config: dict, view: str) -> dict:
+    """Derive presentation scope without changing the saved execution config."""
+    if view not in {"combined", "screening", "deep"}:
+        raise ValueError("Report view must be combined, screening or deep")
+    result = copy.deepcopy(config)
+    if view == "screening":
+        result["deep"] = {"enabled": False}
+        result["requested_modules"] = [name for name in result.get("requested_modules", [])
+                                       if name != "deepsafe"]
+        for decisions in [result.get("module_decisions", {})]:
+            if isinstance(decisions, dict):
+                decisions.pop("deepsafe", None)
+                for value in decisions.values():
+                    if isinstance(value, dict):
+                        value.pop("deepsafe", None)
+    elif view == "deep" and "deep" in config and not _enabled(config["deep"]):
+        raise ValueError("DeepSafe report conflicts with explicitly disabled report scope")
+    return result
+
+
+def aggregate(sample: dict, config: dict, paths: list[Path], *,
+              view: str = "combined") -> tuple[dict, list[dict], list[dict]]:
     """Validate identity and completion records, retaining interpretation limits."""
+    config = _view_config(config, view)
     sid = sample.get("sample_id")
     if not isinstance(sid, str) or not sid:
         raise ValueError("Sample metadata lacks sample_id")
     records, deep_records, seen, sources, decisions = [], [], set(), [], {}
     for path in paths:
-        record = _read(path)
+        record, source_sha256 = _read_snapshot(path)
         module = record.get("module")
         if record.get("sample_id") != sid:
             raise ValueError(f"Evidence sample identity mismatch: {path}")
         if not isinstance(module, str) or not module or module in seen:
             raise ValueError(f"Missing or duplicate evidence module: {module}")
+        if module == "deepsafe" and "deep" in config and not _enabled(config["deep"]):
+            raise ValueError("DeepSafe evidence conflicts with explicitly disabled report scope")
         seen.add(module)
         status = record.get("execution_status")
         if status not in STATUSES:
             raise ValueError(f"Unrecognized execution status for {module}: {status}")
-        if status in {"failed", "blocked", "not_started"}:
+        provisional_parent = view == "deep" and module == "deepsafe"
+        if status in {"failed", "blocked", "not_started"} and not provisional_parent:
             raise ValueError(f"Cannot finalize report: {module} is {status}; repair the failed Snakemake job")
         if not isinstance(record.get("findings", []), list):
             raise ValueError(f"Invalid findings for {module}")
@@ -111,6 +141,8 @@ def aggregate(sample: dict, config: dict, paths: list[Path]) -> tuple[dict, list
         record.setdefault("metrics", {})
         record.setdefault("artifacts", [])
         decision = _decision(module, record, config, sid)
+        if view == "deep" and module == "deepsafe" and not decision.get("requested"):
+            raise ValueError("DeepSafe follow-up report conflicts with unrequested saved scope")
         # A completed process may explicitly leave part of its input unassessed.
         # Planning metadata cannot clear that observed limitation, nor can an
         # evidence record clear an existing planning hold.
@@ -132,8 +164,11 @@ def aggregate(sample: dict, config: dict, paths: list[Path]) -> tuple[dict, list
         record["module_decision"] = decision
         if module == "deepsafe":
             from basis.deep_reporting import completion_summary
-            if not isinstance(record.get("candidates", []), list):
+            if (not isinstance(record.get("candidates", []), list)
+                    or any(not isinstance(c, dict) for c in record.get("candidates", []))):
                 raise ValueError("Invalid DeepSafe candidate list")
+            if any(c.get("sample_id") not in (None, "", sid) for c in record.get("candidates", [])):
+                raise ValueError("DeepSafe candidate sample identity mismatch")
             record["completion_summary"] = completion_summary(record)
             # A completed module with a failed selected candidate is inconsistent.
             if status == "completed" and any(c.get("selected") and c.get("execution") != "completed"
@@ -142,12 +177,12 @@ def aggregate(sample: dict, config: dict, paths: list[Path]) -> tuple[dict, list
             deep_records.append(record)
         else:
             records.append(record)
-        sources.append({"module": module, "path": str(path.resolve()), "sha256": _sha(path)})
+        sources.append({"module": module, "path": str(path.resolve()), "sha256": source_sha256})
 
     configured = config.get("modules") or {}
     requested = set(config.get("requested_modules") or [])
     requested.update(module for module, value in configured.items() if _enabled(value))
-    if _enabled(config.get("deep", {})):
+    if _enabled(config.get("deep", {})) or view == "deep":
         requested.add("deepsafe")
     if missing := requested - seen:
         raise ValueError("Missing requested evidence: " + ", ".join(sorted(missing)))
@@ -173,6 +208,7 @@ def aggregate(sample: dict, config: dict, paths: list[Path]) -> tuple[dict, list
     serialized = json.dumps({"sample": sample, "config": config, "sources": sources}, sort_keys=True).encode()
     run = {
         "schema": "basis-snakemake-run-v1", "run_id": hashlib.sha256(serialized).hexdigest()[:20],
+        "report_view": view,
         "version": config.get("version", "0.4.0a1"), "engine": "snakemake",
         "options": {"deep": bool(deep_records), "extend": "pathogenfinder2" in seen},
         "validation_mode": config.get("validation_mode", "research_screening"),
@@ -188,28 +224,49 @@ def aggregate(sample: dict, config: dict, paths: list[Path]) -> tuple[dict, list
     return run, records, deep_records
 
 
-def _file_index(root: Path) -> None:
+def _deep_file(relative: Path) -> bool:
+    """Identify historical DeepSafe files without opening or changing them."""
+    parts = relative.parts
+    return (parts[0] == "deepsafe"
+            or len(parts) > 1 and parts[0] in {"native", "logs", "benchmarks"} and parts[1] == "deepsafe"
+            or relative.as_posix() in {"evidence/deepsafe.json", "logs/configs/deepsafe.log",
+                                       "logs/deepsafe-report.log", "benchmarks/deepsafe-report.tsv"})
+
+
+def _file_index(root: Path, *, include_deep=True, evidence_root: Path | None = None,
+                deep_only=False) -> None:
     """Expose isolate-local files without following symlinks outside the bundle."""
     files = []
+    source_root = evidence_root or root
     for folder in ("native", "deepsafe", "evidence", "logs", "benchmarks"):
-        directory = root / folder
-        if not directory.exists():
+        directory = source_root / folder
+        if (not directory.exists() or directory.is_symlink()
+                or not include_deep and _deep_file(Path(folder))):
             continue
-        for path in sorted(directory.rglob("*")):
-            if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(root):
-                continue
-            relative = path.relative_to(root).as_posix()
-            files.append({"path": relative, "bytes": path.stat().st_size})
+        for current, directories, names in os.walk(directory, followlinks=False):
+            current = Path(current)
+            directories[:] = sorted(name for name in directories
+                if include_deep or not _deep_file((current / name).relative_to(source_root)))
+            for name in sorted(names):
+                path = current / name
+                relative = path.relative_to(source_root)
+                if ((not include_deep and _deep_file(relative)) or not path.is_file()
+                        or path.is_symlink() or not path.resolve().is_relative_to(source_root)
+                        or deep_only and not _deep_file(relative)):
+                    continue
+                files.append({"path": relative.as_posix(), "bytes": path.stat().st_size,
+                              "href": quote(Path(os.path.relpath(path, root / "metadata")).as_posix(), safe="/")})
+    files.sort(key=lambda item: item["path"])
     _write_json(root / "metadata/files.json", {"schema": "basis-local-files-v1", "files": files,
                 "scope": "Local file navigation; availability does not independently verify file contents."})
-    rows = "".join('<tr><td><a href="../' + quote(f["path"], safe="/") + '">' + html.escape(f["path"])
+    rows = "".join('<tr><td><a href="' + f["href"] + '">' + html.escape(f["path"])
                    + '</a></td><td>' + f'{f["bytes"]:,}' + '</td></tr>' for f in files)
     page = ('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             '<title>BaSIS · Run files</title><style>body{font:15px/1.6 system-ui;background:#f3f7f9;color:#173a4a;margin:0}'
             'main{max-width:1100px;margin:auto;padding:32px}a{color:#087d79}table{width:100%;border-collapse:collapse;background:white}'
             'th,td{text-align:left;padding:10px;border-bottom:1px solid #dce7ec}td:first-child{overflow-wrap:anywhere}</style>'
             '<main><a href="../report.html">← Back to report</a><h1>Run files</h1>'
-            '<p>Native outputs, candidate evidence, logs and benchmarks from this isolate. Files are linked in place.</p>'
+            '<p>Outputs, logs and benchmarks within this report scope. Files are linked in place.</p>'
             '<p><a href="files.json" download>Download index · JSON</a></p><table><thead><tr><th>File</th><th>Bytes</th></tr></thead>'
             '<tbody>' + rows + '</tbody></table></main></html>')
     (root / "metadata/files.html").write_text(page, encoding="utf-8")
@@ -258,26 +315,46 @@ def export_workflow_coverage(deep_records, root):
     return {"json": str(json_path), "tsv": str(tsv_path)}
 
 
-def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], outdir: Path) -> dict:
+def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], outdir: Path, *,
+           view: str = "combined", evidence_root: Path | None = None) -> dict:
     """Write the polished offline bundle into the isolate's safety directory."""
-    sample, config = _read(sample_path), _read(config_path)
-    run, records, deep_records = aggregate(sample, config, evidence_paths)
+    if view == "deep" and Path(outdir).is_symlink():
+        raise ValueError("DeepSafe report output must not be a symlink")
+    sample, sample_sha256 = _read_snapshot(sample_path)
+    config, config_sha256 = _read_snapshot(config_path)
+    review = config.get("followup_review")
+    if review is not None:
+        for source in review["sources"]:
+            path = Path(source["path"])
+            if not path.is_file() or _sha(path) != source["sha256"]:
+                raise ValueError("Saved screening input changed after review: " + str(path))
+    run, records, deep_records = aggregate(sample, config, evidence_paths, view=view)
+    from basis.report_scope import deep_requested, validate_report_output_paths
+    include_deep = deep_requested(run, deep_records)
     root = outdir.resolve()
+    source_root = Path(evidence_root).resolve() if evidence_root is not None else root
+    if evidence_root is not None and root != (source_root / "deepsafe-report" if view == "deep" else source_root):
+        raise ValueError("External evidence root is allowed only for its deepsafe-report subdirectory")
+    validate_report_output_paths(root)
     root.mkdir(parents=True, exist_ok=True)
-    for name in ("tables", "metadata", "native", "deepsafe", "logs", "benchmarks"):
+    folders = ("tables", "metadata") if view == "deep" else ("tables", "metadata", "native", "logs", "benchmarks")
+    for name in folders + (("deepsafe",) if include_deep and view != "deep" else ()):
         (root / name).mkdir(exist_ok=True)
-    run["report_inputs"] = {"sample": {"path": str(sample_path.resolve()), "sha256": _sha(sample_path)},
-                            "config": {"path": str(config_path.resolve()), "sha256": _sha(config_path)}}
-    coverage_artifacts = export_workflow_coverage(deep_records, root)
-    run["deep_workflow_artifacts"] = {key: Path(path).relative_to(root).as_posix()
-                                     for key, path in coverage_artifacts.items()}
+    run["report_inputs"] = {"sample": {"path": str(sample_path.resolve()), "sha256": sample_sha256},
+                            "config": {"path": str(config_path.resolve()), "sha256": config_sha256}}
+    run["config_hash"] = run["report_inputs"]["config"]["sha256"]
+    coverage_artifacts = export_workflow_coverage(deep_records, root) if include_deep else {}
+    if include_deep:
+        run["deep_workflow_artifacts"] = {key: Path(path).relative_to(root).as_posix()
+                                         for key, path in coverage_artifacts.items()}
     from basis.report import write_report
     from basis.run_summary import build_run_summary, write_run_summary
     # The vendored renderer is presentation only. Disable its legacy heartbeat;
     # Snakemake owns job-level progress and writes the render log itself.
     previous = os.environ.pop("BASIS_VERBOSE", None)
     try:
-        artifacts = write_report(run, [sample], records, deep_records, root)
+        artifacts = write_report(run, [sample], records, deep_records, root,
+                                 evidence_root=source_root if evidence_root is not None else None)
         summary = build_run_summary(run, [sample], records, deep_records)
         artifacts.update(write_run_summary(summary, root))
         artifacts.update({"deep_workflow_" + key: path for key, path in coverage_artifacts.items()})
@@ -285,6 +362,12 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
         if previous is not None:
             os.environ["BASIS_VERBOSE"] = previous
     text = (root / "report.html").read_text(encoding="utf-8")
+    if not include_deep:
+        # Only renderer-owned exports are removed; saved analysis evidence,
+        # logs, and all native files remain available on disk.
+        for relative in ("deferred-candidates.tsv", "tables/deferred-candidates.tsv",
+                         "metadata/deep-workflow.json", "metadata/deep-workflow.tsv"):
+            (root / relative).unlink(missing_ok=True)
     for original, new in RELOCATIONS.items():
         source, target = root / original, root / new
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -294,7 +377,11 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
         for key, value in list(artifacts.items()):
             if Path(value) == source:
                 artifacts[key] = str(target)
-    text = text.replace('<div class="topbar-actions">', '<div class="topbar-actions"><a class="button" href="metadata/files.html">Run files</a>')
+    from .report_links import matching_report_link
+    counterpart = matching_report_link(run, source_root)
+    related = ('<a class="button" href="' + html.escape(counterpart[0], quote=True) + '">'
+               + html.escape(counterpart[1]) + '</a>') if counterpart else ""
+    text = text.replace('<div class="topbar-actions">', '<div class="topbar-actions">' + related + '<a class="button" href="metadata/files.html">Run files</a>')
     (root / "report.html").write_text(text, encoding="utf-8")
     navigation_path = root / "metadata/report-navigation.json"
     navigation = _read(navigation_path)
@@ -304,7 +391,8 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
     # the machine-readable navigation index below metadata/.
     navigation["href_base"] = "../report.html"
     _write_json(navigation_path, navigation)
-    _file_index(root)
+    _file_index(root, include_deep=include_deep, evidence_root=source_root,
+                deep_only=view == "deep")
     artifacts.update(files_html=str(root / "metadata/files.html"), files_json=str(root / "metadata/files.json"))
     _write_json(root / "metadata/report-artifacts.json", {"schema": "basis-report-artifacts-v1", "artifacts": artifacts})
     return artifacts
@@ -314,10 +402,13 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sample", required=True, type=Path)
     parser.add_argument("--config", required=True, type=Path)
-    parser.add_argument("--evidence", required=True, nargs="+", type=Path)
+    parser.add_argument("--evidence", required=True, nargs="*", type=Path)
     parser.add_argument("--outdir", required=True, type=Path)
+    parser.add_argument("--view", choices=("combined", "screening", "deep"), default="combined")
+    parser.add_argument("--evidence-root", type=Path)
     args = parser.parse_args(argv)
-    render(args.sample, args.config, args.evidence, args.outdir)
+    render(args.sample, args.config, args.evidence, args.outdir,
+           view=args.view, evidence_root=args.evidence_root)
     print(f"Report: {args.outdir.resolve() / 'report.html'}")
     return 0
 

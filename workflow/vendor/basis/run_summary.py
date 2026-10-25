@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import tempfile
 
-from .deep_reporting import completion_summary
+from .deep_reporting import completion_summary, parent_execution, qualify_completion_summary
 from .report_sample_scope import module_scope_rows, record_requested, scope_label
 
 
@@ -19,7 +19,8 @@ TSV_COLUMNS = (
     "sample_id", "completeness", "requested_modules", "completed_modules", "failed_modules",
     "not_assessed_modules", "blocked_modules", "not_started_modules", "planned_runnable_modules", "held", "excluded", "disabled",
     "not_requested", "imported_modules", "cache_reused", "deep_execution",
-    "deep_selected_execution", "deep_selected", "deep_completed_selected", "deep_failed_selected",
+    "deep_selected_execution", "deep_recorded_selected_execution", "deep_selected", "deep_completed_selected",
+    "deep_accepted_completed_selected", "deep_provisional_completed_selected", "deep_failed_selected",
     "deep_not_assessed_selected", "deep_deferred", "deep_upstream_incomplete", "incomplete_requested",
 )
 
@@ -69,15 +70,18 @@ def _deep_summary(record, requested):
         failed = sum(candidate.get("execution") == "failed" for candidate in selected)
         unassessed = sum(candidate.get("execution") not in {"completed", "failed"} for candidate in selected)
     else:
-        saved = record.get("completion_summary") or {}
+        saved = qualify_completion_summary(record.get("completion_summary") or {}, parent_execution(record))
         failed = saved.get("failed_selected_candidates")
         unassessed = saved.get("not_assessed_selected_candidates")
     return {"requested": bool(requested),
-            "execution": record.get("execution_status", "not_recorded"),
+            "execution": parent_execution(record),
             "complete": record.get("complete"),
             "selected_execution": saved.get("selected_execution", "not_recorded"),
+            "recorded_selected_execution": saved.get("recorded_selected_execution", "not_recorded"),
             "selected_candidates": saved.get("selected_candidates"),
             "completed_selected_candidates": saved.get("completed_selected_candidates"),
+            "accepted_completed_selected_candidates": saved.get("accepted_completed_selected_candidates"),
+            "provisional_completed_selected_candidates": saved.get("provisional_completed_selected_candidates"),
             "failed_selected_candidates": failed, "not_assessed_selected_candidates": unassessed,
             "deferred_candidates": saved.get("deferred_candidates"),
             "upstream_incomplete": copy.deepcopy(record.get("upstream_incomplete", saved.get("upstream_incomplete", []))),
@@ -183,7 +187,10 @@ def _summary_rows(summary):
             **{key: sample.get(key, planned.get(key)) for key in ("held", "excluded", "disabled", "not_requested")},
             "imported_modules": sample.get("imported_modules"), "cache_reused": sample.get("cache_reused"),
             "deep_execution": deep.get("execution"), "deep_selected_execution": deep.get("selected_execution"),
+            "deep_recorded_selected_execution": deep.get("recorded_selected_execution"),
             "deep_selected": deep.get("selected_candidates"), "deep_completed_selected": deep.get("completed_selected_candidates"),
+            "deep_accepted_completed_selected": deep.get("accepted_completed_selected_candidates"),
+            "deep_provisional_completed_selected": deep.get("provisional_completed_selected_candidates"),
             "deep_failed_selected": deep.get("failed_selected_candidates"), "deep_not_assessed_selected": deep.get("not_assessed_selected_candidates"),
             "deep_deferred": deep.get("deferred_candidates"), "deep_upstream_incomplete": deep.get("upstream_incomplete"),
             "incomplete_requested": sample.get("incomplete_requested")}
@@ -249,7 +256,10 @@ def format_run_summary(summary, artifacts=None):
             if deep.get("requested"):
                 lines.append("  DeepSafe execution: " + _display(deep.get("execution")) +
                              "; selected " + _display(deep.get("completed_selected_candidates")) + "/" + _display(deep.get("selected_candidates")) +
-                             " completed (" + _display(deep.get("selected_execution")) + "); failed selected: " + _display(deep.get("failed_selected_candidates")) +
+                             " recorded completed; effective status: " + _display(deep.get("selected_execution")) +
+                             "; accepted completed: " + _display(deep.get("accepted_completed_selected_candidates")) +
+                             "; provisional completed: " + _display(deep.get("provisional_completed_selected_candidates")) +
+                             "; failed selected: " + _display(deep.get("failed_selected_candidates")) +
                              "; deferred: " + _display(deep.get("deferred_candidates")) + ".")
                 if deep.get("upstream_incomplete"):
                     lines.append("  Incomplete upstream: " + ", ".join(map(str, deep["upstream_incomplete"])))

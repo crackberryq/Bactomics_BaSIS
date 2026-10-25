@@ -11,10 +11,15 @@ import csv
 import hashlib
 import html
 import json
+import os
 import re
 from collections import Counter
+from contextvars import ContextVar
 from pathlib import Path
 from urllib.parse import quote
+
+
+_ARTIFACT_ROOT = ContextVar("basis_report_artifact_root", default=None)
 
 
 MOBILE_CATEGORIES = {"plasmid", "prophage", "integron", "is", "ice"}
@@ -317,23 +322,26 @@ def build_recommendations(samples, records, deep_records):
 
 
 def _artifact_link(value, outdir):
-    """Link only to a file beneath the report root; never expose file:// or JS URLs."""
+    """Link inside the explicitly scoped evidence root; reject URLs and symlinks."""
     text = str(value)
     if not text or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", text) or "\\" in text:
         return None
     try:
+        root = Path(outdir).resolve()
+        trusted = _ARTIFACT_ROOT.get() or root
         path = Path(text)
-        lexical = path if path.is_absolute() else Path(outdir) / path
+        lexical = path if path.is_absolute() else root / path
+        if not path.is_absolute() and not lexical.exists() and trusted != root:
+            lexical = trusted / path
         if any(p.is_symlink() for p in (lexical, *lexical.parents)):
             return None
         candidate = lexical.resolve(strict=True)
-        relative = candidate.relative_to(outdir.resolve())
+        candidate.relative_to(trusted)
         if not candidate.is_file():
             return None
     except (OSError, ValueError, RuntimeError):
         return None
-    if relative == Path("."):
-        return None
+    relative = Path(os.path.relpath(candidate, root))
     return quote(relative.as_posix(), safe="/._-")
 
 
@@ -511,6 +519,7 @@ SCRIPT = """
 
 def _methods(run, records, deep_records):
     lines = ["BaSIS methods and execution record", "", "Software version: " + _plain(run.get("version")),
+             "Report view: " + _plain(run.get("report_view", "combined")),
              "Run ID: " + _plain(run.get("run_id")), "Started: " + _plain(run.get("started_at")),
              "Finished: " + _plain(run.get("finished_at")), "Configuration hash: " + _plain(run.get("config_hash")),
              "Options: " + _plain(run.get("options")), "Validation mode: " + _plain(run.get("validation_mode")), "",
@@ -603,11 +612,31 @@ def _render_sample_taxonomy(sample):
 
 
 @tracked("Writing consolidated report and evidence artifacts")
-def write_report(run: dict, samples: list[dict], records: list[dict], deep_records: list[dict], outdir: Path) -> dict:
+def write_report(run: dict, samples: list[dict], records: list[dict], deep_records: list[dict],
+                 outdir: Path, *, evidence_root: Path | None = None) -> dict:
+    """Render within one explicit local artifact scope, restoring it afterward."""
+    if run.get("report_view") == "deep" and Path(outdir).is_symlink():
+        raise ValueError("DeepSafe report output must not be a symlink")
+    root = Path(outdir).resolve()
+    trusted = Path(evidence_root).resolve() if evidence_root is not None else root
+    if evidence_root is not None and root != (trusted / "deepsafe-report" if run.get("report_view") == "deep" else trusted):
+        raise ValueError("External evidence root is allowed only for its deepsafe-report subdirectory")
+    from .report_scope import validate_report_output_paths
+    validate_report_output_paths(root)
+    token = _ARTIFACT_ROOT.set(trusted)
+    try:
+        return _write_report(run, samples, records, deep_records, root)
+    finally:
+        _ARTIFACT_ROOT.reset(token)
+
+
+def _write_report(run: dict, samples: list[dict], records: list[dict], deep_records: list[dict], outdir: Path) -> dict:
     """Write the complete offline report bundle; return absolute artifact paths."""
+    from .report_scope import deep_requested
+    records, deep_records = list(records), list(deep_records)
+    include_deep = deep_requested(run, deep_records)
     outdir = Path(outdir).resolve()
     outdir.mkdir(parents=True, exist_ok=True)
-    records, deep_records = list(records), list(deep_records)
     combined = records + deep_records
     findings = _all_findings(combined)
     recommendations = build_recommendations(samples, records, deep_records)
@@ -632,6 +661,9 @@ def write_report(run: dict, samples: list[dict], records: list[dict], deep_recor
     from .report_dashboard import render_dashboard
     content = render_dashboard(run, samples, records, deep_records, findings, recommendations, outdir)
     artifacts["html"].write_text(content, encoding="utf-8")
+    if not include_deep:
+        # This table is renderer-owned. Historical analysis inputs stay intact.
+        (outdir / "deferred-candidates.tsv").unlink(missing_ok=True)
     from .report_navigation import write_navigation_index
     artifacts["report_navigation_json"] = write_navigation_index(run, deep_records, outdir)
     return {key: str(path) for key, path in artifacts.items()}
