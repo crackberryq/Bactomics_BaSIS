@@ -44,6 +44,41 @@ the recorded native exit status and the corrected parser against that attempt
 before deciding how to resume it. Do not fabricate an empty TSV or touch a
 completion file to bypass verification.
 
+For the specific legacy warning-coverage failure, after updating this checkout,
+preview a single sample using its frozen metadata:
+
+```bash
+python scripts/recover_isescan_results.py --isolate /path/to/isolate --refresh-report
+```
+
+Apply the same verified recovery and render the screening report:
+
+```bash
+python scripts/recover_isescan_results.py --isolate /path/to/isolate --apply --refresh-report
+```
+
+This command reads the sample's `safety/metadata` and local
+`safety/results-cache/isescan` store. It does not load or edit study YAML, run
+ISEScan, launch other native tools, activate environments, or invoke Snakemake.
+It requires stopped workflow workers, the exact reviewed legacy parser failure,
+a successful recorded native command, unchanged inputs/settings/resources and
+executable identity, and complete supporting native output. Other requested
+report evidence must exist and match the saved input hashes before publication.
+
+Recovery copies the original raw files into a new verified cache snapshot and
+retains their original bytes and path-bearing transcripts. A `recovery.json`
+audit binds these copies to the original attempt and parser identity. The new
+`parsed.json` points to the copied artifacts. Repeated recovery and subsequent
+reuse by the native worker do not run ISEScan. A gap in generated-protein coverage
+remains inconclusive in the refreshed report. An unsupported or changed attempt
+stops for diagnosis rather than falling back to native execution.
+
+The script repairs the ISEScan receipt and normalized evidence and optionally
+refreshes its sample's report. It does not rewrite Snakemake's scheduler history
+or migrate other tools' cache identities. The recovered files can finish a saved
+report without resubmitting the whole workflow; a future general resume still
+needs the dry-run review below.
+
 This shared adapter is included in native source fingerprints. Updating it may
 invalidate cached jobs that record those fingerprints; inspect the workflow's
 dry-run before resuming an existing batch. The unchanged-repeat test does not
