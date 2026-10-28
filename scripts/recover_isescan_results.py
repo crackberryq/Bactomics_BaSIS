@@ -148,6 +148,8 @@ def inspect(isolate):
         if original["sources"][str((ROOT / PARSER).resolve())] != LEGACY_PARSER:
             raise ValueError("Failed attempt did not use the affected legacy parser")
         payload = plain(attempt / "data")
+        if any(os.path.lexists(payload / name) for name in ("recovery.json", "recovery-source")):
+            raise ValueError("Original native payload contains conflicting recovery metadata")
         commands_path = plain(attempt / "commands.json")
         commands = runtime.read_json(commands_path)
         expected = ["bash", "-euo", "pipefail", "-c",
@@ -236,8 +238,12 @@ def snapshot(info):
     parsed = copy.deepcopy(parsed)
     parsed["artifacts"] = [str(payload / Path(path).relative_to(source)) for path in parsed["artifacts"]]
     runtime.write_json(payload / "parsed.json", parsed)
+    saved_records = payload / "recovery-source"
+    saved_records.mkdir()
     for name, checksum in info["command_hashes"].items():
-        if result_store.sha256(info["attempt"] / name) != checksum:
+        shutil.copy2(info["attempt"] / name, saved_records / name)
+        if (result_store.sha256(info["attempt"] / name) != checksum
+                or result_store.sha256(saved_records / name) != checksum):
             raise ValueError("Original attempt diagnostics changed during recovery")
     audit = {"schema": SCHEMA, "original_attempt": str(info["attempt"]), "original_identity": info["original"],
              "original_inventory": info["inventory"], "original_record_hashes": info["command_hashes"],

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import io
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -123,6 +124,18 @@ class ISEScanRecoveryTests(unittest.TestCase):
         self.assertTrue(reused)
         self.assertEqual(record["payload_root"], first["payload_root"])
         self.no_native.assert_not_called()
+
+    def test_audit_remains_available_after_old_failed_attempt_is_pruned(self):
+        recovery.recover(self.isolate, apply=True)
+        row = runtime.read_json(self.receipt)
+        payload = Path(row["payload_root"])
+        audit = runtime.read_json(payload / "recovery.json")
+        for name, checksum in audit["original_record_hashes"].items():
+            self.assertEqual(result_store.sha256(payload / "recovery-source" / name), checksum)
+        shutil.rmtree(self.attempt)  # Simulate later native failed-attempt retention, in this fixture only.
+        recovery.recover(self.isolate, apply=True, refresh_report=True)
+        self.assertEqual(runtime.read_json(payload / "recovery-source/commands.json")[0]["returncode"], 0)
+        result_store.verify_receipt(self.receipt, self.destination, self.identity)
 
     def test_bad_native_exit_or_invocation_is_refused_without_writes(self):
         path = self.attempt / "commands.json"

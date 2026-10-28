@@ -68,6 +68,8 @@ report evidence must exist and match the saved input hashes before publication.
 Recovery copies the original raw files into a new verified cache snapshot and
 retains their original bytes and path-bearing transcripts. A `recovery.json`
 audit binds these copies to the original attempt and parser identity. The new
+`recovery-source/` directory preserves copies of the original command and failure
+records so the audit survives later native failed-attempt retention. The new
 `parsed.json` points to the copied artifacts. Repeated recovery and subsequent
 reuse by the native worker do not run ISEScan. A gap in generated-protein coverage
 remains inconclusive in the refreshed report. An unsupported or changed attempt
