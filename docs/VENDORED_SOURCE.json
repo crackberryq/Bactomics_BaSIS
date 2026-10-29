@@ -36,6 +36,12 @@
       "source_sha256": "6cd1c8ad05dca2dd6a6c87e7095d98fb99f22b3e4d4bd9bfd98186dd728a4c0c",
       "standalone_sha256": "793920c2b5f668c541505bf49948a839553cce6af8d7f65d8bfaa438193dd0b1",
       "reason": "Preserve the observed one-base native array/component endpoint discrepancy with explicit boundary-review and incomplete-report scope; retain other validation and all native search settings."
+    },
+    {
+      "path": "workflow/vendor/basis/adapters/context.py",
+      "source_sha256": "3ae8d2ce0e8189e2d2980c6a915777b625bf303990efe2e5ead54b7f9c12d2b8",
+      "standalone_sha256": "52f3f6958058e0dfc1768a986a2bc97edb61e3205489b6cd9a1088cffe3e1bc3",
+      "reason": "Match ISEScan 1.7.3 early no-hit warnings to raw-hit contigs, retain completed-search and provenance checks, and expose contigs without predicted proteins."
     }
   ],
   "removed_files": [
