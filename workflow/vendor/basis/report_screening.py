@@ -218,6 +218,10 @@ def render_screening_findings(findings, names, source_paths):
              '<label>Tool<select id="finding-module"><option value="">All tools</option>']
     modules = sorted({f.get("module", "unspecified") for f in rows})
     parts.extend('<option value="' + _esc(m) + '">' + _esc(names.get(m, m)) + '</option>' for m in modules)
+    parts.append('</select></label>')
+    sample_ids = sorted({str(f.get("sample_id", "unknown")) for f in rows})
+    parts.append('<label' + (' hidden' if len(sample_ids) < 2 else '') + '>Sample<select id="finding-sample"><option value="">All samples</option>')
+    parts.extend('<option value="' + _esc(sid) + '">' + _esc(sid) + '</option>' for sid in sample_ids)
     parts.append('</select></label><label>Evidence group<select id="finding-group">'
                  '<option value="review">Main review findings</option><option value="">All saved findings</option>'
                  '<option value="exploratory">Exploratory / below threshold</option>'
@@ -253,7 +257,7 @@ def render_screening_findings(findings, names, source_paths):
         if finding.get("start") is not None and finding.get("end") is not None:
             location.append(("Coordinates", f'{finding["start"]}–{finding["end"]} ({finding.get("strand") or "strand not recorded"})'))
         parts.append('<tr id="screening-finding-' + str(index + 1) + '" data-search="' + _esc(search.lower())
-                     + '" data-module="' + _esc(module) + '" data-group="' + data["group"] + '"><td>'
+                     + '" data-module="' + _esc(module) + '" data-sample="' + _esc(finding.get("sample_id", "unknown")) + '" data-group="' + data["group"] + '"><td>'
                      '<strong class="finding-name">' + _esc(data["title"]) + '</strong><p class="finding-description">'
                      + _esc(data["description"] or "No descriptive annotation recorded.") + '</p>' + detail + '</td><td>'
                      + (_pairs(data["classifications"]) if data["classifications"] else '<span class="muted">Not recorded</span>')
@@ -292,6 +296,7 @@ CSS = r"""
 .reading-guide>summary{cursor:pointer;font-weight:600}.reading-guide[open]>.finding-pairs{margin-top:14px}
 .finding-pages{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:16px}
 .finding-pages[hidden],#finding-table tr[hidden],#finding-empty[hidden]{display:none}
+.screening-reader .filters label[hidden]{display:none}
 .finding-pages button:disabled{opacity:.45;cursor:default}
 @media print{#finding-table tr[hidden]{display:table-row!important}.finding-pages{display:none!important}
  .screening-reader .table-wrap{overflow:visible}.screening-reader #finding-table{min-width:0;font-size:10px}}

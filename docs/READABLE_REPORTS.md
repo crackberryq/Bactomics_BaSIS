@@ -7,6 +7,27 @@ BaSIS does not expand a drug class into an inferred list of antibiotics.
 
 ## Finding the result you need
 
+The report presents screening results before input details and the genome
+explorer. **Results by tool** explains the saved result for every requested
+screening tool, including requested results with no supplied record. It keeps
+**No findings reported**, **Inconclusive result**, **Assessment incomplete**,
+and **Not assessed** distinct. An empty table alone is not labelled negative.
+
+**View findings** selects that exact tool and sample and includes all its saved
+evidence groups, with their original qualifications still visible. The sample
+selector appears when multiple samples have findings. The source rows are not
+deduplicated across tools or promoted into new conclusions.
+
+**Tools finished**, such as 14 / 14, counts completed execution. A tool can
+finish while leaving its assessment incomplete or inconclusive. Such results
+retain a visible review notice and the recorded reason. The expandable tool
+explanation shows what the tool assesses and its saved execution/interpretation.
+
+Sample and input context is expandable near the top. Empty optional model
+panels are omitted when no requested or retained model output exists; disabled
+module records remain in scope information and exports. Model results that do
+exist remain separate from the screening findings.
+
 Use **Read screening findings** at the top of the report. The finding table shows:
 
 - The gene or feature and its full recorded description.
@@ -34,8 +55,7 @@ confirmations across tools.
 
 Expand **Details and original source fields** to read the saved native row in a
 labelled layout. Unrecorded descriptions and classifications remain explicit.
-The report also explains what each screen assesses under **Tools and assessment
-scope**. Failed and incomplete module records remain visible there and in the
+The report also retains **Technical tool records and scope**. Failed and incomplete module records remain visible there and in the
 existing execution-issues section.
 
 **Readable findings · TSV** downloads `tables/screening-findings.tsv` with the

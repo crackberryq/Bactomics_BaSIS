@@ -206,7 +206,7 @@ class SeparateReportViewTests(unittest.TestCase):
         document, _, _ = self.render("screening")
         self.assertEqual("".join(document.title_parts), "BaSIS · Screening report")
         self.assertIn("SCREENING REPORT", document.visible_text)
-        self.assertIn("Inspect native screening calls and model outputs", document.visible_text)
+        self.assertIn("Read what each tool reported", document.visible_text)
         self.assertNotIn("DEEP EVIDENCE", document.visible_text)
         self.assertNotIn("recorded DeepSafe holds", document.visible_text)
 
@@ -268,7 +268,7 @@ class SeparateReportViewTests(unittest.TestCase):
             "deep", "recommendations", "provenance",
         })
         self.assertNotIn("report_view", evidence["run"])
-        for text in ("Core screening evidence", "Extend · model insight", "Native model prediction",
+        for text in ("Core screening evidence", "Model predictions · Extend", "Native model prediction",
                      "ML attention explorer", "Candidate evidence matrix", "Deep family assessment"):
             with self.subTest(text=text):
                 self.assertIn(text, document.visible_text)
