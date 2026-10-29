@@ -18,14 +18,15 @@ OTHER = "b" * 40
 
 
 class GitHub:
-    def __init__(self, record=None, tag=None):
+    def __init__(self, record=None, tag=None, release_tag="v0.4.0a2"):
         self.record, self.tag, self.calls = record, tag, []
+        self.release_tag = release_tag
 
     def __call__(self, path, method="GET", payload=None):
         self.calls.append((path, method, copy.deepcopy(payload)))
-        if path.endswith("/git/ref/tags/v0.4.0a2"):
+        if path.endswith("/git/ref/tags/" + self.release_tag):
             return {"object": {"type": "commit", "sha": self.tag}} if self.tag else None
-        if path.endswith("/releases/tags/v0.4.0a2"):
+        if path.endswith("/releases/tags/" + self.release_tag):
             return copy.deepcopy(self.record)
         if method == "POST" and path.endswith("/releases"):
             self.record = dict(payload, id=23)
@@ -44,6 +45,15 @@ class GitHub:
 
 
 class ReleaseTests(unittest.TestCase):
+    def version_fixture(self, root, version):
+        for name in ("workflow/lib/safety/__init__.py", "workflow/lib/safety/context.py",
+                     "workflow/lib/safety/reporting.py", "CITATION.cff", "docs/VENDORED_SOURCE.json"):
+            target = root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text((ROOT / name).read_text().replace("0.4.0a2", version))
+        (root / f"docs/RELEASE_{version}.md").write_text(
+            f"# BaSIS AWARE {version}\n\nSynthetic release metadata fixture.\n")
+
     def test_version_metadata_and_workflow_gate(self):
         version, notes = release.metadata(ROOT)
         self.assertEqual(version, "0.4.0a2")
@@ -65,6 +75,59 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(result["target_commitish"], COMMIT)
         self.assertEqual([call[1] for call in api.writes], ["POST", "POST", "PATCH"])
         self.assertIn(COMMIT, result["body"])
+        self.assertEqual(result["name"], "BaSIS AWARE 0.4.0a2 — Alpha")
+
+    def test_beta_publication_remains_a_prerelease_at_the_tested_commit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.version_fixture(root, "0.4.0b1")
+            api = GitHub(release_tag="v0.4.0b1")
+            with patch.object(release, "github", api):
+                result = release.publish(root, COMMIT)
+            self.assertFalse(result["draft"])
+            self.assertTrue(result["prerelease"])
+            self.assertEqual(result["name"], "BaSIS AWARE 0.4.0b1 — Research beta")
+            self.assertEqual(result["tag_name"], "v0.4.0b1")
+            self.assertEqual(result["target_commitish"], COMMIT)
+            self.assertEqual(api.tag, COMMIT)
+            self.assertEqual([call[1] for call in api.writes], ["POST", "POST", "PATCH"])
+
+    def test_beta_still_rejects_conflicting_tag_and_published_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.version_fixture(root, "0.4.0b1")
+            cases = [(None, OTHER),
+                     ({"id": 23, "tag_name": "v0.4.0b1", "target_commitish": OTHER,
+                       "draft": False, "prerelease": True}, COMMIT)]
+            for record, tag in cases:
+                with self.subTest(record=record):
+                    api = GitHub(record, tag, release_tag="v0.4.0b1")
+                    with patch.object(release, "github", api), self.assertRaises(ValueError):
+                        release.publish(root, COMMIT)
+                    self.assertEqual(api.writes, [])
+
+    def test_unsupported_release_channels_are_rejected_before_network(self):
+        for version in ("0.4.0", "0.4.0rc1", "0.5.0b1", "0.4.0b0", "0.4.0a0"):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.version_fixture(root, version)
+                with patch.object(release, "github") as network, self.assertRaises(ValueError):
+                    release.publish(root, COMMIT)
+                network.assert_not_called()
+
+    def test_beta_requires_matching_runtime_metadata_and_notes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative, replacement in (
+                ("workflow/lib/safety/context.py", 'version = "0.4.0a2"\n'),
+                ("docs/RELEASE_0.4.0b1.md", "# BaSIS AWARE 0.4.0a2\n"),
+            ):
+                with self.subTest(relative=relative):
+                    self.version_fixture(root, "0.4.0b1")
+                    (root / relative).write_text(replacement)
+                    with patch.object(release, "github") as network, self.assertRaises(ValueError):
+                        release.publish(root, COMMIT)
+                    network.assert_not_called()
 
     def test_draft_retry_reuses_release_and_matching_tag(self):
         original = {"id": 23, "tag_name": "v0.4.0a2", "target_commitish": COMMIT,

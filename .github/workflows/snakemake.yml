@@ -86,7 +86,7 @@ jobs:
             acceptance-environment-recovery/**/*.log
 
   publish:
-    name: Publish checked BaSIS AWARE alpha
+    name: Publish checked BaSIS AWARE prerelease
     needs: [workflow, report-browser, real-conda-deployment]
     if: github.repository == 'crackberryq/Bactomics_BaSIS' && github.ref == 'refs/heads/basis-aware' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -100,7 +100,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Publish the exact tested source as an immutable alpha release
+      - name: Publish the exact tested source as an immutable prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/publish_release.py
