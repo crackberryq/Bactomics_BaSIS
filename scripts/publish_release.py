@@ -1,4 +1,4 @@
-"""Publish checked standalone alpha sources; never move tags or replace releases.
+"""Publish checked standalone prereleases; never move tags or replace releases.
 
 Called only by the publish job after every acceptance job has succeeded.
 This workflow distribution uses GitHub source archives, not a Python wheel.
@@ -35,9 +35,9 @@ def github(path, method="GET", payload=None):
 
 def metadata(root):
     source = (root / "workflow/lib/safety/__init__.py").read_text()
-    matched = re.search(r'^__version__ = "(0\.4\.0a[1-9][0-9]*)"$', source, re.M)
+    matched = re.search(r'^__version__ = "(0\.4\.0[ab][1-9][0-9]*)"$', source, re.M)
     if matched is None:
-        raise ValueError("Publication supports explicitly versioned 0.4.0 alpha releases only")
+        raise ValueError("Publication supports explicitly versioned 0.4.0 alpha or beta releases only")
     version = matched[1]
     citation = (root / "CITATION.cff").read_text()
     if not re.search(r"^version: " + re.escape(version) + r"$", citation, re.M):
@@ -87,10 +87,11 @@ def publish(root, commit):
     if release and (release.get("target_commitish") != commit or release.get("tag_name") != tag):
         raise ValueError("Existing draft belongs to another commit; it will not be replaced")
     if not release:
+        channel = "Research beta" if "b" in version else "Alpha"
         notes += (f"\n\nTested source commit: `{commit}`. "
                   f"[Source](https://github.com/{REPO}/tree/{commit}).\n")
         release = github(f"{BASE}/releases", "POST", {
-            "tag_name": tag, "target_commitish": commit, "name": f"BaSIS AWARE {version} — Alpha",
+            "tag_name": tag, "target_commitish": commit, "name": f"BaSIS AWARE {version} — {channel}",
             "body": notes, "draft": True, "prerelease": True})
     if existing_tag is None:
         github(f"{BASE}/git/refs", "POST", {"ref": "refs/tags/" + tag, "sha": commit})

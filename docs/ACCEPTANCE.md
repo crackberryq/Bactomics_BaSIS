@@ -74,6 +74,9 @@ A failed pilot should be diagnosed from the named Snakemake rule and its log. Do
 This gate is **pending**. Passing software CI or updating the checklist does not
 complete the native acceptance work.
 
+The current feature freeze, recorded software evidence and remaining native
+acceptance work are tracked in [beta preparation](BETA_READINESS.md).
+
 - Integrate the release changes into the documented installation branch and
   record the exact release commit. Installation instructions, version metadata
   and release notes must describe that same build.
