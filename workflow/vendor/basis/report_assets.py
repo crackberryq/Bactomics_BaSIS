@@ -524,25 +524,43 @@ JS = r"""
 
   var findingSearch = document.getElementById('finding-search');
   var findingModule = document.getElementById('finding-module');
+  var findingGroup = document.getElementById('finding-group');
   var findingRows = Array.prototype.slice.call(document.querySelectorAll('#finding-table tbody tr'));
   var findingCount = document.getElementById('finding-count');
   var findingEmpty = document.getElementById('finding-empty');
-  function filterFindings() {
+  var findingPages = document.getElementById('finding-pages');
+  var findingPrev = document.getElementById('finding-prev');
+  var findingNext = document.getElementById('finding-next');
+  var findingPageLabel = document.getElementById('finding-page');
+  var findingPage = 0, findingPageSize = 50;
+  function filterFindings(resetPage) {
+    if (resetPage !== false) { findingPage = 0; }
     var query = valueOf(findingSearch);
-    var visible = 0;
-    findingRows.forEach(function (row) {
+    var matches = findingRows.filter(function (row) {
       var text = (row.getAttribute('data-search') || row.textContent || '').toLowerCase();
-      var show = containsTerms(text, query) && matchesFilter(row, 'module', findingModule);
-      row.hidden = !show;
-      if (show) { visible += 1; }
+      return containsTerms(text, query) && matchesFilter(row, 'module', findingModule) && matchesFilter(row, 'group', findingGroup);
     });
-    if (findingCount) { findingCount.textContent = visible + ' of ' + findingRows.length + ' displayed findings'; }
-    if (findingEmpty) { findingEmpty.hidden = visible !== 0; }
+    var pages = Math.max(1, Math.ceil(matches.length / findingPageSize));
+    findingPage = Math.max(0, Math.min(findingPage, pages - 1));
+    var first = findingPage * findingPageSize;
+    var visible = new Set(matches.slice(first, first + findingPageSize));
+    findingRows.forEach(function (row) {
+      row.hidden = !visible.has(row);
+    });
+    if (findingCount) { findingCount.textContent = (matches.length ? 'Showing ' + (first + 1) + '–' + (first + visible.size) : '0') + ' of ' + matches.length + ' matching findings · ' + findingRows.length + ' saved records across all evidence groups'; }
+    if (findingEmpty) { findingEmpty.hidden = matches.length !== 0; }
+    if (findingPages) { findingPages.hidden = pages === 1; }
+    if (findingPrev) { findingPrev.disabled = findingPage === 0; }
+    if (findingNext) { findingNext.disabled = findingPage >= pages - 1; }
+    if (findingPageLabel) { findingPageLabel.textContent = 'Page ' + (findingPage + 1) + ' of ' + pages; }
   }
-  if (findingSearch) { findingSearch.addEventListener('input', filterFindings); }
-  if (findingModule) { findingModule.addEventListener('change', filterFindings); }
+  [findingSearch, findingModule, findingGroup].forEach(function (control) {
+    if (control) { control.addEventListener(control === findingSearch ? 'input' : 'change', function () { filterFindings(true); }); }
+  });
+  if (findingPrev) { findingPrev.addEventListener('click', function () { findingPage -= 1; filterFindings(false); }); }
+  if (findingNext) { findingNext.addEventListener('click', function () { findingPage += 1; filterFindings(false); }); }
   if (findingCount) { findingCount.setAttribute('aria-live', 'polite'); findingCount.setAttribute('aria-atomic', 'true'); }
-  if (findingRows.length) { filterFindings(); }
+  if (findingCount) { filterFindings(); }
 
   document.querySelectorAll('[data-action]').forEach(function (button) {
     button.addEventListener('click', function () {

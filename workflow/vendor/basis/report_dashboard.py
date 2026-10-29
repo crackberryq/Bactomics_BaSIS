@@ -20,6 +20,7 @@ from .report_citation import AUTHOR, CITATION_NOTE, citation_text
 from .report_motif_views import candidate_motif_details, motif_search_terms, render_motif_overview, CSS as MOTIF_CSS
 from .report_placement import candidate_placement_details, placement_search_terms, render_placement_overview, CSS as PLACEMENT_CSS
 from .report_context import finding_context
+from .report_screening import render_screening_findings, PURPOSES, CSS as SCREENING_CSS
 from .report_sample_scope import render_sample_scope, record_requested, missing_requested_count
 from .report_deep_workflow import (candidate_workflow_details, render_workflow_overview,
                                    workflow_search_terms)
@@ -351,7 +352,7 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     q = Counter(c.get('selection_queue','exploratory') for _, c in selected)
     branding = '<svg width="34" height="34" viewBox="0 0 36 36" aria-hidden="true"><rect width="36" height="36" rx="10" fill="#1ba9a0"/><path d="M10 10h9a5 5 0 0 1 0 10h-9m0-5h11a5 5 0 0 1 0 10H10V10" fill="none" stroke="white" stroke-width="2.4"/></svg>'
     nav = ''.join('<a class="nav-link" href="#' + ident + '"><span>' + number + '</span>' + title + '</a>' for ident,number,title in [('overview','01','Overview'),('inputs','02','Inputs & scope'),('genome','03','Genome explorer'),('evidence-matrix','04','Evidence matrix'),('screens','05','Core screens'),('extend','06','Extend · ML'),('deep','07','DeepSafe'),('recommendations','08','Review priorities'),('provenance','09','Provenance')] if (deep_enabled or ident not in {'deep', 'evidence-matrix'}) and (show_screening or ident not in {'screens', 'extend'}))
-    navigator = link('#deep-navigator', 'Evidence navigator') if deep_enabled else link('#screens', 'Screening calls')
+    navigator = link('#deep-navigator', 'Evidence navigator') if deep_enabled else link('#screening-findings', 'Read screening findings')
     report_title = {'screening': 'Screening report', 'deep': 'DeepSafe follow-up report'}.get(view, 'Genomic evidence report')
     hero_eyebrow = {'screening': 'CORE SCREENING · MODEL INSIGHT', 'deep': 'DEEPSAFE · FOCUSED FOLLOW-UP'}.get(view, 'CORE SCREENING · DEEP EVIDENCE · MODEL INSIGHT')
     hero_title = esc(report_title) if view != 'combined' else 'Genomic evidence,<br>ready for review.'
@@ -447,33 +448,21 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
         elif r._execution(rec) != 'completed':
             desc = 'No completed-screen conclusion; retained findings are provisional.'
         else:
-            desc = str(len(follow)) + ' non-exploratory records for review'
+            desc = str(len(follow)) + ' findings in the main review group'
         if r._module(rec) == 'isescan' and r._execution(rec) == 'completed' and own:
             types = Counter(finding_context(f)['is_prediction_type'] for f in own)
             desc = f"{types['partial']} partial; {types['complete']} complete; {sum(v for k, v in types.items() if k not in {'partial', 'complete'})} completeness not recorded. Predictions do not establish activity."
-        screenrows.append((esc(r._sample_id(rec)), '<strong>' + esc(NAMES.get(r._module(rec), r._module(rec))) + '</strong>', badge(r._execution(rec)), esc(human(r._interpretation(rec))), num(len(own)), esc(desc), link(raw_paths[id(rec)], 'Evidence', 'text-link')))
-    screens = '<article class="panel">' + table(['Sample','Screen','Execution','Interpretation','All records','Scope / review','Source'], screenrows) + '</article>'
+        screenrows.append((esc(r._sample_id(rec)), '<strong>' + esc(NAMES.get(r._module(rec), r._module(rec))) + '</strong><p class="small muted">' + esc(PURPOSES.get(r._module(rec), 'Recorded screening results.')) + '</p>', badge(r._execution(rec)), esc(human(r._interpretation(rec))), num(len(own)), esc(desc), link(raw_paths[id(rec)], 'Evidence', 'text-link')))
+    scope_open = any(r._execution(rec) != 'completed' or rec.get('scope_incomplete') for rec in core)
+    screens = '<details class="panel"' + (' open' if scope_open else '') + '><summary>Tools and assessment scope · ' + str(len(core)) + ' records</summary>' + table(['Sample','Screen','Execution','Interpretation','All records','Scope / review','Source'], screenrows) + '</details>'
     if omitted:
         screens += '<details class="panel" id="optional-modules"><summary>' + str(len(omitted)) + ' optional module records not assessed</summary><p>Not assessed means that no result was produced for this module in the recorded run. It does not mean a negative result. Core + DeepSafe + Extend executes the configured scope; optional modules require explicit enablement.</p>' + table(['Sample','Module','What it assesses','Recorded status','Why not run','Integration in this release'], [_omitted_row(v) for v in omitted]) + '</details>'
-    display = [f for f in findings if f['module'] not in {'pathogenfinder2','pf2'} and f['execution_status'] == 'completed' and not r._exploratory_finding(f)]
-    shown = display[:250]
-    screens += '<article class="panel"><div class="panel-head"><div><h3>Screening calls for review</h3><p class="muted">' + str(len(display)) + ' records · source annotations retain their original evidence levels.</p></div>' + link('findings.tsv', 'All findings · TSV') + '</div><div class="filters"><label>Search screening calls<input id="finding-search" type="search" placeholder="Protein, gene, reference…"></label><label>Module<select id="finding-module"><option value="">All modules</option>' + ''.join('<option value="' + esc(m) + '">' + esc(NAMES.get(m,m)) + '</option>' for m in sorted({f['module'] for f in shown})) + '</select></label></div><div class="table-wrap"><table id="finding-table"><thead><tr>' + ''.join('<th scope="col">' + x + '</th>' for x in ['Sample / protein','Source call','Module','Evidence','Identity / coverage']) + '</tr></thead><tbody>'
-    for f in shown:
-        context = finding_context(f)
-        search = (' '.join(str(f.get(k) or '') for k in ['sample_id','protein_id','gene','family','reference']) + ' ' + context['source_call'] + ' ' + ' '.join(context['caveats'])).lower()
-        attrs = f.get('attributes') or {}
-        source_evidence = f.get('evidence_level') or 'not recorded'
-        if attrs.get('native_method'):
-            source_evidence += ' · ' + str(attrs['native_method'])
-        if attrs.get('cutoff'):
-            source_evidence += ' · ' + str(attrs['cutoff'])
-        value = lambda k: str(f[k]) + '%' if _number(f.get(k)) else '—'
-        caveats = ''.join('<br><small class="muted">' + esc(note) + '</small>' for note in context['caveats'])
-        screens += '<tr data-search="' + esc(search) + '" data-module="' + esc(f['module']) + '"><td><strong>' + esc(f.get('protein_id') or f.get('locus_id') or 'Region') + '</strong><br><small>' + esc(f['sample_id']) + '</small></td><td>' + esc(context['source_call']) + '<br><small class="muted">' + esc(f.get('reference') or f.get('interpretation')) + '</small>' + caveats + '</td><td>' + esc(NAMES.get(f['module'],f['module'])) + '</td><td>' + esc(human(source_evidence)) + '</td><td>' + esc(context['coverage_text'] or (value('identity') + ' / ' + value('coverage'))) + '</td></tr>'
-    screens += '</tbody></table></div><p id="finding-count" class="small muted" aria-live="polite">' + str(len(shown)) + ' visible records</p><p class="small muted">Identity and coverage are reported by each source and are not directly interchangeable. Exploratory and below-threshold records remain in the complete exports.</p>'
-    if len(display) > 250:
-        screens += '<p class="callout">Showing the first 250 review records. Download all findings to inspect the complete set.</p>'
-    screens += '</article>'
+    source_paths = {}
+    for rec in core:
+        key = (r._sample_id(rec), r._module(rec))
+        source_paths.setdefault(key, []).append(raw_paths[id(rec)])
+    if show_screening:
+        screens += render_screening_findings(findings, NAMES, source_paths)
     if show_screening:
         content += section('screens','05','Core screening evidence','Complementary screens, with source calls kept distinct from validated function.',screens)
         models = [v for v in records if r._module(v) in {'pathogenfinder2','pf2'}]
@@ -543,5 +532,5 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     if (Path(outdir) / 'source-artifacts.html').is_file():
         provenance += '<article class="panel"><h3>Files from the saved run</h3><p class="muted">Browse the original report and exactly recorded artifacts. File availability is separate from the saved analysis result.</p><a class="button" href="source-artifacts.html">Open source files</a></article>'
     content += section('provenance','09','Provenance & downloads','Recorded inputs, taxonomy, sources and exported evidence.',provenance)
-    start = start.replace('</style>', GENOME_CSS + EVIDENCE_CSS + TREE_CSS + MOTIF_CSS + PLACEMENT_CSS + PLACEMENT_TREE_CSS + '</style>', 1)
+    start = start.replace('</style>', GENOME_CSS + EVIDENCE_CSS + TREE_CSS + MOTIF_CSS + PLACEMENT_CSS + PLACEMENT_TREE_CSS + SCREENING_CSS + '</style>', 1)
     return start + content + '<footer>BaSIS · Bactomics environment · Author: ' + esc(AUTHOR) + ' · <a href="#citation">Cite this software</a><br>Research screening evidence. No global safety score or organism-level safety verdict is computed.<br><span class="small">All primary content is available offline. Interactive views link recorded evidence and do not change its interpretation.</span></footer></main></div><script>' + JS + GENOME_JS + EVIDENCE_JS + TREE_JS + PLACEMENT_TREE_JS + '</script></body></html>'

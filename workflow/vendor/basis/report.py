@@ -641,12 +641,15 @@ def _write_report(run: dict, samples: list[dict], records: list[dict], deep_reco
     findings = _all_findings(combined)
     recommendations = build_recommendations(samples, records, deep_records)
     artifacts = {"html": outdir / "report.html", "findings_tsv": outdir / "findings.tsv",
+                 "screening_findings_tsv": outdir / "screening-findings.tsv",
                  "recommendations_tsv": outdir / "recommendations.tsv", "evidence_json": outdir / "evidence.json",
                  "methods_txt": outdir / "methods.txt", "module_scope_tsv": outdir / "module-scope.tsv"}
     from .report_citation import write_citations
     artifacts.update({key: Path(path) for key, path in
                       write_citations(outdir, run.get("version") or None).items()})
     _write_tsv(artifacts["findings_tsv"], FINDING_COLUMNS, findings)
+    from .report_screening import write_readable_findings
+    write_readable_findings(artifacts["screening_findings_tsv"], findings)
     _write_tsv(artifacts["recommendations_tsv"], RECOMMENDATION_COLUMNS, recommendations)
     from .report_sample_scope import SCOPE_COLUMNS, module_scope_rows
     _write_tsv(artifacts["module_scope_tsv"], SCOPE_COLUMNS, module_scope_rows(run, samples, combined))
