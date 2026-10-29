@@ -21,6 +21,7 @@ from urllib.parse import quote
 
 RELOCATIONS = {
     "findings.tsv": "tables/findings.tsv",
+    "screening-findings.tsv": "tables/screening-findings.tsv",
     "recommendations.tsv": "tables/recommendations.tsv",
     "module-scope.tsv": "tables/module-scope.tsv",
     "deferred-candidates.tsv": "tables/deferred-candidates.tsv",

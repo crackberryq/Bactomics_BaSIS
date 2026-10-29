@@ -72,6 +72,10 @@ although enabled resources still share the setup barrier. See
 [separate reports and saved-evidence rendering](docs/REPORT_SEPARATION.md) for
 commands, disabled/provisional states and navigation behavior.
 
+The [screening findings reader](docs/READABLE_REPORTS.md) brings full source
+descriptions and recorded drug/class labels into the report. Search every saved
+finding, expand its original fields, or download the readable findings table.
+
 For follow-up that must never schedule screening, use the separate
 [`Followup.smk` entry point](docs/REVIEWED_FOLLOWUP.md) after reviewing a completed
 screening report. It verifies saved inputs and stops on missing or stale

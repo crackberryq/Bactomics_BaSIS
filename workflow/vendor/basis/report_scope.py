@@ -6,7 +6,7 @@ from pathlib import Path
 
 # Flat exports belong to the standalone renderer. The workflow renderer moves
 # some into metadata/tables and adds its own navigation and completion exports.
-_FLAT_OUTPUTS = ("report.html", "evidence.json", "findings.tsv", "recommendations.tsv",
+_FLAT_OUTPUTS = ("report.html", "evidence.json", "findings.tsv", "screening-findings.tsv", "recommendations.tsv",
                  "module-scope.tsv", "deferred-candidates.tsv", "methods.txt",
                  "run-summary.json", "run-summary.tsv", "report-navigation.json",
                  "CITATION.cff", "CITATION.txt", "BaSIS.bib", "BaSIS.ris")

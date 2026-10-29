@@ -488,5 +488,40 @@
         "updated_sha256": "acba1a20f6efad948f6e72d71288a22f6aa7ab5898971a634618583969cdff06"
       }
     ]
+  },
+  "readable_screening_report_update": {
+    "base_commit": "1d2d96b266e98d956254d1a518ff5b437ab7a10a",
+    "scope": "Display saved source descriptions, classifications and original fields in searchable, paginated screening reports and a readable TSV. Preserve native records and their evidence classifications.",
+    "native_analysis_settings_changed": false,
+    "scientific_thresholds_changed": false,
+    "evidence_classification_changed": false,
+    "candidate_selection_changed": false,
+    "files": [
+      {
+        "path": "workflow/vendor/basis/report.py",
+        "base_sha256": "85c9a958f26a8f5a16325d4da5a138d3b1d936db25bd51eb6e8ade1799ce6ceb",
+        "updated_sha256": "db81e5c8e49a153b59d1db3121070569ba42e748f3dafbeacf132401eddc44d8"
+      },
+      {
+        "path": "workflow/vendor/basis/report_assets.py",
+        "base_sha256": "4fe653b1f350b7cef9351c8109fefd4a8ddfd57cc00cdf959ffcb93112f3042c",
+        "updated_sha256": "81fc929e49d5a9c413d2cf1451610e62f86c3fb6da9ae3f28ce9314840f1fdd8"
+      },
+      {
+        "path": "workflow/vendor/basis/report_dashboard.py",
+        "base_sha256": "c618b06916f82257b83c5333bde2cb7676a41a231c849bd6d9c38883ba7f17d9",
+        "updated_sha256": "bedfa04ab9d42f18c760e98d1734ab046feb0a8e7af9c8650641d8e30b76b061"
+      },
+      {
+        "path": "workflow/vendor/basis/report_scope.py",
+        "base_sha256": "2b8133c994e007bdfb06e1e2fb5a751a1299bc42f13f5caa076796b1ef24a9f5",
+        "updated_sha256": "d60d42237112890d2accea8822363af973672d7e14a182c48e2474647f9e0bae"
+      },
+      {
+        "path": "workflow/vendor/basis/report_screening.py",
+        "base_sha256": null,
+        "updated_sha256": "a3131bff4b3621f1807ad2b0bc0480f1e8f3b7fb08118cbbbc78e98d6218648a"
+      }
+    ]
   }
 }
