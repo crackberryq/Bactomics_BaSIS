@@ -221,6 +221,12 @@ class StandaloneWorkflowTests(unittest.TestCase):
         self.assertEqual(Counter(event["sample"] for event in self.events()), {"isolateA": 1, "isolateB": 2})
         for isolate in self.isolates:
             self.assertTrue((isolate / "safety/report.html").is_file())
+            page = (isolate / "safety/report.html").read_text()
+            self.assertIn("Results by tool", page)
+            self.assertIn("Tools finished", page)
+            self.assertIn("No findings reported", page)
+            self.assertIn("Read screening findings", page)
+            self.assertTrue((isolate / "safety/tables/screening-findings.tsv").is_file())
             record = json.loads((isolate / "safety/evidence/minced.json").read_text())
             self.assertEqual(record["execution_status"], "completed")
             self.assertEqual(record["metrics"]["assessed_contig_count"], 1)

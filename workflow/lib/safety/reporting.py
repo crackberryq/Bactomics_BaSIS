@@ -210,7 +210,7 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
     run = {
         "schema": "basis-snakemake-run-v1", "run_id": hashlib.sha256(serialized).hexdigest()[:20],
         "report_view": view,
-        "version": config.get("version", "0.4.0a1"), "engine": "snakemake",
+        "version": config.get("version", "0.4.0a2"), "engine": "snakemake",
         "options": {"deep": bool(deep_records), "extend": "pathogenfinder2" in seen},
         "validation_mode": config.get("validation_mode", "research_screening"),
         "enabled_modules": sorted(m for m, d in decisions.items() if d.get("requested") and m != "deepsafe"),

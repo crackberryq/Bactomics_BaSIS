@@ -4,7 +4,7 @@
   "source_tag": "v0.3.0rc8",
   "source_commit": "bedf903300e2450b1ced5f5585e8dd6b56db58c9",
   "source_version": "0.3.0rc8",
-  "standalone_version": "0.4.0a1",
+  "standalone_version": "0.4.0a2",
   "scope": "Selected scientific parsers, analysis and report functions plus their original scientific resources. Snakemake owns the standalone workflow; the previous CLI, GUI, environment managers and scheduler are not included.",
   "changed_files": [
     {
