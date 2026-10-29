@@ -294,11 +294,12 @@ def parse_isescan(path: Path) -> dict:
 def _isescan_native_zero(native: Path, assembly: Path, stdout: str, stdout_path: Path) -> dict:
     """Recognize ISEScan 1.7.3's intentional omission of result tables on zero IS.
 
-    The later no-IS marker and the earlier all-contig no-significant-hit return
+    The later no-IS marker and the earlier no-significant-hit return
     are distinct native paths. Missing output alone is never a negative result.
     Both require completed searches and a nonempty generated proteome. The
-    early return additionally requires exact input-contig coverage and binding
-    of the searches to this attempt's proteome.
+    early return binds the searches to this attempt's proteome and checks its
+    warnings against raw-hit contigs. Upstream does not warn for every input
+    contig: pred.py v1.7.3 groups only the rows returned by HMMER.
     """
     if not isinstance(stdout, str):
         raise ValueError("ISEScan output table missing; no verifiable completion transcript")
@@ -308,6 +309,7 @@ def _isescan_native_zero(native: Path, assembly: Path, stdout: str, stdout_path:
     expected = str(Path(assembly.parent.name) / assembly.name)
     no_hit_format = "isescan_1.7.3_terminal_marker"
     assessed_contigs = None
+    warning_contigs = None
     if len(markers) == 1:
         index, literal = markers[0]
         try:
@@ -319,18 +321,22 @@ def _isescan_native_zero(native: Path, assembly: Path, stdout: str, stdout_path:
     elif markers:
         raise ValueError("Ambiguous ISEScan zero-result markers")
     else:
-        # v1.7.3 pred.py returns before creating tables when every contig has
-        # no significant protein-search hit. Recognize this exact format only.
+        # v1.7.3 pred.py returns before creating tables when no raw-hit group
+        # survives filtering. The last warning summarizes just those groups;
+        # when both searches have no rows, its contig list is empty.
         prefix = "Warning: no significant hit with E-value <= 1e-10 found for "
         warnings = [(i, line[len(prefix):]) for i, line in enumerate(lines)
                     if line.startswith(prefix)]
         contigs = read_fasta(assembly)
         if any("," in cid for cid in contigs):
             raise ValueError("Ambiguous contig identifier in ISEScan no-hit transcript")
-        if (len(warnings) != len(contigs) + 1
-                or Counter(value for _, value in warnings[:-1]) != Counter(contigs.keys())
-                or Counter(warnings[-1][1].split(",")) != Counter(contigs.keys())):
-            raise ValueError("ISEScan missing table: no-hit transcript does not cover every input contig")
+        if not warnings:
+            raise ValueError("ISEScan missing table: no native no-hit summary")
+        summary = warnings[-1][1].split(",") if warnings[-1][1] else []
+        warning_contigs = set(summary)
+        if (len(summary) != len(warning_contigs) or not warning_contigs.issubset(contigs)
+                or Counter(value for _, value in warnings[:-1]) != Counter(summary)):
+            raise ValueError("ISEScan no-hit warning inventory is inconsistent or names unknown contigs")
         starts = [i for i, line in enumerate(lines) if line.startswith("ISEScan starts at ")]
         begins = [i for i, line in enumerate(lines) if line.startswith("pred begins at ")]
         ends = [i for i, line in enumerate(lines) if line.startswith("End in pred ")]
@@ -340,13 +346,13 @@ def _isescan_native_zero(native: Path, assembly: Path, stdout: str, stdout_path:
                         <= warnings[-1][0] < ends[0] < finishes[0])
                 or any(line.strip() for line in lines[finishes[0] + 1:])
                 or any(re.match(r"(?:Traceback|ERROR\b|Error:)", line) for line in lines)):
-            raise ValueError("ISEScan all-contig no-hit transcript is incomplete or conflicting")
+            raise ValueError("ISEScan no-hit transcript is incomplete or conflicting")
         translation = f"Translating genome into proteome for {assembly} , return  0"
         if sum(line == translation for line in lines[:begins[0]]) != 1:
             raise ValueError("ISEScan no-hit transcript does not bind successful translation to this assembly")
         index = warnings[-1][0]
-        assessed_contigs = sorted(contigs)
-        no_hit_format = "isescan_1.7.3_all_contigs_no_significant_hits"
+        assessed_contigs = []
+        no_hit_format = "isescan_1.7.3_no_significant_hits"
     tail = lines[index + 1:]
     if not any(line.startswith("End in pred ") for line in tail) or not any(
             line.startswith("ISEScan ends at ") for line in tail):
@@ -362,9 +368,11 @@ def _isescan_native_zero(native: Path, assembly: Path, stdout: str, stdout_path:
             if (len(parts) != 4 or parts[3] not in {"+", "-"}
                     or not parts[1].isdigit() or not parts[2].isdigit()):
                 raise ValueError("Unrecognized ISEScan generated-protein identifier")
+            if (parts[0] not in contigs
+                    or not 1 <= int(parts[1]) <= int(parts[2]) <= len(contigs[parts[0]])):
+                raise ValueError("ISEScan generated protein is outside the input assembly")
             translated_contigs.add(parts[0])
-        if translated_contigs != set(assessed_contigs):
-            raise ValueError("ISEScan generated proteins do not cover the declared assessed contigs")
+        assessed_contigs = sorted(translated_contigs)
     searches = [native / "hmm" / assembly.parent.name / (name + "." + assembly.name + ".faa")
                 for name in ("clusters.single.faa", "clusters.faa.hmm")]
     raw_hit_contigs = set()
@@ -398,17 +406,28 @@ def _isescan_native_zero(native: Path, assembly: Path, stdout: str, stdout_path:
                 if evalue <= 1e-10:
                     raise ValueError(f"ISEScan no-hit transcript conflicts with a significant HMMER hit: {path}")
                 raw_hit_contigs.add(fields[0].rsplit("_", 3)[0])
-    if assessed_contigs is not None and raw_hit_contigs != set(assessed_contigs):
-        raise ValueError("ISEScan raw search hits do not cover every no-hit warning contig")
+    if warning_contigs is not None and raw_hit_contigs != warning_contigs:
+        raise ValueError("ISEScan raw search hits do not match the no-hit warning contigs")
     metrics = {"insertion_sequence_count": 0, "native_no_hit_format": no_hit_format}
     if assessed_contigs is not None:
         metrics.update(assessed_contigs=assessed_contigs,
                        assessed_contig_count=len(assessed_contigs),
-                       completion_check="all_contig_no_hit_transcript_and_completed_searches")
-    return _result([], [stdout_path, proteins, *searches],
+                       input_contig_count=len(contigs),
+                       no_hit_warning_contigs=sorted(warning_contigs),
+                       contigs_without_predicted_proteins=sorted(set(contigs) - set(assessed_contigs)),
+                       completion_check="no_hit_transcript_and_completed_searches")
+    result = _result([], [stdout_path, proteins, *searches],
                    metrics=metrics,
                    notes=["ISEScan reported a verified native no-hit result after completed protein searches; native zero-hit runs omit their result TSV.",
                           "A negative prediction does not establish absence of all insertion sequences."])
+    unassessed = metrics.get("contigs_without_predicted_proteins", [])
+    if unassessed:
+        result.update(scope_incomplete=True, interpretation="inconclusive",
+                      reason="isescan_contigs_without_predicted_proteins")
+        result["notes"].append(
+            "Native execution completed, but no proteins were generated for these input contigs; "
+            "they have no protein-search assessment: " + ", ".join(unassessed))
+    return result
 
 
 _ICE_CATEGORIES = ("Complete ICE", "Complete IME", "Conjugation module", "Mobilizable element",
