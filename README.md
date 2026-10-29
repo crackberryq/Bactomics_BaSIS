@@ -1,14 +1,14 @@
 # BaSIS AWARE · standalone Snakemake workflow
 
-**Version 0.4.0a1 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
+**Version 0.4.0a2 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
 
 This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
 
 The [acceptance checklist](docs/ACCEPTANCE.md) distinguishes completed software
 checks from the native integration evidence still required before beta promotion.
 The release branch is `basis-aware`, and the product name is **BaSIS AWARE**,
-consistent with **HybAs AWARE**. See the [0.4.0a1 release notes](docs/RELEASE_0.4.0a1.md).
-The installation command below selects `basis-aware`; use `--branch v0.4.0a1`
+consistent with **HybAs AWARE**. See the [0.4.0a2 release notes](docs/RELEASE_0.4.0a2.md).
+The installation command below selects `basis-aware`; use `--branch v0.4.0a2`
 instead to check out the fixed alpha release.
 
 ## Install the workflow controller
@@ -75,6 +75,11 @@ commands, disabled/provisional states and navigation behavior.
 The [screening findings reader](docs/READABLE_REPORTS.md) brings full source
 descriptions and recorded drug/class labels into the report. Search every saved
 finding, expand its original fields, or download the readable findings table.
+This format is generated automatically by the normal `BaSIS.smk` run, including
+runs launched through Bactologix using this checkout. **Results by tool** appears
+before technical input details and distinguishes no findings, inconclusive
+results and incomplete assessments. **Tools finished** counts execution only.
+No separate report-format setting or manual Python refresh is needed for a new run.
 
 For follow-up that must never schedule screening, use the separate
 [`Followup.smk` entry point](docs/REVIEWED_FOLLOWUP.md) after reviewing a completed
