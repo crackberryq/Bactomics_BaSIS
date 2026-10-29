@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -108,6 +109,29 @@ class ScreeningBrowserTests(unittest.TestCase):
         self.assertEqual(page.locator("#finding-table tbody tr:visible").count(), 1)
         page.emulate_media(media="print")
         self.assertEqual(page.locator("#finding-table tbody tr:visible").count(), 303)
+
+    def test_tool_summary_opens_all_saved_groups_for_exact_sample(self):
+        saved = json.loads((self.root / "evidence.json").read_text())
+        other = "Synthetic-sample"
+        saved["samples"].append({"sample_id": other, "input_mode": "external"})
+        saved["records"].append({"sample_id": other, "module": "rgi", "execution_status": "completed",
+                                 "interpretation": "detected", "findings": [synthetic_finding(module="rgi", sample_id=other)]})
+        write_report(saved["run"], saved["samples"], saved["records"], [], self.root)
+        page = self.page(viewport={"width": 1440, "height": 1000})
+        self.assertEqual(page.locator('a[href="#extend"]').count(), 0)
+        self.assertTrue(page.locator('#screens').evaluate("e => e.compareDocumentPosition(document.getElementById('inputs')) & Node.DOCUMENT_POSITION_FOLLOWING"))
+        page.locator('[data-findings-tool="rgi"][data-findings-sample="synthetic-sample"]').click()
+        rows = page.locator("#finding-table tbody tr:visible")
+        self.assertEqual(rows.count(), 1)
+        self.assertIn("synthetic_exploratory", rows.inner_text())
+        self.assertEqual(page.locator("#finding-group").input_value(), "")
+        self.assertEqual(page.locator("#finding-sample").input_value(), "synthetic-sample")
+        self.assertIn("Exploratory", rows.inner_text())
+        page.goto((self.root / "report.html").as_uri())
+        self.screenshot(page, "reading-flow-overview.png")
+        page.locator("#tool-results").scroll_into_view_if_needed()
+        self.screenshot(page, "reading-flow-tools.png")
+        self.assertEqual(self.errors, [])
 
 
 if __name__ == "__main__":

@@ -524,6 +524,7 @@ JS = r"""
 
   var findingSearch = document.getElementById('finding-search');
   var findingModule = document.getElementById('finding-module');
+  var findingSample = document.getElementById('finding-sample');
   var findingGroup = document.getElementById('finding-group');
   var findingRows = Array.prototype.slice.call(document.querySelectorAll('#finding-table tbody tr'));
   var findingCount = document.getElementById('finding-count');
@@ -538,7 +539,9 @@ JS = r"""
     var query = valueOf(findingSearch);
     var matches = findingRows.filter(function (row) {
       var text = (row.getAttribute('data-search') || row.textContent || '').toLowerCase();
-      return containsTerms(text, query) && matchesFilter(row, 'module', findingModule) && matchesFilter(row, 'group', findingGroup);
+      return containsTerms(text, query) && matchesFilter(row, 'module', findingModule)
+        && (!findingSample || !findingSample.value || row.getAttribute('data-sample') === findingSample.value)
+        && matchesFilter(row, 'group', findingGroup);
     });
     var pages = Math.max(1, Math.ceil(matches.length / findingPageSize));
     findingPage = Math.max(0, Math.min(findingPage, pages - 1));
@@ -554,13 +557,22 @@ JS = r"""
     if (findingNext) { findingNext.disabled = findingPage >= pages - 1; }
     if (findingPageLabel) { findingPageLabel.textContent = 'Page ' + (findingPage + 1) + ' of ' + pages; }
   }
-  [findingSearch, findingModule, findingGroup].forEach(function (control) {
+  [findingSearch, findingModule, findingSample, findingGroup].forEach(function (control) {
     if (control) { control.addEventListener(control === findingSearch ? 'input' : 'change', function () { filterFindings(true); }); }
   });
   if (findingPrev) { findingPrev.addEventListener('click', function () { findingPage -= 1; filterFindings(false); }); }
   if (findingNext) { findingNext.addEventListener('click', function () { findingPage += 1; filterFindings(false); }); }
   if (findingCount) { findingCount.setAttribute('aria-live', 'polite'); findingCount.setAttribute('aria-atomic', 'true'); }
   if (findingCount) { filterFindings(); }
+  document.querySelectorAll('[data-findings-tool]').forEach(function (link) {
+    link.addEventListener('click', function () {
+      if (findingSearch) { findingSearch.value = ''; }
+      if (findingModule) { findingModule.value = link.getAttribute('data-findings-tool'); }
+      if (findingSample) { findingSample.value = link.getAttribute('data-findings-sample'); }
+      if (findingGroup) { findingGroup.value = ''; }
+      filterFindings(true);
+    });
+  });
 
   document.querySelectorAll('[data-action]').forEach(function (button) {
     button.addEventListener('click', function () {

@@ -523,5 +523,35 @@
         "updated_sha256": "a3131bff4b3621f1807ad2b0bc0480f1e8f3b7fb08118cbbbc78e98d6218648a"
       }
     ]
+  },
+  "report_reading_flow_update": {
+    "base_commit": "30a5b15dbb29dd41b643e508d96b8b1858225ff0",
+    "scope": "Present saved screening results before technical context; explain each recorded tool outcome and distinguish execution completion from incomplete assessment. Add exact tool/sample navigation with original evidence groups.",
+    "native_analysis_settings_changed": false,
+    "scientific_thresholds_changed": false,
+    "evidence_classification_changed": false,
+    "candidate_selection_changed": false,
+    "files": [
+      {
+        "path": "workflow/vendor/basis/report_assets.py",
+        "base_sha256": "81fc929e49d5a9c413d2cf1451610e62f86c3fb6da9ae3f28ce9314840f1fdd8",
+        "updated_sha256": "a03a4de0f2ec7d268665689d8cb0640af60d2066601b52f32170f956f53860cc"
+      },
+      {
+        "path": "workflow/vendor/basis/report_dashboard.py",
+        "base_sha256": "bedfa04ab9d42f18c760e98d1734ab046feb0a8e7af9c8650641d8e30b76b061",
+        "updated_sha256": "a6f76f4ff8cbadf7cc2aa72b5c8cb0dc531dbe704ac255423daa17422315d6e7"
+      },
+      {
+        "path": "workflow/vendor/basis/report_screening.py",
+        "base_sha256": "a3131bff4b3621f1807ad2b0bc0480f1e8f3b7fb08118cbbbc78e98d6218648a",
+        "updated_sha256": "1e57bb7d71da894ff44ba8ef7b1396c25fc57fa9a4bec2a2babcc9487879a089"
+      },
+      {
+        "path": "workflow/vendor/basis/report_overview.py",
+        "base_sha256": null,
+        "updated_sha256": "f8f16c7eac9282ccc5c9c44b1e909ec8a45b82042d476bacdaf0c4ea73eeb8bc"
+      }
+    ]
   }
 }
