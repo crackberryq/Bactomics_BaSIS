@@ -18,16 +18,18 @@ execution or the source version used by an older saved run.
 |---|---|---|
 | Source, citation and release identity | [BaSIS release](https://github.com/crackberryq/Bactomics_BaSIS/releases/tag/v0.4.0a2) | Record the final beta commit and matching metadata |
 | Python 3.11/3.12, report browser and Conda deployment/recovery | [BaSIS checks](https://github.com/crackberryq/Bactomics_BaSIS/actions/runs/40883511632) passed on the baseline | Repeat required CI on the final beta commit |
-| Workflow failure/resume, unchanged rerun and report-only refresh | Covered by synthetic orchestration acceptance in the checks above | Retain the corresponding native pilot records |
+| Workflow failure/resume and report-only refresh | Covered by synthetic orchestration acceptance in the checks above | Retain the corresponding native pilot records |
 | Bactologix adapter, application browser and environment deployment | [Bactologix checks](https://github.com/crackberryq/Bactologix/actions/runs/40885417060) passed with the baseline | Support and test the exact beta release commit |
-| Clean installation and complete native pilot | No reviewable native acceptance bundle is recorded here | Retain platform, run commit, configuration, setup/execution logs, results and resource records |
-| Native no-op rerun, interruption/resume and resource reuse | Not established by the synthetic fixtures | Retain before/after observations and execution logs from the pilot |
+| Native AMRFinder workflow through report generation | [Inspected pilot log](validation/native-screening-pilot-2026-10-29.md) records all 10 requested workflow steps complete on v0.4.0a2 | Other analysis modules and report contents/links are outside this log's verified scope |
+| Native unchanged rerun | [Second invocation](validation/native-screening-pilot-2026-10-29.md#unchanged-rerun) of the same run and source reports no work to do | No before/after artifact hash or modification-time inventory was supplied |
+| Clean installation and native coverage of advertised configurations | Reuse of an existing environment was exercised by the pilot | Retain clean-install, platform/configuration and resource-use evidence for each scope advertised as tested |
+| Native interruption/resume and resource reuse after interruption | Not established by the completed run or no-op rerun | Retain a controlled recovery record; the ordinary no-op is not an interruption test |
 | Separate screening/follow-up reports and optional follow-up | Software checks exist; native follow-up acceptance remains unrecorded | Record exercised scope and preserve screening files; label experimental coverage explicitly |
 
-A successful application update, a report that opens, or a report-only refresh
-is useful evidence for that operation. It does not by itself demonstrate a
-complete native run on the new source. Record the exact run commit and distinguish
-user observations from inspected execution evidence.
+The inspected pilot and unchanged-rerun logs establish the limited software
+outcomes stated above. A successful application update, a report that opens, or
+a report-only refresh is evidence for that operation. Record the exact run
+commit and distinguish user observations from inspected execution evidence.
 
 ## Complete the acceptance record
 
