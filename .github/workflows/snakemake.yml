@@ -39,7 +39,7 @@ jobs:
         env:
           BASIS_TEST_REPORT_BROWSER: '1'
           BASIS_REPORT_SCREENSHOT_DIR: report-browser-artifacts
-        run: python -m unittest discover -s tests -p test_report_screening_browser.py -v
+        run: python -m unittest discover -s tests -p 'test_report*_browser.py' -v
       - name: Preserve synthetic report screenshots
         if: always()
         uses: actions/upload-artifact@v4

@@ -273,6 +273,13 @@ previews the selected result-folder renames; `--apply` archives them after
 checking that workflow processes have stopped. Keep the same ordered configuration
 overlays. Database and environment caches remain outside those result folders.
 
+### Sharing through Teams and OneDrive
+
+For Teams/OneDrive sharing, use the [portable sharing export](docs/TEAMS_SHARING.md).
+It creates a ZIP with short extracted paths, a searchable original-file index,
+checksums, and linked offline BaSIS reports. It works with existing saved results;
+the live analysis directories and cache identities are preserved.
+
 ### Linux result storage for WSL
 
 When samples live under `/mnt/c`, retaining and verifying thousands of CRISPR
