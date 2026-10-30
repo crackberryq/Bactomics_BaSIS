@@ -85,6 +85,9 @@ acceptance work are tracked in [beta preparation](BETA_READINESS.md).
   budget deferral, missing references and inconclusive or failed follow-up must
   retain review accounting. A nonempty native pilot and scientific review of
   the escalation policy remain pending independently of software-test success.
+- Complete the [Bactologix follow-up source handoff](AWARE_TO_REPORT.md): a newer
+  installation must not be mistaken for an upgrade of a frozen screening run.
+  Record the verified follow-up implementation and explicit review scope.
 - Preserve clean-install and native pilot evidence for each platform and
   configuration advertised as tested. Untested configurations remain explicit.
 - Verify setup, screening, both report bundles, opt-in follow-up, unchanged rerun,

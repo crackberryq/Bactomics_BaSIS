@@ -172,10 +172,18 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
             if any(c.get("sample_id") not in (None, "", sid) for c in record.get("candidates", [])):
                 raise ValueError("DeepSafe candidate sample identity mismatch")
             record["completion_summary"] = completion_summary(record)
-            # A completed module with a failed selected candidate is inconsistent.
-            if status == "completed" and any(c.get("selected") and c.get("execution") != "completed"
-                                             for c in record.get("candidates", [])):
-                raise ValueError("Completed DeepSafe record contains unfinished selected candidates")
+            # Finalization can finish with a terminal abstention (for example,
+            # unavailable query or references). Keep that unassessed scope in
+            # the report; failed or still-running work remains inconsistent.
+            if status == "completed":
+                for candidate in record.get("candidates", []):
+                    if not candidate.get("selected"):
+                        continue
+                    if candidate.get("execution") not in {"completed", "not_assessed"}:
+                        raise ValueError("Completed DeepSafe record contains unfinished selected candidates")
+                    if candidate.get("execution") == "not_assessed" and (
+                            not isinstance(candidate.get("reason"), str) or not candidate["reason"].strip()):
+                        raise ValueError("Unassessed DeepSafe candidate requires an explicit reason")
             deep_records.append(record)
         else:
             records.append(record)

@@ -263,7 +263,8 @@ class SavedFollowupContext:
         return str(self.root / "envs/deepsafe.yml")
 
     def followup_report_targets(self):
-        return [str(self.safety / "deepsafe-report/report.html")]
+        return [str(self.safety / "deepsafe-report" / relative)
+                for relative in ("report.html", "tables/amr-review.tsv")]
 
     def publish(self):
         verify_sources(self.snapshot["sources"])

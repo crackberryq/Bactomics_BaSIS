@@ -5,6 +5,9 @@ can require investigation even when DeepSafe is off, a manual filter excludes it
 its candidate is deferred by a budget, or follow-up fails or is inconclusive.
 Completed execution never closes the review question.
 
+See the [end-to-end walkthrough and integration audit](AWARE_TO_REPORT.md) for
+the sequence from saved screening through AWARE, DeepSafe and report exports.
+
 This first scope covers **reported AMRFinder AMR findings**. It does not search
 again, lower native screening thresholds, recover rejected alignments, infer a
 resistance phenotype, or classify an organism as safe. Other modules retain their

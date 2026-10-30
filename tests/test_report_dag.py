@@ -29,8 +29,10 @@ class ReportTargetTests(unittest.TestCase):
 
     def test_enabled_scope_has_two_independent_report_targets_per_sample(self):
         context = self.context(True)
-        screening = [path + "/safety/report.html" for path in context.samples]
-        followup = [path + "/safety/deepsafe-report/report.html" for path in context.samples]
+        screening = [path + "/safety/" + relative for path in context.samples
+                     for relative in ("report.html", "tables/amr-review.tsv")]
+        followup = [path + "/safety/deepsafe-report/" + relative for path in context.samples
+                    for relative in ("report.html", "tables/amr-review.tsv")]
         self.assertEqual(context.screening_report_targets(), screening)
         self.assertEqual(context.followup_report_targets(), followup)
         self.assertEqual(context.report_targets(), screening + followup)
@@ -98,17 +100,17 @@ class IndependentReportDagTests(unittest.TestCase):
             "from pathlib import Path\nimport sys\n"
             f"ROOT = Path({str(self.workflow_root)!r})\nPYTHON = sys.executable\n"
             f"CODE_PATH = {str(self.workflow_root / 'workflow/lib') + ':' + str(self.workflow_root / 'workflow/vendor')!r}\n"
+            "sys.path[:0] = CODE_PATH.split(':')\n"
+            "from safety.context import SafetyContext\n"
             "class Context:\n"
             f"    deep_enabled = {enabled!r}\n"
             f"    samples = {samples!r}\n"
             "    def evidence_targets(self, isolate):\n"
             "        return [isolate + '/safety/evidence/minced.json']\n"
             "    def screening_report_targets(self):\n"
-            "        if not self.samples: raise ValueError('No samples selected; use setup target')\n"
-            "        return [s + '/safety/report.html' for s in self.samples]\n"
+            "        return SafetyContext.screening_report_targets(self)\n"
             "    def followup_report_targets(self):\n"
-            "        if not self.samples: raise ValueError('No samples selected; use setup target')\n"
-            "        return [s + '/safety/deepsafe-report/report.html' for s in self.samples] if self.deep_enabled else []\n"
+            "        return SafetyContext.followup_report_targets(self)\n"
             "    def report_targets(self):\n"
             "        return self.screening_report_targets() + self.followup_report_targets()\n"
             "CTX = Context()\n"
@@ -165,6 +167,19 @@ class IndependentReportDagTests(unittest.TestCase):
         self.assertTrue(report.is_file())
         self.assertFalse((self.safety / "report.html").exists())
         self.assertIn("Provisional", report.read_text())
+
+    def test_missing_screening_review_export_is_regenerated_from_saved_evidence(self):
+        first = self.snake("screening_reports")
+        self.assertEqual(first.returncode, 0, first.stdout[-6000:])
+        export = self.safety / "tables/amr-review.tsv"
+        expected = export.read_bytes()
+        source = self.safety / "evidence/minced.json"
+        original = (source.read_bytes(), source.stat().st_mtime_ns)
+        export.unlink()
+        restored = self.snake("screening_reports")
+        self.assertEqual(restored.returncode, 0, restored.stdout[-6000:])
+        self.assertEqual(export.read_bytes(), expected)
+        self.assertEqual((source.read_bytes(), source.stat().st_mtime_ns), original)
 
     def test_summary_helper_edit_refreshes_saved_evidence_report_directly(self):
         isolated = self.work / "isolated-workflow"
