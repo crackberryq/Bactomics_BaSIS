@@ -8,6 +8,7 @@ REPORTING_SOURCE = [str(Path(ROOT) / "workflow/lib/safety" / name)
 ] + [str(Path(ROOT) / "workflow/vendor/basis/run_summary.py")]
 REPORTING_SOURCE.append(str(Path(ROOT) / "workflow/vendor/basis/deep_workflow.py"))
 REPORTING_SOURCE.append(str(Path(ROOT) / "workflow/vendor/basis/deep_reporting.py"))
+REPORTING_SOURCE.append(str(Path(ROOT) / "workflow/vendor/basis/amr_review.py"))
 
 
 def safety_report_evidence(wildcards):

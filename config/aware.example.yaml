@@ -4,6 +4,7 @@
 deep:
   aware:
     enabled: true
+    scope: amrfinder-review  # all-supported restores broader legacy admission.
     preset: auto-medium  # auto-strict | auto-medium | auto-loose
     # Omit overrides to use the selected preset. Explicit values always win.
     queues: {}

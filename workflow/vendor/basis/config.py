@@ -45,7 +45,7 @@ def default_config() -> dict:
             "modules": modules, "sample_module_overrides": {},
             "deep": {"enabled": False, "motifs": True, "motif_rules": None, "prosite_snapshot": None, "prosite_profiles": False, "profiles_dir": None, "reference_fasta": None, "reference_metadata": None,
                      "reference_search_tool": "blastp", "maximum_candidates": 5,
-                     "aware": {"enabled": True, "preset": "auto-medium", "tools": {}, "queues": {}},
+                     "aware": {"enabled": True, "preset": "auto-medium", "scope": "amrfinder-review", "tools": {}, "queues": {}},
                      "maximum_attention_candidates": 20, "attention_queue_for_mixed_evidence": False, "maximum_exploratory_candidates": 20,
                      "include_exploratory": True, "include_stress": False, "max_references": 40,
                      "min_identity": 30, "min_coverage": 70, "phylogeny": True,

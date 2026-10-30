@@ -81,6 +81,10 @@ acceptance work are tracked in [beta preparation](BETA_READINESS.md).
   record the exact release commit. Installation instructions, version metadata
   and release notes must describe that same build.
 - Resolve confirmed user-visible correctness defects and retain regression tests.
+- Preserve the [AFB01 AMRFinder review regression](AMR_REVIEW.md): preset changes,
+  budget deferral, missing references and inconclusive or failed follow-up must
+  retain review accounting. A nonempty native pilot and scientific review of
+  the escalation policy remain pending independently of software-test success.
 - Preserve clean-install and native pilot evidence for each platform and
   configuration advertised as tested. Untested configurations remain explicit.
 - Verify setup, screening, both report bundles, opt-in follow-up, unchanged rerun,
