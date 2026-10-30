@@ -14,7 +14,7 @@ def safety_deep_sources(*, finalization=False):
              "references.py", "motifs.py", "prosite.py",
              "prosite_profiles.py", "placement.py", "placement_panels.py",
              "placement_native.py", "placement_scoring.py", "placement_diagnostics.py",
-             "candidate_labels.py", "deep_workflow.py", "aware.py")
+             "candidate_labels.py", "deep_workflow.py", "aware.py", "amr_review.py")
     # Completion/reference summaries are consumed during finalization, not by
     # the preceding analyses. Keep their provenance without rerunning those
     # analyses when only summary formatting or status semantics change.

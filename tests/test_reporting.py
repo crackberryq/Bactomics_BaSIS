@@ -78,6 +78,28 @@ class ReportTests(unittest.TestCase):
         self.assertIn("sample1:icescreen", run["incomplete_modules"])
         self.assertEqual(run["module_decisions"]["sample1"]["icescreen"]["action"], "withheld")
 
+    def test_terminal_unassessed_candidate_renders_with_incomplete_scope(self):
+        candidate = self.deep["candidates"][0]
+        candidate.update(execution="not_assessed", reason="query_protein_not_found")
+        self.write("evidence/deepsafe.json", self.deep)
+        run, _, deep = aggregate(self.sample, self.config, [self.amr_path, self.deep_path], view="deep")
+        self.assertEqual(run["completeness"], "incomplete")
+        self.assertEqual(deep[0]["completion_summary"]["selected_execution"], "incomplete")
+        self.assertEqual(deep[0]["completion_summary"]["accepted_completed_selected_candidates"], 0)
+        self.assertEqual(deep[0]["candidates"][0]["execution"], "not_assessed")
+        for reason in (None, "", " ", False):
+            candidate["reason"] = reason
+            self.write("evidence/deepsafe.json", self.deep)
+            with self.subTest(reason=reason), self.assertRaisesRegex(ValueError, "explicit reason"):
+                aggregate(self.sample, self.config, [self.amr_path, self.deep_path], view="deep")
+
+    def test_completed_parent_still_rejects_failed_or_unfinished_candidates(self):
+        for status in ("failed", "pending", "running", "deferred", "unknown", None):
+            self.deep["candidates"][0].update(execution=status, reason="synthetic")
+            self.write("evidence/deepsafe.json", self.deep)
+            with self.subTest(status=status), self.assertRaisesRegex(ValueError, "unfinished selected"):
+                aggregate(self.sample, self.config, [self.amr_path, self.deep_path], view="deep")
+
     def test_completed_process_with_partial_assessment_retains_incomplete_scope(self):
         config = {"modules": {"integronfinder": {"enabled": True}},
                   "module_decisions": {"integronfinder": {

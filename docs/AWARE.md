@@ -6,6 +6,11 @@ qualifying source, then applies the existing candidate budgets. Original native
 outputs, normalized evidence and confidence labels are retained. Weak findings
 do not become qualifying evidence because several tools reported them.
 
+The standard scope is now **`amrfinder-review`**: reported AMRFinder AMR review
+cues are selected before budgets. See [AMRFinder review](AMR_REVIEW.md) for exact
+methods, retained review obligations, exports and the AFB01 regression. Use
+**`all-supported`** explicitly for the previous broad policy described below.
+
 ## Configuration
 
 DeepSafe is disabled by default (`deep.enabled: false`). After explicit opt-in,
@@ -29,12 +34,14 @@ a separately justified, method-specific review policy and the relevant evidence.
 
 Set `deep.aware.enabled: false` explicitly to retain legacy admission. Low-level
 legacy API calls without an AWARE block retain legacy behavior; saved historical
-evidence is never reinterpreted by report rendering.
+calls and analysis results are never changed by report rendering. Current,
+version-labelled review cues may be derived from that evidence in refreshed reports.
 
 ```yaml
 deep:
   aware:
     enabled: true
+    scope: amrfinder-review
     preset: auto-medium
     tools:
       vfdb:
@@ -53,11 +60,13 @@ every supported field. Native screening settings under `modules` and reference
 retrieval settings such as `deep.min_identity` remain separate. A looser AWARE
 preset cannot recover matches that an upstream search never emitted.
 
-## Preset definitions
+## Preset definitions for all-supported scope
 
 These are transparent **computational workload policies**, not validated
 sensitivity/specificity thresholds or organism safety ratings. Their values need
 study-specific validation before use as a scientific decision rule.
+The AMRFinder review scope uses its documented review methods across all presets;
+the AMRFinder row below applies only to `scope: all-supported`.
 
 | Setting | auto-strict | auto-medium | auto-loose |
 |---|---|---|---|

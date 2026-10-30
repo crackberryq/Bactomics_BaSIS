@@ -8,6 +8,7 @@ REPORTING_SOURCE = [str(Path(ROOT) / "workflow/lib/safety" / name)
 ] + [str(Path(ROOT) / "workflow/vendor/basis/run_summary.py")]
 REPORTING_SOURCE.append(str(Path(ROOT) / "workflow/vendor/basis/deep_workflow.py"))
 REPORTING_SOURCE.append(str(Path(ROOT) / "workflow/vendor/basis/deep_reporting.py"))
+REPORTING_SOURCE.append(str(Path(ROOT) / "workflow/vendor/basis/amr_review.py"))
 
 
 def safety_report_evidence(wildcards):
@@ -38,6 +39,7 @@ if not getattr(CTX, "followup_only", False):
             evidence="{isolate}/safety/evidence.json",
             findings="{isolate}/safety/tables/findings.tsv",
             readable_findings="{isolate}/safety/tables/screening-findings.tsv",
+            amr_review="{isolate}/safety/tables/amr-review.tsv",
             recommendations="{isolate}/safety/tables/recommendations.tsv",
             scope="{isolate}/safety/tables/module-scope.tsv",
             summary_tsv="{isolate}/safety/tables/run-summary.tsv",
@@ -86,6 +88,7 @@ if CTX.deep_enabled:
             evidence="{isolate}/safety/deepsafe-report/evidence.json",
             findings="{isolate}/safety/deepsafe-report/tables/findings.tsv",
             readable_findings="{isolate}/safety/deepsafe-report/tables/screening-findings.tsv",
+            amr_review="{isolate}/safety/deepsafe-report/tables/amr-review.tsv",
             recommendations="{isolate}/safety/deepsafe-report/tables/recommendations.tsv",
             scope="{isolate}/safety/deepsafe-report/tables/module-scope.tsv",
             deferred="{isolate}/safety/deepsafe-report/tables/deferred-candidates.tsv",

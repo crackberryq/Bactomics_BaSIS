@@ -4,6 +4,9 @@
 deep:
   enabled: false
   maximum_candidates: 5
+  aware:
+    enabled: true
+    scope: amrfinder-review
 # Other settings inherit the saved screening configuration. No threshold
 # sentinel disables analysis, and native screening settings cannot be changed.
 

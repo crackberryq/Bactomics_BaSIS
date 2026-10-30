@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "workflow/lib"), str(ROOT / "workflow/vendor")]
 
 from basis.config import default_config
+from safety.deep import load_document
 from safety.reporting import render
 from safety.setup import validate
 
@@ -185,6 +186,123 @@ class SavedFollowupDagTests(unittest.TestCase):
         result = json.loads((self.safety / "evidence/deepsafe.json").read_text())
         self.assertEqual(result["commands"], [])
         self.assertEqual(result["effective_config"]["maximum_candidates"], 4)
+
+    def test_nonempty_amr_review_through_saved_workflow_resume_and_report(self):
+        """Real entry point and report, synthetic queries, no native binaries."""
+        sample = json.loads((self.safety / "metadata/sample.json").read_text())
+        Path(sample["assembly"]).write_text(">contig1\n" + "ATGAAATTTTAA" * 2 + "\n")
+        Path(sample["proteins"]).write_text(">synthetic_cds\nMKF\n>synthetic_second\nMKF\n")
+        Path(sample["gff"]).write_text(
+            "##gff-version 3\n"
+            "contig1\tfixture\tCDS\t1\t12\t.\t+\t0\tID=synthetic_cds;locus_tag=synthetic_cds;transl_table=11\n"
+            "contig1\tfixture\tCDS\t13\t24\t.\t+\t0\tID=synthetic_second;locus_tag=synthetic_second;transl_table=11\n")
+        validate(sample, None, self.safety / "metadata")
+        sample = json.loads((self.safety / "metadata/sample.json").read_text())
+        hashes = sample["input_validation"]["input_hashes"]
+        self.write("metadata/setup.ready.json", {"schema": "basis-snake-setup-v1",
+                   "status": "completed", "inputs": hashes, "resources": [], "environments": []})
+        config = json.loads((self.safety / "metadata/config.json").read_text())
+        config["modules"] = {name: {"enabled": True} for name in ("amrfinder", "rgi")}
+        config["deep"]["prosite_patterns"] = False
+        config_path = self.write("metadata/config.json", config)
+        findings = [{"finding_id": "synthetic-hmm-" + str(i), "tool": "amrfinder",
+                     "category": "amr", "gene": "synthetic_family", "protein_id": pid,
+                     "contig": "contig1", "start": 1 + 12 * i, "end": 12 + 12 * i,
+                     "strand": "+", "identity": 85.67 - i, "coverage": 100.,
+                     "evidence_level": "curated_model", "attributes": {
+                         "native_method": "HMM", "flags": ["family_hmm_only"], "raw": {"Method": "HMM"}}}
+                    for i, pid in enumerate(("synthetic_cds", "synthetic_second"))]
+        record = {"schema_version": 1, "sample_id": "synthetic", "module": "amrfinder",
+                  "execution_status": "completed", "input_hashes": hashes,
+                  "findings": findings, "metrics": {}, "artifacts": []}
+        sources = [self.write("evidence/amrfinder.json", record)]
+        linked = {**findings[0], "finding_id": "synthetic-linked-exact", "tool": "rgi",
+                  "identity": 100., "attributes": {"cutoff": "perfect", "nudged": False,
+                  "model_type": "protein homolog model"}}
+        sources.append(self.write("evidence/rgi.json", {**record, "module": "rgi", "findings": [linked]}))
+        render(self.safety / "metadata/sample.json", config_path, sources, self.safety,
+               view="screening", evidence_root=self.safety)
+        self.supplied["deep"].update(maximum_candidates=1,
+                                     aware={"enabled": True, "scope": "amrfinder-review"})
+        self.save_review_config()
+        original = self.snapshot()
+
+        first = self.snake("--until", "safety_deep_tree_plan")
+        self.assertEqual(first.returncode, 0, first.stdout[-12000:])
+        self.assert_retained(original)
+        self.assertFalse((self.safety / "deepsafe-report/report.html").exists())
+        prepare = load_document(self.safety / "deepsafe/states/prepare.json")
+        self.assertEqual(len(prepare["selected_candidate_ids"]), 1)
+        audit = prepare["state"]["aware_audit"]
+        self.assertEqual((audit["counts"]["findings_received"], audit["counts"]["unique_candidates"],
+                          audit["counts"]["selected_candidates"]), (3, 2, 1))
+        retained = self.snapshot()
+
+        finished = self.snake("--rerun-incomplete")
+        self.assertEqual(finished.returncode, 0, finished.stdout[-12000:])
+        self.assert_retained(retained)
+        result = json.loads((self.safety / "evidence/deepsafe.json").read_text())
+        self.assertEqual(result["commands"], [])
+        selected = next(c for c in result["candidates"] if c["selected"])
+        deferred = next(c for c in result["candidates"] if not c["selected"])
+        self.assertEqual(len(selected["source_evidence"]), 2)
+        self.assertEqual(selected["analysis_plan"]["route"], "ambiguous_amr_family_investigation")
+        self.assertEqual((selected["execution"], selected["reason"]),
+                         ("not_assessed", "reference_catalogue_not_configured"))
+        self.assertEqual(deferred["reason"], "candidate_resource_budget")
+        self.assertFalse(selected["assessment"]["function_established"])
+        for phase in ("domains", "phylogeny", "patterns", "profiles", "motifs", "placement"):
+            self.assertTrue((self.safety / "deepsafe/candidates" / selected["candidate_id"] / (phase + ".json")).is_file())
+        self.assertFalse((self.safety / "deepsafe/candidates" / deferred["candidate_id"]).exists())
+        report = self.safety / "deepsafe-report"
+        bundle = json.loads((report / "evidence.json").read_text())
+        review = bundle["amr_review"]
+        self.assertEqual(review["counts"]["investigation_findings"], 2)
+        self.assertEqual({s for row in review["rows"] for s in row["followup_status"]},
+                         {"not_assessed", "deferred"})
+        self.assertIn("AMR evidence review outstanding", (report / "report.html").read_text())
+        summary = json.loads((report / "metadata/run-summary.json").read_text())
+        self.assertEqual(summary["samples"][0]["amr_review"]["counts"], review["counts"])
+        complete = self.snapshot()
+        unchanged = self.snake("--dry-run")
+        self.assertEqual(unchanged.returncode, 0, unchanged.stdout[-6000:])
+        self.assertIn("Nothing to be done", unchanged.stdout)
+        self.assert_retained(complete)
+
+        export = report / "tables/amr-review.tsv"
+        expected = export.read_bytes()
+        export.unlink()
+        restored = self.snake()
+        self.assertEqual(restored.returncode, 0, restored.stdout[-12000:])
+        self.assertEqual(export.read_bytes(), expected)
+        self.assert_retained(original)
+        self.assert_retained({name: state for name, state in complete.items()
+                              if "/deepsafe/" in name or name.endswith("/evidence/deepsafe.json")})
+
+        # A terminal search with no eligible comparators is also unresolved.
+        # Metadata-only synthetic retrieval exercises orchestration, not search
+        # sensitivity or a native-tool validation claim.
+        fasta = self.work / "synthetic-reference.faa"
+        fasta.write_text(">synthetic-reference\nMKF\n")
+        metadata = self.work / "synthetic-reference.tsv"
+        metadata.write_text("reference_id\taccession\tfamily\tcomparison_group\trole\treview_status\tsource\n"
+                            "synthetic-reference\tTEST.1\tunrelated_synthetic\tother\treference\tunreviewed\tsynthetic_fixture\n")
+        self.supplied["deep"].update(reference_fasta=str(fasta), reference_metadata=str(metadata),
+                                     reference_search_tool="metadata")
+        self.save_review_config()
+        reviewed = self.snake()
+        self.assertEqual(reviewed.returncode, 0, reviewed.stdout[-12000:])
+        self.assert_retained(original)
+        result = json.loads((self.safety / "evidence/deepsafe.json").read_text())
+        self.assertEqual(result["commands"], [])
+        selected = next(c for c in result["candidates"] if c["selected"])
+        self.assertEqual((selected["execution"], selected["assessment"]["interpretation"]),
+                         ("completed", "unresolved"))
+        self.assertFalse(selected["assessment"]["function_established"])
+        review = json.loads((report / "evidence.json").read_text())["amr_review"]
+        self.assertEqual(review["counts"]["investigation_findings"], 2)
+        self.assertEqual({s for row in review["rows"] for s in row["followup_status"]},
+                         {"completed_unresolved", "deferred"})
 
     def test_summary_helper_edit_refreshes_only_finalization_and_report(self):
         helper = self.isolate_workflow_sources()

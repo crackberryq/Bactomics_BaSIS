@@ -12,6 +12,8 @@ import hashlib
 import json
 import math
 
+from .amr_review import VERSION as REVIEW_VERSION, REVIEW_METHODS, review_finding
+
 VERSION = "basis-aware-v1"
 EXACT_METHODS = ["ALLELE", "ALLELEP", "ALLELEX", "EXACT", "EXACTP", "EXACTX"]
 NATIVE_METHODS = EXACT_METHODS + [
@@ -54,10 +56,19 @@ def resolve_policy(config):
     supplied = config.get("aware", {"enabled": False})
     if not isinstance(supplied, dict):
         raise ValueError("deep.aware must be a mapping")
-    unknown = set(supplied) - {"enabled", "preset", "queues", "tools"}
+    unknown = set(supplied) - {"enabled", "preset", "scope", "queues", "tools"}
     if unknown:
         raise ValueError("Unknown deep.aware settings: " + str(sorted(unknown)))
     result = _preset(supplied.get("preset", "auto-medium"))
+    scope = supplied.get("scope", "all-supported")
+    if not isinstance(scope, str) or scope not in {"all-supported", "amrfinder-review"}:
+        raise ValueError("deep.aware.scope must be all-supported or amrfinder-review")
+    result["scope"] = scope
+    result["review_policy"] = REVIEW_VERSION
+    if scope == "amrfinder-review":
+        # A dedicated review scope must not inherit strict's exact-only list.
+        # Explicit tool overrides below still apply and remain auditable.
+        result["tools"]["amrfinder"]["methods"] = sorted(REVIEW_METHODS)
     enabled = supplied.get("enabled", True)
     if not isinstance(enabled, bool):
         raise ValueError("deep.aware.enabled must be boolean")
@@ -111,6 +122,13 @@ def evaluate(finding, policy, config):
     exploratory = _is_exploratory(finding) or attrs.get("passes_threshold") is False
     queue = "ml_attention" if attention else "exploratory" if exploratory else "native_screen"
     reasons, observed = [], {}
+    review = review_finding(finding)
+    if policy.get("scope") == "amrfinder-review":
+        if review is None:
+            reasons.append("outside_amrfinder_review_scope")
+        elif not review["automatic_followup"]:
+            reasons.append("manual_review_without_automatic_followup" if review["investigation_required"]
+                           else "native_call_retained_without_deep_followup")
     if category not in {"amr", "virulence", "stress", "ml_attention"}:
         reasons.append("category_outside_followup_scope")
     if category == "stress" and not config.get("include_stress", False):
@@ -130,7 +148,7 @@ def evaluate(finding, policy, config):
         if not rule["enabled"]:
             reasons.append("tool_followup_disabled")
         if tool == "amrfinder":
-            method = str(attrs.get("native_method") or "").upper()
+            method = (review["native_method"] if review else str(attrs.get("native_method") or "").upper()) or ""
             observed["native_method"] = method or None
             if method not in rule["methods"]:
                 reasons.append("native_method_not_admitted")
@@ -166,7 +184,7 @@ def evaluate(finding, policy, config):
                 reasons.append("threshold_not_met:" + field)
     return {"finding_id": finding["finding_id"], "source_record_id": finding.get("source_record_id"),
             "tool": tool, "queue": queue, "eligible": not reasons,
-            "reasons": reasons or ["tool_criteria_met"], "observed": observed}
+            "reasons": reasons or ["tool_criteria_met"], "observed": observed, "review": review}
 
 
 def identities(findings, sample):
@@ -265,7 +283,7 @@ def select(records, config, sample, policy):
                 "finding_ids": [], "source_evidence": [], "selection_reasons": [], "family_labels": [],
                 "priority": 99, "attention_rank": None, "attention_max": None,
                 "execution": "pending", "interpretation": "inconclusive",
-                "aware": {"version": VERSION, "evidence": [], "identity": []}}
+                "aware": {"version": VERSION, "scope": policy.get("scope", "all-supported"), "evidence": [], "identity": []}}
         candidate = groups[key]
         for field, value in fields.items():
             if candidate.get(field) is None and value is not None:
@@ -281,6 +299,11 @@ def select(records, config, sample, policy):
     for key, candidate in list(groups.items()):
         admitted = [(f, d) for f, d in zip(candidate["source_evidence"], candidate["aware"]["evidence"]) if d["eligible"]]
         candidate["aware"]["eligible"] = bool(admitted)
+        reviews = [d["review"] for d in candidate["aware"]["evidence"] if d.get("review")]
+        candidate["review"] = {"policy": REVIEW_VERSION,
+            "status": "requires_review" if reviews else "outside_amrfinder_review_scope",
+            "investigation_required": any(r["investigation_required"] for r in reviews),
+            "reasons": sorted({reason for r in reviews for reason in r["reasons"]})}
         candidate["aware"]["qualifying_finding_ids"] = sorted({f["finding_id"] for f, _ in admitted})
         queues = {d["queue"] for _, d in admitted}
         queue = ("native_screen" if "native_screen" in queues else
@@ -359,6 +382,9 @@ def audit(candidates, records, config):
               "selected_candidates": sum(c["selected"] for c in candidates),
               "admission_deferred": sum(c["reason"] == "aware_admission_deferred" for c in candidates),
               "budget_deferred": sum(c["reason"] == "candidate_resource_budget" for c in candidates)}
+    counts["investigation_candidates"] = sum(c.get("review", {}).get("investigation_required", False) for c in candidates)
+    counts["investigation_deferred"] = sum(c.get("review", {}).get("investigation_required", False)
+                                          and not c["selected"] for c in candidates)
     counts["findings_merged"] = counts["findings_evaluated"] - counts["unique_candidates"]
     hashes = [c.get("query", {}).get("sequence_sha256") for c in candidates if c["selected"]]
     counts["selected_queries_available"] = sum(h is not None for h in hashes)

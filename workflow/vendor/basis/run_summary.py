@@ -22,6 +22,7 @@ TSV_COLUMNS = (
     "deep_selected_execution", "deep_recorded_selected_execution", "deep_selected", "deep_completed_selected",
     "deep_accepted_completed_selected", "deep_provisional_completed_selected", "deep_failed_selected",
     "deep_not_assessed_selected", "deep_deferred", "deep_upstream_incomplete", "incomplete_requested",
+    "amr_review_status", "amr_review_findings", "amr_investigation_findings", "amr_review_policy",
 )
 
 
@@ -96,6 +97,7 @@ def build_run_summary(run, samples, records, deep_records):
     completed DeepSafe when reused. Imported counts include cached imports and
     are provenance descriptors, not an additional completion denominator.
     """
+    from .report_review import build_review_summary
     options = _options(run.get("options", {}), force=run.get("force", False))
     result = {"schema": SCHEMA, "kind": "run", "run_id": run.get("run_id"),
               "completeness": run.get("completeness", "not_recorded"),
@@ -156,11 +158,14 @@ def build_run_summary(run, samples, records, deep_records):
                 module = str(identifier)[len(sid) + 1:]
                 if not any(item["module"] == module for item in incomplete):
                     incomplete.append({"module": module, "status": "incomplete", "reason": "Recorded in run.incomplete_modules"})
+        review = build_review_summary([r for r in records if r.get("sample_id") == sid],
+                                      [r for r in deep_records if r.get("sample_id") == sid])
         result["samples"].append({"sample_id": sid,
             "completeness": "incomplete" if incomplete else "completed_requested_scope",
             "requested_modules": counts, **_scope_counts(own),
             "imported_modules": int(imported), "cache_reused": int(cache_reused) + int(deep["cache_reused"]),
-            "deepsafe": deep, "incomplete_requested": incomplete})
+            "deepsafe": deep, "incomplete_requested": incomplete,
+            "amr_review": {k: v for k, v in review.items() if k != "rows"}})
     return result
 
 
@@ -193,7 +198,11 @@ def _summary_rows(summary):
             "deep_provisional_completed_selected": deep.get("provisional_completed_selected_candidates"),
             "deep_failed_selected": deep.get("failed_selected_candidates"), "deep_not_assessed_selected": deep.get("not_assessed_selected_candidates"),
             "deep_deferred": deep.get("deferred_candidates"), "deep_upstream_incomplete": deep.get("upstream_incomplete"),
-            "incomplete_requested": sample.get("incomplete_requested")}
+            "incomplete_requested": sample.get("incomplete_requested"),
+            "amr_review_status": sample.get("amr_review", {}).get("status"),
+            "amr_review_findings": sample.get("amr_review", {}).get("counts", {}).get("review_findings"),
+            "amr_investigation_findings": sample.get("amr_review", {}).get("counts", {}).get("investigation_findings"),
+            "amr_review_policy": sample.get("amr_review", {}).get("schema")}
 
 
 def write_run_summary(summary, outdir):
@@ -253,6 +262,11 @@ def format_run_summary(summary, artifacts=None):
             lines.append(f"{sample['sample_id']}: {sample.get('completeness', 'not recorded')} | modules {counts.get('completed', 0)}/{counts.get('total', 0)} completed, {counts.get('failed', 0)} failed, {counts.get('blocked', 0)} blocked, {counts.get('not_started', 0)} not started, {counts.get('not_assessed', 0)} not assessed")
             lines.append(f"  Scope: {sample.get('held', 0)} held; {sample.get('excluded', 0)} excluded; {sample.get('disabled', 0)} disabled. Imported evidence: {sample.get('imported_modules', 0)} modules; cached stages: {sample.get('cache_reused', 0)}.")
             deep = sample.get("deepsafe", {})
+            review = sample.get("amr_review", {})
+            if review.get("status") == "requires_review":
+                lines.append("  AMR evidence review outstanding: " + str(review["counts"]["investigation_findings"])
+                             + " findings require investigation; " + str(review["counts"]["native_call_findings"])
+                             + " other native calls require context review.")
             if deep.get("requested"):
                 lines.append("  DeepSafe execution: " + _display(deep.get("execution")) +
                              "; selected " + _display(deep.get("completed_selected_candidates")) + "/" + _display(deep.get("selected_candidates")) +

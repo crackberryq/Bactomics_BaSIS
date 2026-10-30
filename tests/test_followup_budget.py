@@ -28,6 +28,8 @@ class FollowupBudgetTests(unittest.TestCase):
     def test_standard_and_fallback_budgets_select_at_most_five(self):
         self.assertEqual(default_config()["deep"]["maximum_candidates"], 5)
         rows = [record(i) for i in range(12)]
+        for row in rows:
+            row["attributes"]["native_method"] = "HMM"
         for config in (default_config()["deep"], aware_config(), {},
                        {"aware": {"enabled": False}}):
             with self.subTest(config=config):

@@ -28,7 +28,8 @@ class DeepOptInDefaultsTests(unittest.TestCase):
             self.assertEqual(context.resource_specs(), {})
             self.assertEqual(context.needed_recipes(), [])
             context.samples = {"/tmp/synthetic": {}}
-            self.assertEqual(context.report_targets(), ["/tmp/synthetic/safety/report.html"])
+            self.assertEqual(context.report_targets(), ["/tmp/synthetic/safety/report.html",
+                                                       "/tmp/synthetic/safety/tables/amr-review.tsv"])
 
     def test_explicit_optin_retains_existing_setup_behavior(self):
         context = SafetyContext(self.config(deep={"enabled": True}), ROOT)

@@ -149,6 +149,10 @@ def describe_finding(finding):
     if _present(cutoff):
         evidence += " · " + _text(cutoff)
     notes = list(context["caveats"])
+    from .amr_review import review_finding, REASONS
+    review = review_finding(finding)
+    if review:
+        notes.extend(REASONS[reason] for reason in review["reasons"])
     for flag in attrs.get("flags") or []:
         notes.append("Source flag: " + _text(flag).replace("_", " "))
     if attrs.get("nudged") is True:

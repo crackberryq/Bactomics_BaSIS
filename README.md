@@ -364,6 +364,13 @@ errors, and isolate identity, duplicate-key and provenance checks remain active.
 
 ## BaSIS AWARE: candidate admission and deduplication
 
+The standard follow-up scope is **AMRFinder review**: family-only HMM, partial and
+disrupted-sequence calls can receive focused investigation, while other native
+AMR calls remain visible for context review. Deferred or inconclusive follow-up
+keeps an explicit review notice in the report and exports. See
+[AMRFinder review and the AFB01 regression](docs/AMR_REVIEW.md). The previous
+broader tool admission is available explicitly as `deep.aware.scope: all-supported`.
+
 DeepSafe now defaults to **auto-medium** admission, with **auto-strict** and
 **auto-loose** alternatives plus manual per-tool overrides under `deep.aware`.
 Each source is evaluated independently before unique candidates consume budgets.

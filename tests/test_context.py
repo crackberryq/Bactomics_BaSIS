@@ -192,7 +192,8 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(context.needed_recipes(), [])
         self.assertEqual(context.environment_receipts(), [])
         self.assertEqual(context.evidence_targets(row["isolate_dir"]), [])
-        self.assertEqual(context.report_targets(), [str(Path(row["isolate_dir"]) / "safety/report.html")])
+        self.assertEqual(context.report_targets(), [str(Path(row["isolate_dir"]) / "safety" / relative)
+                                                  for relative in ("report.html", "tables/amr-review.tsv")])
 
     def test_resource_paths_stable_and_mlst_points_at_bundled_db_root(self):
         row = self.annotation("resourcepaths")

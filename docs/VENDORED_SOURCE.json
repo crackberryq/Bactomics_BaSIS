@@ -553,5 +553,71 @@
         "updated_sha256": "f8f16c7eac9282ccc5c9c44b1e909ec8a45b82042d476bacdaf0c4ea73eeb8bc"
       }
     ]
+  },
+  "amrfinder_review_update": {
+    "base_commit": "3c166c1374ab15670b35f9cf8fea23b48dfeb724",
+    "scope": "Versioned AMRFinder review cues independent of selection; explicit AMRFinder-only follow-up scope; retained review accounting in reports and exports.",
+    "native_analysis_settings_changed": false,
+    "scientific_thresholds_changed": false,
+    "evidence_classification_changed": false,
+    "candidate_selection_changed": true,
+    "review_policy_validation": "Operational software rules; scientific validation and nonempty native follow-up pilot remain pending.",
+    "files": [
+      {
+        "path": "workflow/vendor/basis/amr_review.py",
+        "base_sha256": null,
+        "updated_sha256": "923f763f787da08da8f3bba60c3b916b6991c39b18215ade6f83e39aa30f30e7"
+      },
+      {
+        "path": "workflow/vendor/basis/aware.py",
+        "base_sha256": "b287a0e029b749e3aea13c91ea1ff324b8e9f12890f321e63eb197c31e8fd10b",
+        "updated_sha256": "249deecba3affbba70d6405ba3b5424f3300ed82b821be7d12df95d90758c2ae"
+      },
+      {
+        "path": "workflow/vendor/basis/config.py",
+        "base_sha256": "7a882b5a7466bd78328ed39b8e0844c0eb79d849b18bb9e195d0a325be6dd7c7",
+        "updated_sha256": "6e214d4bf75eaaeb0db47f1c83215017004dc7bbfde10c56cc9b1288407f1a3d"
+      },
+      {
+        "path": "workflow/vendor/basis/deep.py",
+        "base_sha256": "3fff44f338030edf8129ce8ffe4290f098e1567c09679e8bd2e8413c2402e392",
+        "updated_sha256": "10328a3d25dd19f40587a968cb7c2fe2d8acac2c688093302374e9bb1302d178"
+      },
+      {
+        "path": "workflow/vendor/basis/report.py",
+        "base_sha256": "db81e5c8e49a153b59d1db3121070569ba42e748f3dafbeacf132401eddc44d8",
+        "updated_sha256": "672f0199d1b4da22907e766f4444260b38e04e90d986b6a5641b34c7c5384cfa"
+      },
+      {
+        "path": "workflow/vendor/basis/report_aware.py",
+        "base_sha256": "92df69253d92f86c408085e4cf850c64e352c8d380c225ef06cc0fe43ca50bb1",
+        "updated_sha256": "c1f2b0c3ebd1af3c167aa67c74796c9d288c1aa2b71c468eac44a973644986a9"
+      },
+      {
+        "path": "workflow/vendor/basis/report_dashboard.py",
+        "base_sha256": "a6f76f4ff8cbadf7cc2aa72b5c8cb0dc531dbe704ac255423daa17422315d6e7",
+        "updated_sha256": "2fbcfd87c6837e8af58a77731b8d3947f8e06c17625a1923d45726985c1fd00b"
+      },
+      {
+        "path": "workflow/vendor/basis/report_review.py",
+        "base_sha256": null,
+        "updated_sha256": "70755cdc07a9fd2945420efc33ed40e3a2d226a5f2b1b9a0cea77f46e994fb53"
+      },
+      {
+        "path": "workflow/vendor/basis/report_scope.py",
+        "base_sha256": "d60d42237112890d2accea8822363af973672d7e14a182c48e2474647f9e0bae",
+        "updated_sha256": "122ef7ec73728d77c2bd3a059e20d1e1bb8b6b647bbdd1204f9d5e95ce53c7fb"
+      },
+      {
+        "path": "workflow/vendor/basis/report_screening.py",
+        "base_sha256": "1e57bb7d71da894ff44ba8ef7b1396c25fc57fa9a4bec2a2babcc9487879a089",
+        "updated_sha256": "cfbf6222adda71128e40d39d7c8fe72313c341440d30bf835cb6628faa2c8615"
+      },
+      {
+        "path": "workflow/vendor/basis/run_summary.py",
+        "base_sha256": "acba1a20f6efad948f6e72d71288a22f6aa7ab5898971a634618583969cdff06",
+        "updated_sha256": "93c857297eb4e1ac014025d221effea2567a9cbf2a799b82c69ef8cc4ecea373"
+      }
+    ]
   }
 }

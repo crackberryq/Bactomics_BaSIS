@@ -632,9 +632,11 @@ def write_report(run: dict, samples: list[dict], records: list[dict], deep_recor
 
 def _write_report(run: dict, samples: list[dict], records: list[dict], deep_records: list[dict], outdir: Path) -> dict:
     """Write the complete offline report bundle; return absolute artifact paths."""
+    from .report_review import build_review_summary, COLUMNS as REVIEW_COLUMNS
     from .report_scope import deep_requested
     records, deep_records = list(records), list(deep_records)
     include_deep = deep_requested(run, deep_records)
+    review = build_review_summary(records, deep_records)
     outdir = Path(outdir).resolve()
     outdir.mkdir(parents=True, exist_ok=True)
     combined = records + deep_records
@@ -643,11 +645,13 @@ def _write_report(run: dict, samples: list[dict], records: list[dict], deep_reco
     artifacts = {"html": outdir / "report.html", "findings_tsv": outdir / "findings.tsv",
                  "screening_findings_tsv": outdir / "screening-findings.tsv",
                  "recommendations_tsv": outdir / "recommendations.tsv", "evidence_json": outdir / "evidence.json",
-                 "methods_txt": outdir / "methods.txt", "module_scope_tsv": outdir / "module-scope.tsv"}
+                 "methods_txt": outdir / "methods.txt", "module_scope_tsv": outdir / "module-scope.tsv",
+                 "amr_review_tsv": outdir / "amr-review.tsv"}
     from .report_citation import write_citations
     artifacts.update({key: Path(path) for key, path in
                       write_citations(outdir, run.get("version") or None).items()})
     _write_tsv(artifacts["findings_tsv"], FINDING_COLUMNS, findings)
+    _write_tsv(artifacts["amr_review_tsv"], REVIEW_COLUMNS, review["rows"])
     from .report_screening import write_readable_findings
     write_readable_findings(artifacts["screening_findings_tsv"], findings)
     _write_tsv(artifacts["recommendations_tsv"], RECOMMENDATION_COLUMNS, recommendations)
@@ -655,7 +659,7 @@ def _write_report(run: dict, samples: list[dict], records: list[dict], deep_reco
     _write_tsv(artifacts["module_scope_tsv"], SCOPE_COLUMNS, module_scope_rows(run, samples, combined))
     evidence = {"schema_version": "basis-report-1", "run": run, "samples": samples,
                 "records": records, "deep_records": deep_records, "normalized_report_findings": findings,
-                "recommendations": recommendations,
+                "recommendations": recommendations, "amr_review": review,
                 "provided_phenotypes": {str(s.get("sample_id", "unknown")): _phenotypes(s) for s in samples},
                 "interpretation_limit": "Research screening evidence; no organism-level safety verdict or global safety score."}
     artifacts["evidence_json"].write_text(json.dumps(_jsonable(evidence), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
