@@ -14,7 +14,7 @@ from basis.adapters.amr import parse_amrfinder
 from basis.amr_review import REVIEW_METHODS, VERSION, review_finding
 from basis.aware import audit, resolve_policy
 from basis.config import default_config
-from basis.deep import select_candidates
+from basis.deep import select_candidates, make_analysis_plan
 from basis.report import write_report
 from basis.report_review import build_review_summary
 from basis.run_summary import build_run_summary, format_run_summary
@@ -88,6 +88,22 @@ class AmrReviewTests(unittest.TestCase):
         self.assertEqual(len(selected["source_evidence"]), 2)
         self.assertEqual(selected["evidence_priority"]["tools"], ["amrfinder"])
         self.assertEqual(sum(c["selected"] for c in candidates), 1)
+
+    def test_linked_exact_call_cannot_shortcut_selected_hmm_investigation(self):
+        rgi = copy.deepcopy(self.finding)
+        rgi.update(tool="rgi", finding_id="rgi-perfect", identity=100., coverage=100.)
+        rgi["attributes"] = {"cutoff": "perfect", "nudged": False, "model_type": "protein homolog model"}
+        candidate = self.candidates(records=[self.record, dict(self.record, module="rgi", findings=[rgi])])[0]
+        plan = make_analysis_plan(candidate, {"profile_id": "fixture", "validation_status": "unvalidated"},
+                                  {"flags": []}, self.config)
+        self.assertEqual(plan["route"], "ambiguous_amr_family_investigation")
+        self.assertTrue(plan["analyses"]["references"])
+        self.assertEqual(plan["decision_trace"][1]["exact_source_finding_ids"], ["rgi-perfect"])
+        self.assertTrue(plan["decision_trace"][1]["targeted_amrfinder_review"])
+
+    def test_report_module_identity_takes_precedence_over_nested_tool_label(self):
+        other = dict(self.record, module="rgi")
+        self.assertEqual(build_review_summary([other])["counts"]["review_findings"], 0)
 
     def test_budget_defers_without_removing_investigation(self):
         findings = [dict(copy.deepcopy(self.finding), finding_id=f"f{i}", protein_id=f"p{i}",
@@ -185,7 +201,7 @@ class AmrReviewTests(unittest.TestCase):
         page = (self.root / "report/report.html").read_text()
         evidence = json.loads((self.root / "report/evidence.json").read_text())
         self.assertIn("Analysis completed · AMR evidence review outstanding", page)
-        self.assertIn("1 findings require investigation", page)
+        self.assertIn("1 finding requires investigation", page)
         self.assertIn("hmm_family_assignment", (self.root / "report/amr-review.tsv").read_text())
         self.assertEqual(evidence["amr_review"]["status"], "requires_review")
         self.assertEqual(evidence["records"], [before])

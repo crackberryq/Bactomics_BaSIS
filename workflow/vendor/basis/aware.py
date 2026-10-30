@@ -283,7 +283,7 @@ def select(records, config, sample, policy):
                 "finding_ids": [], "source_evidence": [], "selection_reasons": [], "family_labels": [],
                 "priority": 99, "attention_rank": None, "attention_max": None,
                 "execution": "pending", "interpretation": "inconclusive",
-                "aware": {"version": VERSION, "evidence": [], "identity": []}}
+                "aware": {"version": VERSION, "scope": policy.get("scope", "all-supported"), "evidence": [], "identity": []}}
         candidate = groups[key]
         for field, value in fields.items():
             if candidate.get(field) is None and value is not None:

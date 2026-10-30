@@ -54,6 +54,8 @@ linked source evidence is preserved. Eligibility is evaluated before identity
 deduplication and the existing five-candidate ceiling; no unused slots are filled
 with unrelated findings. Ordering within eligible candidates retains the existing
 heuristic and is not a biological risk ranking.
+An exact/Perfect call from another linked source cannot shortcut an investigation
+selected by this review scope.
 
 Use `scope: all-supported` to explicitly request the previous broader admission
 policy. Low-level API calls with an AWARE block but no scope keep that legacy
@@ -62,6 +64,9 @@ default; standard configuration loading merges the new documented default.
 configurations are never rewritten. Updating code or changing scope requires a
 new selection under the new source/configuration identity; inspect the dry run.
 Do not overwrite the only copy of an earlier follow-up to compare policies.
+The saved-screening follow-up entry point and preview preserve the previous scope
+when the saved configuration lacks this field. Use the explicit overlay above to
+request AMRFinder review for an older screening run.
 
 Preview without native execution or changes to saved results:
 

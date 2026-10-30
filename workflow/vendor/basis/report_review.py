@@ -116,8 +116,10 @@ def render_review_summary(summary):
         return ""
     esc = lambda value: escape(str(value if value is not None else "Not recorded"), quote=True)
     counts = summary["counts"]
+    number = counts["investigation_findings"]
+    investigation = str(number) + (" finding requires investigation" if number == 1 else " findings require investigation")
     body = ('<article class="panel" id="amr-review"><h3>AMR evidence review outstanding</h3>'
-            '<p><strong>' + str(counts["investigation_findings"]) + ' findings require investigation</strong>; '
+            '<p><strong>' + investigation + '</strong>; '
             + str(counts["native_call_findings"]) + ' other native AMR calls remain for context review.</p>'
             '<p>Follow-up selection and completed jobs do not close these review questions. '
             'Deferred, failed and inconclusive follow-up remains visible.</p>'

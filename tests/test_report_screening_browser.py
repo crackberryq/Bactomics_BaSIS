@@ -115,11 +115,16 @@ class ScreeningBrowserTests(unittest.TestCase):
         finding = saved["records"][0]["findings"][0]
         finding["attributes"]["native_method"] = "HMM"
         finding["attributes"]["raw"]["Method"] = "HMM"
+        saved["run"]["completeness"] = "completed_requested_scope"
+        for record in saved["records"]:
+            record["execution_status"] = "completed"
         write_report(saved["run"], saved["samples"], saved["records"], [], self.root)
         page = self.page(viewport={"width": 390, "height": 844})
+        self.assertIn("Analysis completed · AMR evidence review outstanding", page.locator(".hero-meta").inner_text())
+        self.screenshot(page, "amr-review-completed-mobile.png")
         notice = page.locator("#amr-review")
         self.assertTrue(notice.is_visible())
-        self.assertIn("1 findings require investigation", notice.inner_text())
+        self.assertIn("1 finding requires investigation", notice.inner_text())
         notice.locator("summary").click()
         self.assertIn("family-level HMM match", notice.inner_text())
         self.assertTrue((self.root / "amr-review.tsv").is_file())

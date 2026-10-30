@@ -334,7 +334,10 @@ def make_analysis_plan(candidate: dict, profile: dict, integrity: dict, config: 
             exact_evidence.append(finding["finding_id"])
         elif finding.get("tool") == "rgi" and str(attributes.get("cutoff")).casefold() == "perfect" and not attributes.get("nudged") and str(attributes.get("model_type")).casefold() == "protein homolog model":
             exact_evidence.append(finding["finding_id"])
-    exact = bool(exact_evidence) and not integrity["flags"] and "virulence" not in categories and len(gene_labels) <= 1
+    targeted_review = ((candidate.get("aware") or {}).get("scope") == "amrfinder-review"
+                       and (candidate.get("review") or {}).get("investigation_required") is True)
+    exact = (bool(exact_evidence) and not integrity["flags"] and "virulence" not in categories
+             and len(gene_labels) <= 1 and not targeted_review)
     if exact and not config.get("investigate_exact_calls", False):
         route = "exact_curated_amr_context_review"
     elif "amr" in native_categories:
@@ -350,6 +353,7 @@ def make_analysis_plan(candidate: dict, profile: dict, integrity: dict, config: 
     allowed = set(profile_analyses) if profile_analyses is not None else {"integrity", "context", "references", "domains", "phylogeny"}
     trace = [{"decision": "taxonomy_review", "value": candidate.get("taxonomy_review", {"status": "not_evaluated"})},
              {"decision": "route", "value": route, "exact_source_finding_ids": exact_evidence,
+              "targeted_amrfinder_review": targeted_review,
               "source_gene_labels": sorted(gene_labels), "integrity_flags": integrity["flags"],
               "reason": "Native exact/Perfect full-reference match permits context review without redundant phylogeny; phenotype remains unresolved."
                         if not investigate else "No unambiguous complete exact-call shortcut; investigate available family evidence."},

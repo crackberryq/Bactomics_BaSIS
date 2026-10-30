@@ -26,7 +26,7 @@ REASONS = {
 
 def review_finding(finding):
     """Describe a source finding even when its follow-up is disabled or deferred."""
-    if (finding.get("tool", finding.get("module")) != "amrfinder"
+    if ((finding.get("module") or finding.get("tool")) != "amrfinder"
             or finding.get("category") != "amr"):
         return None
     attrs = finding.get("attributes") or {}

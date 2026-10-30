@@ -129,6 +129,11 @@ class SavedFollowupContext:
             raise ValueError("resource_receipts must be a list of existing receipt paths")
         receipts = [str((self.root / Path(p).expanduser()).resolve()) for p in receipts]
         effective = resolved_config({"deep": deep}, receipts, [])
+        # A saved pre-scope policy must keep its recorded selection semantics.
+        # New standard defaults apply only when the saved config or reviewed
+        # overlay actually declares the new scope.
+        if "scope" not in deep.get("aware", {}):
+            effective["deep"]["aware"].pop("scope", None)
         self.config = copy.deepcopy(original)
         self.config["deep"] = effective["deep"]
         self.config.setdefault("options", {})["deep"] = True
