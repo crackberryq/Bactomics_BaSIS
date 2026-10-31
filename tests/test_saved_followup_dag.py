@@ -256,6 +256,9 @@ class SavedFollowupDagTests(unittest.TestCase):
         self.assertFalse((self.safety / "deepsafe/candidates" / deferred["candidate_id"]).exists())
         report = self.safety / "deepsafe-report"
         bundle = json.loads((report / "evidence.json").read_text())
+        from safety import __version__
+        self.assertEqual(bundle["run"]["version"], __version__)
+        self.assertEqual(bundle["run"]["screening_version"], "0.4.0a1")
         review = bundle["amr_review"]
         self.assertEqual(review["counts"]["investigation_findings"], 2)
         self.assertEqual({s for row in review["rows"] for s in row["followup_status"]},
