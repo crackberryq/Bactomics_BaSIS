@@ -219,7 +219,7 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
     run = {
         "schema": "basis-snakemake-run-v1", "run_id": hashlib.sha256(serialized).hexdigest()[:20],
         "report_view": view,
-        "version": config.get("version", "0.4.0a3"), "engine": "snakemake",
+        "version": config.get("version", "0.4.0a4"), "engine": "snakemake",
         "options": {"deep": bool(deep_records), "extend": "pathogenfinder2" in seen},
         "validation_mode": config.get("validation_mode", "research_screening"),
         "enabled_modules": sorted(m for m, d in decisions.items() if d.get("requested") and m != "deepsafe"),
@@ -231,7 +231,7 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
         "reporting_scope": "Saved evidence aggregation only; no native analyses or model inference performed by reporting.",
         "input_validations": {sid: sample.get("input_validation", {})},
     }
-    if view == "followup" and config.get("followup_review"):
+    if view == "deep" and config.get("followup_review"):
         run["screening_version"] = config["followup_review"].get("screening_version", "unknown")
     return run, records, deep_records
 

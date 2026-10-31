@@ -18,7 +18,7 @@ OTHER = "b" * 40
 
 
 class GitHub:
-    def __init__(self, record=None, tag=None, release_tag="v0.4.0a3"):
+    def __init__(self, record=None, tag=None, release_tag="v0.4.0a4"):
         self.record, self.tag, self.calls = record, tag, []
         self.release_tag = release_tag
 
@@ -50,13 +50,13 @@ class ReleaseTests(unittest.TestCase):
                      "workflow/lib/safety/reporting.py", "CITATION.cff", "docs/VENDORED_SOURCE.json"):
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text((ROOT / name).read_text().replace("0.4.0a3", version))
+            target.write_text((ROOT / name).read_text().replace("0.4.0a4", version))
         (root / f"docs/RELEASE_{version}.md").write_text(
             f"# BaSIS AWARE {version}\n\nSynthetic release metadata fixture.\n")
 
     def test_version_metadata_and_workflow_gate(self):
         version, notes = release.metadata(ROOT)
-        self.assertEqual(version, "0.4.0a3")
+        self.assertEqual(version, "0.4.0a4")
         self.assertIn("automatically", notes)
         workflow = yaml.load((ROOT / ".github/workflows/snakemake.yml").read_text(), Loader=yaml.BaseLoader)
         publish = workflow["jobs"]["publish"]
@@ -75,7 +75,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(result["target_commitish"], COMMIT)
         self.assertEqual([call[1] for call in api.writes], ["POST", "POST", "PATCH"])
         self.assertIn(COMMIT, result["body"])
-        self.assertEqual(result["name"], "BaSIS AWARE 0.4.0a3 — Alpha")
+        self.assertEqual(result["name"], "BaSIS AWARE 0.4.0a4 — Alpha")
 
     def test_beta_publication_remains_a_prerelease_at_the_tested_commit(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -119,8 +119,8 @@ class ReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for relative, replacement in (
-                ("workflow/lib/safety/context.py", 'version = "0.4.0a3"\n'),
-                ("docs/RELEASE_0.4.0b1.md", "# BaSIS AWARE 0.4.0a3\n"),
+                ("workflow/lib/safety/context.py", 'version = "0.4.0a4"\n'),
+                ("docs/RELEASE_0.4.0b1.md", "# BaSIS AWARE 0.4.0a4\n"),
             ):
                 with self.subTest(relative=relative):
                     self.version_fixture(root, "0.4.0b1")
@@ -130,7 +130,7 @@ class ReleaseTests(unittest.TestCase):
                     network.assert_not_called()
 
     def test_draft_retry_reuses_release_and_matching_tag(self):
-        original = {"id": 23, "tag_name": "v0.4.0a3", "target_commitish": COMMIT,
+        original = {"id": 23, "tag_name": "v0.4.0a4", "target_commitish": COMMIT,
                     "draft": True, "prerelease": True, "body": "retained notes"}
         api = GitHub(original, COMMIT)
         with patch.object(release, "github", api):
@@ -139,7 +139,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(result["body"], "retained notes")
 
     def test_published_release_is_never_replaced_by_later_commit(self):
-        original = {"id": 23, "tag_name": "v0.4.0a3", "target_commitish": OTHER,
+        original = {"id": 23, "tag_name": "v0.4.0a4", "target_commitish": OTHER,
                     "draft": False, "prerelease": True}
         api = GitHub(original, OTHER)
         with patch.object(release, "github", api):
@@ -147,7 +147,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(api.writes, [])
 
     def test_conflicting_tag_or_draft_is_not_changed(self):
-        cases = [(None, OTHER), ({"id": 23, "tag_name": "v0.4.0a3", "target_commitish": OTHER,
+        cases = [(None, OTHER), ({"id": 23, "tag_name": "v0.4.0a4", "target_commitish": OTHER,
                                  "draft": True, "prerelease": True}, None)]
         for original, tag in cases:
             with self.subTest(tag=tag):
@@ -157,7 +157,7 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(api.writes, [])
 
     def test_inconsistent_published_release_is_not_modified(self):
-        api = GitHub({"id": 23, "tag_name": "v0.4.0a3", "target_commitish": OTHER,
+        api = GitHub({"id": 23, "tag_name": "v0.4.0a4", "target_commitish": OTHER,
                       "draft": False, "prerelease": True}, COMMIT)
         with patch.object(release, "github", api), self.assertRaises(ValueError):
             release.publish(ROOT, COMMIT)
@@ -178,7 +178,7 @@ class ReleaseTests(unittest.TestCase):
             root = Path(temporary)
             for name in ("workflow/lib/safety/__init__.py", "workflow/lib/safety/context.py",
                          "workflow/lib/safety/reporting.py", "CITATION.cff", "docs/VENDORED_SOURCE.json",
-                         "docs/RELEASE_0.4.0a3.md"):
+                         "docs/RELEASE_0.4.0a4.md"):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / name).read_bytes())

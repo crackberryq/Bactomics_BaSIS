@@ -149,6 +149,20 @@ class SavedFollowupTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaisesRegex(ValueError, "screening settings"):
                 self.context({**self.supplied, key: value})
 
+    def test_report_retains_original_screening_version(self):
+        from safety import __version__
+        from safety.reporting import aggregate
+        context = self.context()
+        sample = self.read(self.sample_path)
+        deep_path = self.write("evidence/deepsafe.json", {"sample_id": "synthetic", "module": "deepsafe",
+                              "execution_status": "completed", "candidates": []})
+        run, _, _ = aggregate(sample, context.config, [self.record_path, deep_path], view="deep")
+        self.assertEqual(run["version"], __version__)
+        self.assertEqual(run["screening_version"], self.config["version"])
+        screening, _, _ = aggregate(sample, self.config, [self.record_path], view="screening")
+        self.assertEqual(screening["version"], self.config["version"])
+        self.assertNotIn("screening_version", screening)
+
     def test_missing_screening_sources_fail_without_creating_outputs(self):
         for relative in ("report.html", "evidence.json", "metadata/report-navigation.json",
                          "metadata/sample.json", "metadata/config.json", "metadata/validation.json",
