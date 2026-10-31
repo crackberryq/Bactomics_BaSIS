@@ -11,6 +11,7 @@ import re
 
 from basis.aware import resolve_policy
 from basis.config import ALL_MODULES, PATH_KEYS, default_config, merge_dict
+from . import __version__
 from .deep_resources import config_input_paths
 from .reporting import aggregate
 from .setup import resolved_config, write_stable
@@ -135,9 +136,12 @@ class SavedFollowupContext:
         if "scope" not in deep.get("aware", {}):
             effective["deep"]["aware"].pop("scope", None)
         self.config = copy.deepcopy(original)
+        self.config["version"] = __version__
         self.config["deep"] = effective["deep"]
         self.config.setdefault("options", {})["deep"] = True
         self.config["followup_review"] = {**self.snapshot, "requested_config": copy.deepcopy(supplied),
+                                          "screening_version": original.get("version", "unknown"),
+                                          "followup_version": __version__,
                                           "resource_receipts": effective["resource_receipts"]}
         self._check_resources()
         self.prerequisites = list(dict.fromkeys([str(p) for p in tracked] + receipts + self.resource_paths))

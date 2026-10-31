@@ -121,6 +121,10 @@ class SavedFollowupTests(unittest.TestCase):
             self.assertEqual(self.snapshot(), before)
             self.assertEqual(context.records, [str(self.record_path)])
             self.assertEqual(context.config["modules"], self.config["modules"])
+            from safety import __version__
+            self.assertEqual(context.config["version"], __version__)
+            self.assertEqual(context.config["followup_review"]["screening_version"], self.config["version"])
+            self.assertEqual(context.config["followup_review"]["followup_version"], __version__)
             self.assertTrue(context.config["deep"]["enabled"])
             self.assertTrue(context.followup_only)
             self.assertTrue(context.deep_enabled)

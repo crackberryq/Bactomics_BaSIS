@@ -1,8 +1,8 @@
 # AWARE to DeepSafe report: end-to-end audit
 
-This walkthrough covers the AMRFinder review scope in PR #16. It describes
-software behavior and the remaining integration work; it is not a native AFB01
-analysis or a release announcement.
+This walkthrough covers the AMRFinder review scope in v0.4.0a3. It describes
+software behavior and the remaining native acceptance work; it is not a native
+AFB01 analysis.
 
 | Step | What happens | What must remain visible |
 |---|---|---|
@@ -58,29 +58,26 @@ catalogue with no eligible comparators produces `completed` plus `unresolved`.
 Both remain in the report and export. No native biological tool runs in this test.
 Separate tests exercise failed-stage rejection and per-stage state integrity.
 
-## Bactologix handoff still pending
+## Bactologix source transition
 
-The inspected Bactologix source was
-[`781f83e`](https://github.com/crackberryq/Bactologix/tree/781f83e2a7f7d1ac38132a6bc7059096ae579977).
-Its [follow-up adapter](https://github.com/crackberryq/Bactologix/blob/781f83e2a7f7d1ac38132a6bc7059096ae579977/src/bactologix/followup.py)
-copies the parent screening workflow and checks an explicit `followup_commits`
-list. Its general release-compatibility approval does not automatically extend
-that follow-up list. Therefore installing a newer BaSIS version does not upgrade
-an existing frozen screening run's follow-up implementation.
+A follow-up request can use an explicitly selected installed BaSIS release when
+Bactologix's official compatibility registry approves its follow-up entry point,
+parent screening version and scope. General release discovery alone is insufficient.
+The original screening source and outputs remain frozen. The new follow-up draft
+records its own workflow commit, the parent's commit, both workflow checksums,
+the selected scope and the reviewed release contract. Its runner/cache belong to
+the selected installation, and native validation checks the saved screening bundle.
 
-Before using the new policy through Bactologix:
+Choose the AMRFinder review scope explicitly for an older screening bundle.
+A request that retains the original workflow also retains its original behavior.
+DeepSafe remains opt-in, with a default ceiling of five unique candidates per
+isolate; deferred or unassessed findings remain visible for review.
 
-1. Merge and publish the tested BaSIS change under an identified version.
-2. Test and register its follow-up compatibility in Bactologix, including the new
-   scope and unchanged-snapshot checks.
-3. Give the follow-up request an explicit, verified implementation version and
-   scope. A newer installed checkout must not silently replace the parent's
-   frozen workflow. Reusing an older screening bundle with a newer follow-up
-   implementation needs a recorded, tested source transition.
-4. Verify the real AFB01/isolate1 candidate preview, requested resources, a
-   nonempty native run, report/export consistency, restart and unchanged rerun.
+The follow-up report identifies the executing BaSIS version and retains the
+screening version in its evidence metadata. Bactologix's run methods also record
+the exact source transition. Completed software checks do not establish candidate
+function or close outstanding review.
 
-The current PR does not implement that Bactologix source transition or validate
-native runtimes or family interpretation. Those remain acceptance work before
-claiming that the full installed application path is ready for beta. See
-[AMRFinder review policy](AMR_REVIEW.md) and [acceptance gates](ACCEPTANCE.md).
+Before beta, verify the real AFB01/isolate1 candidate preview, resource coverage,
+a nonempty native run, report/export consistency, restart and unchanged rerun.
+See [AMRFinder review policy](AMR_REVIEW.md) and [acceptance gates](ACCEPTANCE.md).
