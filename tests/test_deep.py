@@ -124,6 +124,21 @@ class DeepWorkflowTests(unittest.TestCase):
         self.assertEqual(selected["execution"], "not_assessed")
         self.assertEqual(selected["reason"], "reference_catalogue_not_configured")
 
+    def test_amrfinder_review_survives_stages_and_missing_references(self):
+        from basis.report_review import build_review_summary
+        self.cfg["aware"] = {"enabled": True, "scope": "amrfinder-review", "preset": "auto-strict"}
+        self.record["findings"][0]["attributes"]["native_method"] = "HMM"
+        deep.write(self.isolate / "safety/metadata/config.json", {"deep": self.cfg})
+        deep.write(self.record_path, self.record)
+        result = deep.evidence_record(self.completed())
+        selected = next(c for c in result["candidates"] if c["selected"])
+        self.assertTrue(selected["review"]["investigation_required"])
+        self.assertEqual(selected["reason"], "reference_catalogue_not_configured")
+        summary = build_review_summary([self.record], [result])
+        self.assertEqual(summary["status"], "requires_review")
+        self.assertEqual(summary["counts"]["investigation_findings"], 1)
+        self.assertEqual(summary["rows"][0]["followup_status"], ["not_assessed"])
+
     def test_candidate_failure_raises_to_snakemake_without_mutating_parent(self):
         prepared = self.prepared()
         before = copy.deepcopy(prepared)

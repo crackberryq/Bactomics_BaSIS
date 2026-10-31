@@ -299,6 +299,8 @@ def _extend(record, outdir, raw, *, deep_enabled=True):
 
 
 def render_dashboard(run, samples, records, deep_records, findings, recommendations, outdir):
+    from .report_review import build_review_summary, render_review_summary
+    review = build_review_summary(records, deep_records)
     from .report_scope import deep_requested
     deep_enabled = deep_requested(run, deep_records)
     view = run.get('report_view', 'combined')
@@ -382,9 +384,14 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     if show_screening and all_done and done == len(selected) and not run.get('engine_error'):
         headline = 'Tools finished · review assessment limits' if attention or scope_limited else 'All requested tools finished'
     overview_tone = 'ok' if all_done and done == len(selected) and not run.get('engine_error') and not (show_screening and (attention or scope_limited)) else 'warn'
+    if review['rows']:
+        overview_tone = 'warn'
+        if all_done and done == len(selected) and not run.get('engine_error'):
+            headline = 'Analysis completed · AMR evidence review outstanding'
     hero = '<header class="hero"><div><p class="eyebrow">' + esc(hero_eyebrow) + '</p><h1>' + hero_title + '</h1><p>' + hero_intro + '</p><div class="hero-meta">' + badge(headline, overview_tone) + '<span>' + esc(_date(run.get('finished_at'))) + '</span></div></div><div class="hero-art" aria-hidden="true"><svg viewBox="0 0 250 210"><g fill="none" stroke="#60d4c4" stroke-width="1.5" opacity=".65"><circle cx="125" cy="105" r="82"/><circle cx="125" cy="105" r="65" stroke-dasharray="5 9"/><ellipse cx="125" cy="105" rx="37" ry="82" transform="rotate(35 125 105)"/><path d="M49 75L172 40 192 130 91 174 49 75 192 130M91 174L172 40"/></g><g fill="#abf0df"><circle cx="49" cy="75" r="6"/><circle cx="172" cy="40" r="8"/><circle cx="192" cy="130" r="5"/><circle cx="91" cy="174" r="7"/></g><text x="125" y="112" text-anchor="middle" fill="white" font-size="29" font-family="sans-serif">BaSIS</text></svg></div></header>'
     candidate_stats = (stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'Unavailable' if selection_unavailable else 'None selected', 'completed DeepSafe analyses' if selected else 'candidate selection unavailable — inspect execution issues' if selection_unavailable else 'no selected-candidate analyses requested') + stat('Requires attention', num(len(deferred)), 'not selected for this follow-up run · reasons retained')) if deep_enabled else ''
     overview = hero + '<div class="stats">' + stat('Tools finished', f'{completed} / {requested_count}', 'completed execution; recorded result and assessment scope are shown separately') + candidate_stats + stat('Execution failures', num(failed), 'failed or unknown requested module records') + '</div>'
+    overview += render_review_summary(review)
     deferred_note = num(len(deferred)) + ' candidates remain deferred. ' if deep_enabled else ''
     overview += '<div class="callout"><strong>What does the completion count mean?</strong><p>The tools-finished count describes execution. An inconclusive or incomplete assessment can remain after a tool finishes. Recorded overall scope: ' + esc(human(run.get('completeness'))) + '. ' + deferred_note + 'Completed analyses do not establish protein function or organism safety.</p></div>'
     failed_resources = [item for item in run.get('resource_preparation', [])

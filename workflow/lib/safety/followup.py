@@ -11,6 +11,7 @@ import re
 
 from basis.aware import resolve_policy
 from basis.config import ALL_MODULES, PATH_KEYS, default_config, merge_dict
+from . import __version__
 from .deep_resources import config_input_paths
 from .reporting import aggregate
 from .setup import resolved_config, write_stable
@@ -129,10 +130,18 @@ class SavedFollowupContext:
             raise ValueError("resource_receipts must be a list of existing receipt paths")
         receipts = [str((self.root / Path(p).expanduser()).resolve()) for p in receipts]
         effective = resolved_config({"deep": deep}, receipts, [])
+        # A saved pre-scope policy must keep its recorded selection semantics.
+        # New standard defaults apply only when the saved config or reviewed
+        # overlay actually declares the new scope.
+        if "scope" not in deep.get("aware", {}):
+            effective["deep"]["aware"].pop("scope", None)
         self.config = copy.deepcopy(original)
+        self.config["version"] = __version__
         self.config["deep"] = effective["deep"]
         self.config.setdefault("options", {})["deep"] = True
         self.config["followup_review"] = {**self.snapshot, "requested_config": copy.deepcopy(supplied),
+                                          "screening_version": original.get("version", "unknown"),
+                                          "followup_version": __version__,
                                           "resource_receipts": effective["resource_receipts"]}
         self._check_resources()
         self.prerequisites = list(dict.fromkeys([str(p) for p in tracked] + receipts + self.resource_paths))
@@ -258,7 +267,8 @@ class SavedFollowupContext:
         return str(self.root / "envs/deepsafe.yml")
 
     def followup_report_targets(self):
-        return [str(self.safety / "deepsafe-report/report.html")]
+        return [str(self.safety / "deepsafe-report" / relative)
+                for relative in ("report.html", "tables/amr-review.tsv")]
 
     def publish(self):
         verify_sources(self.snapshot["sources"])

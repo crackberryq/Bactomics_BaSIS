@@ -17,6 +17,7 @@ def render_aware(records):
         deferred = "".join("<li>" + esc(reason) + ": " + esc(number) + "</li>"
                            for reason, number in sorted(audit["deferral_reasons"].items()))
         blocks.append('<div class="panel"><h3>BaSIS AWARE · ' + esc(record.get("sample_id", "")) + '</h3>'
+            '<p>Follow-up scope: <strong>' + esc(policy.get("scope", "all-supported")) + '</strong>.</p>'
             '<p>Preset: <strong>' + esc(policy["preset"]) + '</strong> · ' + esc(policy["version"]) + '</p>'
             '<p>' + esc(counts["findings_received"]) + ' findings received → ' + esc(counts["findings_evaluated"]) +
             ' evaluated → ' + esc(counts["findings_qualifying"]) + ' qualifying findings. ' +

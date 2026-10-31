@@ -1,14 +1,14 @@
 # BaSIS AWARE · standalone Snakemake workflow
 
-**Version 0.4.0a2 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
+**Version 0.4.0a3 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
 
 This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
 
 The [acceptance checklist](docs/ACCEPTANCE.md) distinguishes completed software
 checks from the native integration evidence still required before beta promotion.
 The release branch is `basis-aware`, and the product name is **BaSIS AWARE**,
-consistent with **HybAs AWARE**. See the [0.4.0a2 release notes](docs/RELEASE_0.4.0a2.md).
-The installation command below selects `basis-aware`; use `--branch v0.4.0a2`
+consistent with **HybAs AWARE**. See the [0.4.0a3 release notes](docs/RELEASE_0.4.0a3.md).
+The installation command below selects `basis-aware`; use `--branch v0.4.0a3`
 instead to check out the fixed alpha release.
 
 ## Install the workflow controller
@@ -363,6 +363,13 @@ list and `skipped_stages` mapping. Other unexpected nested summary fields remain
 errors, and isolate identity, duplicate-key and provenance checks remain active.
 
 ## BaSIS AWARE: candidate admission and deduplication
+
+The standard follow-up scope is **AMRFinder review**: family-only HMM, partial and
+disrupted-sequence calls can receive focused investigation, while other native
+AMR calls remain visible for context review. Deferred or inconclusive follow-up
+keeps an explicit review notice in the report and exports. See
+[AMRFinder review and the AFB01 regression](docs/AMR_REVIEW.md). The previous
+broader tool admission is available explicitly as `deep.aware.scope: all-supported`.
 
 DeepSafe now defaults to **auto-medium** admission, with **auto-strict** and
 **auto-loose** alternatives plus manual per-tool overrides under `deep.aware`.

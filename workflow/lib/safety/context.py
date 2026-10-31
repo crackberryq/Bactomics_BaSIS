@@ -91,7 +91,7 @@ class SafetyContext:
         from basis.aware import resolve_policy
         resolve_policy(cfg["deep"])
         cfg["execution"].update(cores=self.threads, memory_mb=self.memory_mb)
-        cfg["version"] = "0.4.0a2"
+        cfg["version"] = "0.4.0a3"
         cfg["engine"] = "snakemake"
         cfg["options"] = {"deep": self.deep_enabled, "extend": self.extend_enabled}
         if set(cfg["modules"]) - set(ALL_MODULES):
@@ -371,14 +371,16 @@ class SafetyContext:
     def screening_report_targets(self):
         if not self.samples:
             raise ValueError("No samples selected. Use the setup target to install only, or supply isolates/samples.")
-        return [str(Path(isolate) / "safety/report.html") for isolate in self.samples]
+        return [str(Path(isolate) / "safety" / relative) for isolate in self.samples
+                for relative in ("report.html", "tables/amr-review.tsv")]
 
     def followup_report_targets(self):
         if not self.samples:
             raise ValueError("No samples selected. Use the setup target to install only, or supply isolates/samples.")
         if not self.deep_enabled:
             return []
-        return [str(Path(isolate) / "safety/deepsafe-report/report.html") for isolate in self.samples]
+        return [str(Path(isolate) / "safety/deepsafe-report" / relative) for isolate in self.samples
+                for relative in ("report.html", "tables/amr-review.tsv")]
 
     def report_targets(self):
         return self.screening_report_targets() + self.followup_report_targets()

@@ -1,0 +1,21 @@
+{
+  "description": "Metadata-only regression based on the owner's AFB01/isolate1 cfr incident. Identifiers and coordinates are synthetic; no sequence or functional conclusion is included.",
+  "sample_id": "isolate1",
+  "sample_alias": "AFB01",
+  "native_row": {
+    "Protein id": "fixture-protein-cfr",
+    "Contig id": "fixture-contig",
+    "Start": "1",
+    "Stop": "1047",
+    "Strand": "+",
+    "Element symbol": "cfr",
+    "Element name": "Cfr family methyltransferase",
+    "HMM description": "Cfr family methyltransferase",
+    "Type": "AMR",
+    "Subtype": "AMR",
+    "Scope": "core",
+    "Method": "HMM",
+    "% Identity to reference": "85.67",
+    "% Coverage of reference": "100.00"
+  }
+}

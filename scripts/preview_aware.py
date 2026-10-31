@@ -22,6 +22,8 @@ def preview(isolate, preset="all", configfile=None):
     sample = json.loads((root / "metadata/sample.json").read_text())
     saved = json.loads((root / "metadata/config.json").read_text())
     config = merge_dict(default_config()["deep"], saved["deep"])
+    if "scope" not in saved["deep"].get("aware", {}):
+        config["aware"].pop("scope", None)
     if configfile:
         import yaml
         supplied = yaml.safe_load(Path(configfile).read_text())

@@ -11,6 +11,7 @@ deep:
   maximum_candidates: 5  # Per-sample computing ceiling after deduplication; never a target.
   aware:
     enabled: true
+    scope: amrfinder-review  # Reported AMR uncertainty only; see docs/AMR_REVIEW.md.
     preset: auto-medium  # auto-strict | auto-medium | auto-loose
     tools: {}           # Per-tool manual overrides: see config/aware.example.yaml
 resources:

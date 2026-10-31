@@ -22,6 +22,7 @@ from urllib.parse import quote
 RELOCATIONS = {
     "findings.tsv": "tables/findings.tsv",
     "screening-findings.tsv": "tables/screening-findings.tsv",
+    "amr-review.tsv": "tables/amr-review.tsv",
     "recommendations.tsv": "tables/recommendations.tsv",
     "module-scope.tsv": "tables/module-scope.tsv",
     "deferred-candidates.tsv": "tables/deferred-candidates.tsv",
@@ -171,10 +172,18 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
             if any(c.get("sample_id") not in (None, "", sid) for c in record.get("candidates", [])):
                 raise ValueError("DeepSafe candidate sample identity mismatch")
             record["completion_summary"] = completion_summary(record)
-            # A completed module with a failed selected candidate is inconsistent.
-            if status == "completed" and any(c.get("selected") and c.get("execution") != "completed"
-                                             for c in record.get("candidates", [])):
-                raise ValueError("Completed DeepSafe record contains unfinished selected candidates")
+            # Finalization can finish with a terminal abstention (for example,
+            # unavailable query or references). Keep that unassessed scope in
+            # the report; failed or still-running work remains inconsistent.
+            if status == "completed":
+                for candidate in record.get("candidates", []):
+                    if not candidate.get("selected"):
+                        continue
+                    if candidate.get("execution") not in {"completed", "not_assessed"}:
+                        raise ValueError("Completed DeepSafe record contains unfinished selected candidates")
+                    if candidate.get("execution") == "not_assessed" and (
+                            not isinstance(candidate.get("reason"), str) or not candidate["reason"].strip()):
+                        raise ValueError("Unassessed DeepSafe candidate requires an explicit reason")
             deep_records.append(record)
         else:
             records.append(record)
@@ -210,7 +219,7 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
     run = {
         "schema": "basis-snakemake-run-v1", "run_id": hashlib.sha256(serialized).hexdigest()[:20],
         "report_view": view,
-        "version": config.get("version", "0.4.0a2"), "engine": "snakemake",
+        "version": config.get("version", "0.4.0a3"), "engine": "snakemake",
         "options": {"deep": bool(deep_records), "extend": "pathogenfinder2" in seen},
         "validation_mode": config.get("validation_mode", "research_screening"),
         "enabled_modules": sorted(m for m, d in decisions.items() if d.get("requested") and m != "deepsafe"),
@@ -222,6 +231,8 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
         "reporting_scope": "Saved evidence aggregation only; no native analyses or model inference performed by reporting.",
         "input_validations": {sid: sample.get("input_validation", {})},
     }
+    if view == "followup" and config.get("followup_review"):
+        run["screening_version"] = config["followup_review"].get("screening_version", "unknown")
     return run, records, deep_records
 
 

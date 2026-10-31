@@ -121,6 +121,10 @@ class SavedFollowupTests(unittest.TestCase):
             self.assertEqual(self.snapshot(), before)
             self.assertEqual(context.records, [str(self.record_path)])
             self.assertEqual(context.config["modules"], self.config["modules"])
+            from safety import __version__
+            self.assertEqual(context.config["version"], __version__)
+            self.assertEqual(context.config["followup_review"]["screening_version"], self.config["version"])
+            self.assertEqual(context.config["followup_review"]["followup_version"], __version__)
             self.assertTrue(context.config["deep"]["enabled"])
             self.assertTrue(context.followup_only)
             self.assertTrue(context.deep_enabled)
@@ -187,13 +191,29 @@ class SavedFollowupTests(unittest.TestCase):
                   "maximum_candidates": 2, "maximum_attention_candidates": 0,
                   "maximum_exploratory_candidates": 0, "maximum_tree_candidates": 0,
                   "maximum_placement_candidates": 0,
-                  "aware": {"enabled": True, "preset": "auto-medium", "tools": {}, "queues": {}}}
+                  "aware": {"enabled": True, "preset": "auto-medium", "scope": "amrfinder-review", "tools": {}, "queues": {}}}
         supplied = {**self.supplied, "deep": update}
         original = copy.deepcopy(supplied)
         context = self.context(supplied)
         for key, value in update.items():
             self.assertEqual(context.config["deep"][key], value, key)
         self.assertEqual(supplied, original)
+        self.assertEqual(self.read(self.config_path), self.config)
+
+    def test_review_scope_requires_explicit_saved_or_overlay_setting(self):
+        from basis.aware import resolve_policy
+        self.assertEqual(resolve_policy(self.context(self.supplied).config["deep"])["scope"], "amrfinder-review")
+        # Model an actual older saved screening config, before scope existed.
+        self.config["deep"]["aware"].pop("scope")
+        self.write("metadata/config.json", self.config)
+        self.render_screening()
+        saved = self.context(self.supplied)
+        self.assertEqual(resolve_policy(saved.config["deep"])["scope"], "all-supported")
+        self.assertEqual(saved.config["deep"]["aware"], self.config["deep"]["aware"])
+        supplied = copy.deepcopy(self.supplied)
+        supplied["deep"]["aware"] = {"scope": "amrfinder-review"}
+        reviewed = self.context(supplied)
+        self.assertEqual(resolve_policy(reviewed.config["deep"])["scope"], "amrfinder-review")
         self.assertEqual(self.read(self.config_path), self.config)
 
     def test_invalid_inherited_controls_are_rejected_when_followup_is_enabled(self):
