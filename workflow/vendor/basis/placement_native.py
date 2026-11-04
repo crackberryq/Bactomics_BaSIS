@@ -404,6 +404,12 @@ def run_placement(candidate, panel, config, directory, runner):
         # Recheck the sealed shared reference artifacts after all commands.
         _validate_cache(references, manifest["cache_key"])
         result["artifacts"].extend(str(path) for path in (placed_query, jplace))
+        # Seal query-specific files at production time, as well as reference files.
+        # Reporting must never invent historical checksums for an old run.
+        result["artifact_checksums"] = {
+            str(path): _file_hash(path) for path in map(Path, result["artifacts"])
+            if path.is_file()
+        }
         result.update(status="completed", reason="reference_tree_placement_completed")
         # This descriptive layer cannot promote a group, alter scores, or turn
         # an otherwise completed native placement into an execution failure.
@@ -428,3 +434,4 @@ def run_placement(candidate, panel, config, directory, runner):
         result["artifacts"].append(str(audit))
         audit.write_text(json.dumps(result, sort_keys=True, indent=2, allow_nan=False) + "\n")
     return result
+

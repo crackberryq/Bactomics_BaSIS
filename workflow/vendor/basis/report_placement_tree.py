@@ -305,9 +305,13 @@ def render_placement_tree(candidate, deep_record, outdir):
         target.write_text(page, encoding='utf-8')
         target.with_suffix('.sha256').write_text(_sha(page.encode('utf-8')) + '\n', encoding='ascii')
     except (OSError, ValueError, TypeError, KeyError, UnicodeError, RecursionError) as exc:
-        return '<p class="tree-note">Placement tree visualization unavailable: ' + _esc(exc) + '. Saved analyses are unchanged; no native tools were rerun.</p>'
+        return ('<section class="placement-tree-launch" role="status"><h4>Placement completed; tree view unavailable</h4>'
+                '<p>' + _esc(exc) + '</p><p>The recorded placement summary remains visible, but the tree sources could not be verified. '
+                'For older runs without recorded checksums, create a follow-up using the updated pipeline and rerun placement. '
+                'A report refresh alone cannot establish the original file identity.</p>'
+                '<p>Saved analyses are unchanged; no native tools were rerun.</p></section>')
     historical_diagnostics = render_placement_diagnostics(data['diagnostics'], data['scores']) if not layer.get('diagnostics') else ''
-    return '<section class="placement-tree-launch"><h4>Explore the family placement tree</h4><p>Open the reference tree with ' + _esc(data['protein']) + ' highlighted at its highest-weight placement. Switch between recorded placements and inspect readable reference labels.</p><div class="placement-tree-links"><a class="button placement-tree-primary" href="' + _esc(relative) + '" target="_blank" rel="noopener">Open placement tree</a>' + ''.join('<a class="button" download href="' + _esc(path) + '">' + _esc(label) + '</a>' for label, path in exports[:2]) + '</div><p>Placement weights describe phylogenetic association; they are not probabilities of resistance.</p>'+historical_diagnostics+'</section>'
+    return '<section class="placement-tree-launch"><h4>Explore the family placement tree</h4><p>Open the reference tree with ' + _esc(data['protein']) + ' highlighted at its highest-weight placement. Switch between recorded placements and inspect readable reference labels.</p>' + '<details class="placement-preview" open><summary>Highest-weight placement tree</summary><div class="tree-scroll">' + best_svg + '</div><p>Reference tree with a query attachment; horizontal lengths are substitutions per site. This is not a separately inferred query-containing tree.</p></details>' + '<div class="placement-tree-links"><a class="button placement-tree-primary" href="' + _esc(relative) + '" target="_blank" rel="noopener">Open placement tree</a>' + ''.join('<a class="button" download href="' + _esc(path) + '">' + _esc(label) + '</a>' for label, path in exports[:2]) + '</div><p>Placement weights describe phylogenetic association; they are not probabilities of resistance.</p>'+historical_diagnostics+'</section>'
 
 
 def exported_tree_href(candidate, deep_record, outdir):
@@ -324,3 +328,4 @@ def exported_tree_href(candidate, deep_record, outdir):
         return relative if _sha(path.read_bytes()) == seal.read_text(encoding='ascii').strip() else None
     except (OSError, ValueError, TypeError, KeyError, UnicodeError, RecursionError):
         return None
+

@@ -91,7 +91,7 @@ class SafetyContext:
         from basis.aware import resolve_policy
         resolve_policy(cfg["deep"])
         cfg["execution"].update(cores=self.threads, memory_mb=self.memory_mb)
-        cfg["version"] = "0.4.0a4"
+        cfg["version"] = "0.4.0a5"
         cfg["engine"] = "snakemake"
         cfg["options"] = {"deep": self.deep_enabled, "extend": self.extend_enabled}
         if set(cfg["modules"]) - set(ALL_MODULES):
@@ -384,3 +384,4 @@ class SafetyContext:
 
     def report_targets(self):
         return self.screening_report_targets() + self.followup_report_targets()
+

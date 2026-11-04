@@ -4,7 +4,7 @@
   "source_tag": "v0.3.0rc8",
   "source_commit": "bedf903300e2450b1ced5f5585e8dd6b56db58c9",
   "source_version": "0.3.0rc8",
-  "standalone_version": "0.4.0a4",
+  "standalone_version": "0.4.0a5",
   "scope": "Selected scientific parsers, analysis and report functions plus their original scientific resources. Snakemake owns the standalone workflow; the previous CLI, GUI, environment managers and scheduler are not included.",
   "changed_files": [
     {
@@ -42,6 +42,18 @@
       "source_sha256": "3ae8d2ce0e8189e2d2980c6a915777b625bf303990efe2e5ead54b7f9c12d2b8",
       "standalone_sha256": "52f3f6958058e0dfc1768a986a2bc97edb61e3205489b6cd9a1088cffe3e1bc3",
       "reason": "Match ISEScan 1.7.3 early no-hit warnings to raw-hit contigs, retain completed-search and provenance checks, and expose contigs without predicted proteins."
+    },
+    {
+      "path": "workflow/vendor/basis/placement_native.py",
+      "source_sha256": "87e478a23f7ee2ae740a92b6aa6c86304d882847d3b9c601d89319233bcb13bb",
+      "standalone_sha256": "abd5308f5e795b0378b3607489d389a9f8d9dfee1e0225bfa26b014263dfbb3b",
+      "reason": "Record placement artifact checksums at production and show verified inline tree previews with explicit recovery guidance."
+    },
+    {
+      "path": "workflow/vendor/basis/report_placement_tree.py",
+      "source_sha256": "43b5ed421481094b93bb0b27a46030ebb156c2fcfa29369f54b734d18e9573e6",
+      "standalone_sha256": "17951423a58ef85560453eec202a2e4bd0f260bd2b4aacd8b6d3f17e1649241d",
+      "reason": "Record placement artifact checksums at production and show verified inline tree previews with explicit recovery guidance."
     }
   ],
   "removed_files": [
