@@ -92,6 +92,70 @@ def kv(items):
     return '<dl class="kv">' + ''.join('<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd></div>' for k, v in items.items()) + '</dl>'
 
 
+def _input_validation_rows(run, samples):
+    """Retain recorded warnings from both legacy and current snapshot locations."""
+    by_sample = {}
+    for sample in samples:
+        value = sample.get('input_validation')
+        if isinstance(value, dict) and value:
+            by_sample.setdefault(str(sample.get('sample_id', 'unknown')), []).append(value)
+    for sid, value in (run.get('input_validations') or {}).items():
+        if isinstance(value, dict) and value:
+            by_sample.setdefault(str(sid), []).append(value)
+    rows = []
+    for sid, values in sorted(by_sample.items()):
+        warnings, limitations = [], []
+        for value in values:
+            warning_sources = [value.get('warnings')]
+            for name in ('translation_validation', 'annotation_coverage'):
+                detail = value.get(name)
+                if isinstance(detail, dict):
+                    warning_sources.append(detail.get('warnings'))
+            for group, target in [(item, warnings) for item in warning_sources] + [(value.get('limitations'), limitations)]:
+                for item in group if isinstance(group, list) else [group] if group else []:
+                    text = str(item)
+                    if text not in target:
+                        target.append(text)
+        rows.append({'sample_id': sid, 'warnings': warnings, 'limitations': limitations,
+                     'snapshots': values})
+    return rows
+
+
+def _render_input_validation(rows, *, warnings_only=False):
+    if warnings_only:
+        affected = [row for row in rows if row['warnings']]
+        if not affected:
+            return ''
+        return ('<div class="callout warn" id="input-validation-warnings"><strong>Input validation requires review</strong>'
+                '<p>These recorded input limitations apply to the screening results even when tools finish.</p><ul>'
+                + ''.join(''.join('<li><strong>' + esc(row['sample_id']) + '</strong>: ' + esc(warning) + '</li>'
+                                  for warning in row['warnings'][:5])
+                          + ('<li>' + esc(row['sample_id']) + ': ' + str(len(row['warnings']) - 5)
+                             + ' additional recorded warnings; inspect the complete list below.</li>'
+                             if len(row['warnings']) > 5 else '') for row in affected)
+                + '</ul><a href="#input-validation-details">Inspect input validation and coverage</a></div>')
+    result = '<article class="panel" id="input-validation-details"><h3>Input validation and coverage</h3>'
+    if not rows:
+        return result + '<p>No input-validation record was supplied. Input consistency and annotation coverage cannot be confirmed from this report.</p></article>'
+    for row in rows:
+        result += '<h4>' + esc(row['sample_id']) + '</h4>'
+        if row['warnings']:
+            result += '<details><summary>All recorded input warnings (' + str(len(row['warnings'])) + ')</summary><ul>'
+            result += ''.join('<li>' + esc(item) + '</li>' for item in row['warnings']) + '</ul></details>'
+        result += '<ul>' + ''.join('<li>' + esc(item) + '</li>' for item in row['limitations']) + '</ul>'
+        rendered = set()
+        for snapshot in row['snapshots']:
+            for name in ('annotation_coverage', 'translation_validation'):
+                details = snapshot.get(name)
+                if isinstance(details, dict):
+                    encoded = json.dumps(details, sort_keys=True, default=str)
+                    if (name, encoded) not in rendered:
+                        rendered.add((name, encoded))
+                        result += '<h5>' + esc(human(name).capitalize()) + '</h5>'
+                        result += kv({human(key).capitalize(): value for key, value in details.items() if key != 'warnings'})
+    return result + '<p class="small muted">File consistency and coverage checks do not establish biological function, culture purity or organism safety.</p></article>'
+
+
 def section(ident, number, title, subtitle, content):
     return f'<section class="section" id="{ident}"><div class="section-head"><span class="section-number">{number}</span><div><h2>{esc(title)}</h2><p class="muted">{esc(subtitle)}</p></div></div>{content}</section>'
 
@@ -377,9 +441,11 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     hero_title = esc(report_title) if view != 'combined' else 'Genomic evidence,<br>ready for review.'
     hero_intro = {'screening': 'Read what each tool reported, find the gene or feature,<br class="desktop-only"> and see where the assessment remains incomplete.', 'deep': 'Inspect saved follow-up analyses and source context,<br class="desktop-only"> and review what remains unresolved.'}.get(view, 'Trace the screening calls, inspect focused analyses,<br class="desktop-only"> and see exactly what remains unresolved.')
     start = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>BaSIS · ' + esc(report_title) + '</title><style>' + CSS + '</style></head><body><a class="skip-link" href="#overview">Skip to report</a><div class="app"><aside class="sidebar"><a class="brand" href="#overview">' + branding + '<span>BaSIS<small>BACTOMICS ENVIRONMENT</small></span></a><div class="sidebar-caption">' + esc(report_title.upper()) + '</div><nav aria-label="Report sections">' + nav + '</nav><div class="sidebar-bottom"><span class="status-dot"></span> Offline report<small>Version ' + esc(run.get('version')) + '<br>Research screening evidence</small></div></aside><main class="main"><div class="topbar"><span>Bactomics <span class="muted">/</span> BaSIS <span class="muted">/ Genomic assessment</span></span><div class="topbar-actions">' + navigator + '<a class="button" href="#citation">Cite BaSIS</a><button class="button" data-action="print">Print / Save PDF</button></div></div>'
+    input_validation_rows = _input_validation_rows(run, samples)
+    input_warnings = any(row['warnings'] for row in input_validation_rows)
     all_done = requested_count > 0 and completed == requested_count
     headline = ('Requested modules completed' if not selected else 'Selected analyses completed') if all_done and done == len(selected) and not run.get('engine_error') else 'Execution review required'
-    attention = any(row['tone'] in {'warn', 'bad'} for row in tool_rows)
+    attention = input_warnings or any(row['tone'] in {'warn', 'bad'} for row in tool_rows)
     scope_limited = run.get('completeness') in {'incomplete', 'failed'}
     if show_screening and all_done and done == len(selected) and not run.get('engine_error'):
         headline = 'Tools finished · review assessment limits' if attention or scope_limited else 'All requested tools finished'
@@ -392,6 +458,7 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     candidate_stats = (stat('Selected candidates', f'{done} / {len(selected)}' if selected else 'Unavailable' if selection_unavailable else 'None selected', 'completed DeepSafe analyses' if selected else 'candidate selection unavailable — inspect execution issues' if selection_unavailable else 'no selected-candidate analyses requested') + stat('Requires attention', num(len(deferred)), 'not selected for this follow-up run · reasons retained')) if deep_enabled else ''
     overview = hero + '<div class="stats">' + stat('Tools finished', f'{completed} / {requested_count}', 'completed execution; recorded result and assessment scope are shown separately') + candidate_stats + stat('Execution failures', num(failed), 'failed or unknown requested module records') + '</div>'
     overview += render_review_summary(review)
+    overview += _render_input_validation(input_validation_rows, warnings_only=True)
     deferred_note = num(len(deferred)) + ' candidates remain deferred. ' if deep_enabled else ''
     overview += '<div class="callout"><strong>What does the completion count mean?</strong><p>The tools-finished count describes execution. An inconclusive or incomplete assessment can remain after a tool finishes. Recorded overall scope: ' + esc(human(run.get('completeness'))) + '. ' + deferred_note + 'Completed analyses do not establish protein function or organism safety.</p></div>'
     failed_resources = [item for item in run.get('resource_preparation', [])
@@ -467,7 +534,7 @@ def render_dashboard(run, samples, records, deep_records, findings, recommendati
     if show_screening:
         overview += '</details>'
     content = section('overview', '01', 'Assessment overview', 'A concise account of this run and its evidence coverage.', overview)
-    background = section('inputs', '04' if show_screening else '02', 'Inputs and module scope', 'Input provenance, recorded exclusions and holds for each sample.', render_sample_scope(run, samples, combined, NAMES))
+    background = section('inputs', '04' if show_screening else '02', 'Inputs and module scope', 'Input provenance, recorded exclusions and holds for each sample.', _render_input_validation(input_validation_rows) + render_sample_scope(run, samples, combined, NAMES))
     background += section('genome', '05' if show_screening else '03', 'Genome explorer', 'Locate findings, inspect neighboring genes and follow each candidate into its evidence.', render_genome_explorer(genome_data))
     if deep_enabled:
         background += section('evidence-matrix', '06' if show_screening else '04', 'Candidate evidence matrix', 'Compare analysis coverage and review holds across selected proteins.', render_evidence_matrix(selected, records, candidate_records))

@@ -1,8 +1,16 @@
 # Preparing BaSIS AWARE 0.4.0b1
 
-**Status: beta preparation, not a published beta. Updated 2026-10-29.**
+**Status: beta preparation, not a published beta. Updated 2026-11-09.**
 
-The beta scope is the existing v0.4.0a2 workflow and readable reports. Batch
+The current repair candidate is **0.4.0a6**, described in
+[the release notes](RELEASE_0.4.0a6.md). It carries the reviewed annotation-coverage,
+native-coordinate and report-warning fixes already implemented in development at
+`53c61df005443b2d258664e1da1d3dd9a0a2591e`. The `basis-aware` and `development`
+branches remain separate installation channels. Publication of the new alpha is
+gated on CI for its exact commit; the historical evidence below does not certify
+the new candidate or close native/scientific validation gates.
+
+The original beta preparation baseline was the v0.4.0a2 workflow and readable reports. Batch
 comparison and additional reporting features are deferred. Changes during this
 phase address confirmed defects, acceptance evidence and release packaging.
 The [beta promotion gate](ACCEPTANCE.md#beta-promotion-gate) remains applicable.

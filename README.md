@@ -1,14 +1,14 @@
 # BaSIS AWARE · standalone Snakemake workflow
 
-**Version 0.4.0a4 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
+**Version 0.4.0a6 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
 
 This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
 
 The [acceptance checklist](docs/ACCEPTANCE.md) distinguishes completed software
 checks from the native integration evidence still required before beta promotion.
 The release branch is `basis-aware`, and the product name is **BaSIS AWARE**,
-consistent with **HybAs AWARE**. See the [0.4.0a4 release notes](docs/RELEASE_0.4.0a4.md).
-The installation command below selects `basis-aware`; use `--branch v0.4.0a4`
+consistent with **HybAs AWARE**. See the [0.4.0a6 release notes](docs/RELEASE_0.4.0a6.md).
+The installation command below selects `basis-aware`; use `--branch v0.4.0a6`
 instead to check out the fixed alpha release.
 
 ## Install the workflow controller
@@ -37,6 +37,12 @@ The default annotation layout follows HybAs:
 | Proteins | `~/bactomics/isolate2/annotation/isolate2.faa` |
 | Annotation | `~/bactomics/isolate2/annotation/isolate2.gff` |
 | GenBank, for modules that need it | `~/bactomics/isolate2/annotation/isolate2.gbk` |
+
+Input validation checks that all eligible CDSs are represented consistently across
+the supplied annotations. Incomplete exports now fail explicitly; pseudogene
+exclusions and translation limits remain visible in reports. See
+[annotation integrity and coverage](docs/ANNOTATION_INTEGRITY.md) for the supported
+partial-CDS, alias and GenBank conventions.
 
 Start from the checkout:
 

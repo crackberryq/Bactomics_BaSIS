@@ -4,7 +4,7 @@
   "source_tag": "v0.3.0rc8",
   "source_commit": "bedf903300e2450b1ced5f5585e8dd6b56db58c9",
   "source_version": "0.3.0rc8",
-  "standalone_version": "0.4.0a5",
+  "standalone_version": "0.4.0a6",
   "scope": "Selected scientific parsers, analysis and report functions plus their original scientific resources. Snakemake owns the standalone workflow; the previous CLI, GUI, environment managers and scheduler are not included.",
   "changed_files": [
     {
@@ -629,6 +629,36 @@
         "path": "workflow/vendor/basis/run_summary.py",
         "base_sha256": "acba1a20f6efad948f6e72d71288a22f6aa7ab5898971a634618583969cdff06",
         "updated_sha256": "93c857297eb4e1ac014025d221effea2567a9cbf2a799b82c69ef8cc4ecea373"
+      }
+    ]
+  },
+  "prebeta_integrity_update": {
+    "base_commit": "4fa218db3dfc73733267d36c225ebc0d8df50f27",
+    "development_fix_commit": "53c61df005443b2d258664e1da1d3dd9a0a2591e",
+    "scope": "Require complete eligible CDS coverage across annotation exports; reject contradictory native coordinates; display input and translation limitations in reports.",
+    "native_analysis_settings_changed": false,
+    "scientific_thresholds_changed": false,
+    "evidence_classification_changed": false,
+    "files": [
+      {
+        "path": "workflow/vendor/basis/annotation_coverage.py",
+        "base_sha256": null,
+        "updated_sha256": "2fd6c052e7d236367c1b2461255dd006dbe8d1cbac6f11ae28aa84b8fe29b572"
+      },
+      {
+        "path": "workflow/vendor/basis/inputs.py",
+        "base_sha256": "a95636059c72380ca5997e2172341cae2188bb7e5f9873ea0d14edd2be2b0451",
+        "updated_sha256": "7b9c04e9fcb08916b42f5f61b1a0ae28dd40603a0b29fec4e4b7909d29d549b9"
+      },
+      {
+        "path": "workflow/vendor/basis/normalize.py",
+        "base_sha256": "c5a2274f59b24f44ffa4f64144312854f3e0a9fba6ce2d19281a61bdb60200d9",
+        "updated_sha256": "faef70d82410b9fa91ad74db58902c436ab5d5818f39451e045efe434eda3a47"
+      },
+      {
+        "path": "workflow/vendor/basis/report_dashboard.py",
+        "base_sha256": "2fbcfd87c6837e8af58a77731b8d3947f8e06c17625a1923d45726985c1fd00b",
+        "updated_sha256": "c92be5b112741577ecb293d1a0effd4839c16cce8ba8e31efed924bd446e8323"
       }
     ]
   }

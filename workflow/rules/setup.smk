@@ -4,6 +4,7 @@ SETUP_SOURCE = [str(ROOT / "workflow/lib/safety" / name) for name in
                 ("setup.py", "context.py", "resources.py", "runtime.py")]
 VALIDATION_SOURCE = [str(ROOT / "workflow/lib/safety/setup.py"),
                      str(ROOT / "workflow/vendor/basis/inputs.py"),
+                     str(ROOT / "workflow/vendor/basis/annotation_coverage.py"),
                      str(ROOT / "workflow/vendor/basis/sequence_validation.py")]
 ALL_RESOURCE_RECEIPTS = [CTX.resource_receipt(name) for name in CTX.resource_specs()]
 ALL_ENVIRONMENT_RECEIPTS = CTX.environment_receipts()
