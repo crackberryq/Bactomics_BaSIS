@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from .util import resolve_path, sha256_file
+from .annotation_coverage import is_pseudogene, validate_genbank_coverage
 
 SAMPLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 INPUT_MODES = {"auto", "hybas", "external"}
@@ -63,6 +64,8 @@ def read_cds(path: str | Path) -> list[dict]:
                 if "=" in item:
                     key, value = item.split("=", 1)
                     attrs[key] = unquote(value)
+                elif item.strip().lower() in {"pseudo", "pseudogene"}:
+                    attrs[item.strip().lower()] = "true"
             try:
                 start, end = int(cells[3]), int(cells[4])
             except ValueError as exc:
@@ -186,12 +189,25 @@ def validate_sample(sample: dict) -> dict:
             raise ValueError(f"{sample['sample_id']}: invalid protein sequence {pid}")
     cds = read_cds(sample["gff"])
     mapping = {}
+    omitted_pseudogenes = []
+    eligible_count = 0
     for feature in cds:
         cid = feature["contig"]
         if cid not in assembly or feature["end"] > len(assembly[cid]):
             raise ValueError(f"{sample['sample_id']}: GFF CDS absent from or outside assembly: {cid}")
-        matches = [p for p in feature["aliases"] if p in proteins]
-        for pid in set(matches):
+        matches = set(p for p in feature["aliases"] if p in proteins)
+        pseudo = is_pseudogene(feature["attributes"])
+        if not pseudo:
+            eligible_count += 1
+        if not matches:
+            label = feature["aliases"][0] if feature["aliases"] else f"{cid}:{feature['start']}-{feature['end']}"
+            if pseudo:
+                omitted_pseudogenes.append(label)
+            else:
+                raise ValueError(f"{sample['sample_id']}: incomplete protein annotation: GFF CDS {label!r} has no matching protein FASTA record; partial CDSs also require their supplied protein sequence")
+        if len(matches) > 1:
+            raise ValueError(f"{sample['sample_id']}: ambiguous CDS aliases match multiple protein FASTA records: {sorted(matches)}")
+        for pid in matches:
             if pid in mapping:
                 raise ValueError(f"{sample['sample_id']}: protein {pid} maps to multiple CDS features")
             mapping[pid] = {k: feature[k] for k in ("contig", "start", "end", "strand", "phase")}
@@ -199,6 +215,12 @@ def validate_sample(sample: dict) -> dict:
     if missing:
         raise ValueError(f"{sample['sample_id']}: {len(missing)} protein IDs absent from GFF CDS records; e.g. {sorted(missing)[:3]}")
     warnings = []
+    if omitted_pseudogenes:
+        warnings.append(f"{len(omitted_pseudogenes)} explicitly tagged GFF pseudogene CDS feature(s) have no protein FASTA record and are excluded from protein-based assessment; examples: {', '.join(omitted_pseudogenes[:3])}")
+    coverage = {"status": "complete_eligible_cds", "gff_cds_count": len(cds),
+                "eligible_cds_count": eligible_count, "mapped_eligible_cds_count": eligible_count,
+                "omitted_pseudogene_cds_count": len(omitted_pseudogenes),
+                "policy": "Every non-pseudogene CDS, including partial CDSs, must have exactly one supplied protein; explicitly tagged pseudogenes may be omitted with a visible warning."}
     internal_stops = [pid for pid, seq in proteins.items() if "*" in seq.rstrip("*")]
     if internal_stops:
         warnings.append(f"Internal stop characters in {len(internal_stops)} proteins; candidate integrity requires review")
@@ -209,42 +231,16 @@ def validate_sample(sample: dict) -> dict:
     contig_aliases = {}
     if sample.get("genbank"):
         hashes["genbank"] = sha256_file(sample["genbank"])
-        gb_sequences = []
-        collecting = False
-        sequence = ""
-        gb_aliases = []
-        gb_records = []
-        with open(sample["genbank"], encoding="utf-8") as gb:
-            for line in gb:
-                if line.startswith("LOCUS"):
-                    gb_aliases = line.split()[1:2]
-                elif line.startswith(("ACCESSION", "VERSION")):
-                    gb_aliases.extend(line.split()[1:2])
-                elif line.startswith("ORIGIN"):
-                    collecting, sequence = True, ""
-                elif line.startswith("//") and collecting:
-                    gb_sequences.append(sequence.upper())
-                    gb_records.append((list(gb_aliases), sequence.upper()))
-                    collecting = False
-                elif collecting:
-                    sequence += "".join(re.findall(r"[A-Za-z]+", line))
-        if sorted(gb_sequences) != sorted(assembly.values()):
-            raise ValueError(f"{sample['sample_id']}: GenBank sequences differ from the supplied assembly")
-        for aliases, sequence in gb_records:
-            matches = [cid for cid, seq in assembly.items() if seq == sequence]
-            direct = [cid for cid in matches if cid in aliases]
-            canonical = direct[0] if len(direct) == 1 else matches[0] if len(matches) == 1 else None
-            if canonical is None:
-                raise ValueError(f"{sample['sample_id']}: ambiguous GenBank-to-assembly identifier mapping")
-            for alias in aliases:
-                if alias in contig_aliases and contig_aliases[alias] != canonical:
-                    raise ValueError(f"{sample['sample_id']}: conflicting GenBank accession {alias}")
-                contig_aliases[alias] = canonical
+        gb_check = validate_genbank_coverage(sample, assembly, proteins, cds)
+        contig_aliases = gb_check["contig_aliases"]
+        coverage["genbank"] = gb_check["coverage"]
+        warnings.extend(gb_check["warnings"])
     return {"sample_id": sample["sample_id"], "contigs": len(assembly),
             "assembly_bp": sum(map(len, assembly.values())), "protein_count": len(proteins),
             "protein_coordinates": mapping, "contig_lengths": {k: len(v) for k, v in assembly.items()},
             "contig_aliases": contig_aliases,
             "translation_validation": translation_check,
+            "annotation_coverage": coverage,
             "input_hashes": hashes,
             "warnings": warnings,
             "limitations": ["File consistency checks do not establish culture purity or recovery of all original replicons."]}

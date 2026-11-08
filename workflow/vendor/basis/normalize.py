@@ -28,9 +28,9 @@ def _has_normalized_ids(finding: dict) -> bool:
 def _validate_coordinate_provenance(attributes: dict, module: str, row: int) -> None:
     """Check the audit fields' shape without treating them as canonical location.
 
-    A native alignment span may differ from the annotated CDS, so historical
-    coordinates are retained as reported, not checked against current bounds.
-    The canonical finding coordinates are independently validated below.
+    A native alignment span may be a contained part of the annotated CDS.
+    Its compatibility with that feature is checked separately before replacing
+    any coordinates; the original snapshot remains available for inspection.
     """
     if "native_contig_alias" in attributes:
         alias = attributes["native_contig_alias"]
@@ -45,6 +45,28 @@ def _validate_coordinate_provenance(attributes: dict, module: str, row: int) -> 
             expected = int if key in {"start", "end"} else str
             if value is not None and type(value) is not expected:
                 raise ValueError(f"Invalid reported_coordinates.{key} in {module} finding {row}")
+
+
+def _validate_protein_location(reported: dict, feature: dict, aliases: dict,
+                               module: str, row: int) -> None:
+    """Do not let a protein identifier erase contradictory native evidence.
+
+    Protein-only tools may omit locations. Nucleotide alignments may report a
+    contained subinterval, and a declared GenBank alias is equivalent to its
+    canonical contig. These are different from a conflicting interval/strand.
+    """
+    contig = reported.get("contig")
+    if contig is not None and aliases.get(contig, contig) != feature["contig"]:
+        raise ValueError(f"{module} finding {row}: reported contig conflicts with protein CDS")
+    strand = reported.get("strand")
+    if strand not in (None, ".", "?", feature["strand"]):
+        raise ValueError(f"{module} finding {row}: reported strand conflicts with protein CDS")
+    start, end = reported.get("start"), reported.get("end")
+    if start is not None or end is not None:
+        if type(start) is not int or type(end) is not int or start < 1 or end < start:
+            raise ValueError(f"{module} finding {row}: invalid reported protein coordinates")
+        if start < feature["start"] or end > feature["end"]:
+            raise ValueError(f"{module} finding {row}: reported coordinates outside protein CDS")
 
 
 def normalize_result(result: dict, module: str, sample: dict, validation: dict) -> dict:
@@ -93,6 +115,7 @@ def normalize_result(result: dict, module: str, sample: dict, validation: dict) 
         pid = finding.get("protein_id")
         if pid in coordinates:
             feature = coordinates[pid]
+            _validate_protein_location(finding, feature, aliases, module, index + 1)
             # Imported normalized findings already carry the original native
             # snapshot. Preserve it, including all-None protein-only locations.
             # Retain the historical first-pass convention: snapshot the contig
@@ -101,6 +124,10 @@ def normalize_result(result: dict, module: str, sample: dict, validation: dict) 
             # native location cannot be reconstructed from canonical fields.
             if not previously_normalized:
                 attributes.setdefault("reported_coordinates", {k: finding.get(k) for k in _COORDINATE_KEYS})
+            _validate_coordinate_provenance(attributes, module, index + 1)
+            if "reported_coordinates" in attributes:
+                _validate_protein_location(attributes["reported_coordinates"], feature,
+                                           aliases, module, index + 1)
             for key in _COORDINATE_KEYS:
                 finding[key] = feature[key]
         _validate_coordinate_provenance(attributes, module, index + 1)

@@ -38,6 +38,12 @@ The default annotation layout follows HybAs:
 | Annotation | `~/bactomics/isolate2/annotation/isolate2.gff` |
 | GenBank, for modules that need it | `~/bactomics/isolate2/annotation/isolate2.gbk` |
 
+Input validation checks that all eligible CDSs are represented consistently across
+the supplied annotations. Incomplete exports now fail explicitly; pseudogene
+exclusions and translation limits remain visible in reports. See
+[annotation integrity and coverage](docs/ANNOTATION_INTEGRITY.md) for the supported
+partial-CDS, alias and GenBank conventions.
+
 Start from the checkout:
 
 ```bash
