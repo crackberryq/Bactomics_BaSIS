@@ -113,6 +113,21 @@ class PF2StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "absent"):
             extend.validate_embeddings(self.embedding, self.proteins)
 
+    def test_embedding_reruns_keep_both_verified_native_files(self):
+        target = self.root / "repeat" / "ProteinEmbeddings.h5"
+        manifest = target.with_name("embeddings_manifest.json")
+        config = {**self.config, "embeddings": str(self.embedding),
+                  "embeddings_manifest": str(self.manifest)}
+        with patch("importlib.metadata.version", return_value="0.7.1"):
+            extend.embed(self.sample, config, target, manifest)
+            first = target.resolve()
+            first_manifest = manifest.resolve()
+            extend.embed(self.sample, config, target, manifest)
+        self.assertNotEqual(first, target.resolve())
+        self.assertEqual(first.read_bytes(), self.embedding.read_bytes())
+        self.assertTrue(first_manifest.is_file())
+        self.assertEqual(target.read_bytes(), first.read_bytes())
+
     def test_attention_shape_mismatch_fails_output_collection(self):
         np.savez(self.results / "attentions.npz", attentions=np.array([[.5, .5]] * 4))
         with self.assertRaisesRegex(ValueError, "Attention shape"):

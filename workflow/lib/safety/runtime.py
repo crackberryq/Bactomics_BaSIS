@@ -20,6 +20,8 @@ import threading
 import time
 from datetime import datetime, timezone
 
+from .artifact_retention import archive_paths
+
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
@@ -161,6 +163,8 @@ class DirectRunner:
                 if stdout_path:
                     path = Path(stdout_path)
                     path.parent.mkdir(parents=True, exist_ok=True)
+                    archive_paths(path.absolute().parent, [path], rule="command-stdout",
+                                  reason="before-stdout-replacement")
                     target = path.open("wb")
                 if threading.current_thread() is threading.main_thread():
                     for signum in (signal.SIGTERM, signal.SIGINT):
@@ -278,6 +282,8 @@ def main(argv=None):
         return 1
     finally:
         if args.record and runner is not None and runner.commands:
+            archive_paths(Path(args.record).absolute().parent, [args.record],
+                          rule="command-record", reason="before-record-replacement")
             write_json(args.record, runner.commands[-1])
 
 

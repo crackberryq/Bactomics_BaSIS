@@ -32,14 +32,14 @@ PROTT5_FILES = ("config.json", "pytorch_model.bin", "special_tokens_map.json",
 # Executed by the managed resource environment, not the controller interpreter.
 # TLS verification is retained; partial network reads are retried from scratch.
 _DOWNLOAD = r'''
-import json, os, sys, time, urllib.request
+import json, os, sys, time, urllib.request, uuid
 from pathlib import Path
 url, target, maximum = sys.argv[1], Path(sys.argv[2]), int(sys.argv[3])
-partial = target.with_name(target.name + ".part")
 for attempt in range(4):
+    partial = target.with_name(target.name + ".part-" + uuid.uuid4().hex)
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "BaSIS-resource-setup/1"})
-        with urllib.request.urlopen(request, timeout=60) as response, partial.open("wb") as output:
+        with urllib.request.urlopen(request, timeout=60) as response, partial.open("xb") as output:
             if not response.geturl().startswith("https://"):
                 raise ValueError("Resource redirected away from HTTPS")
             expected = response.headers.get("Content-Length")
@@ -57,11 +57,18 @@ for attempt in range(4):
             output.flush()
             os.fsync(output.fileno())
             effective_url = response.geturl()
+        if os.path.lexists(target):
+            history = target.parent / ".previous-results" / (target.name + "-" + uuid.uuid4().hex)
+            history.mkdir(parents=True)
+            (history / "retention.json").write_text(json.dumps({
+                "schema": "basis-retained-artifact-v1", "original_path": str(target.absolute()),
+                "artifact": "data", "reason": "resource download replacement"}) + "\n")
+            target.rename(history / "data")
         partial.replace(target)
         print(json.dumps({"source_url": url, "effective_url": effective_url, "bytes": received}))
         break
     except Exception:
-        partial.unlink(missing_ok=True)
+        # Every failed transfer keeps its distinct partial bytes for inspection.
         if attempt == 3:
             raise
         time.sleep(min(2 ** attempt, 8))
@@ -202,7 +209,6 @@ def _prosite(spec, destination, runner):
     _download(sources["ps_reldt.txt"], after, runner)
     if after.read_bytes() != initial_marker:
         raise ValueError("PROSITE changed release during download; retry a fresh snapshot")
-    after.unlink()
     manifest = {"schema": "basis-prosite-snapshot-v1", "release": release,
         "downloaded_at_utc": now(), "source_urls": sources,
         "sha256": {name: sha256_file(destination / name) for name in PROSITE_FILES},

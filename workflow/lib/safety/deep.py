@@ -12,9 +12,9 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 from datetime import datetime, timezone
 
+from basis.retention import new_attempt, preserve_existing, publish_link
 from basis import deep_stages as stages
 from basis.deep_candidate_jobs import (
     apply_fragment, candidate_ids, finalize_state, placement_budget_plan,
@@ -57,12 +57,22 @@ def verify_family_snapshot(config):
     verify_resources(manifest)
 
 
+def verify_native_artifacts(document):
+    """Missing retained work is an explicit error, never a completed cache hit."""
+    if document.get("native_output") and not Path(document["native_output"]).is_dir():
+        raise ValueError("Missing retained native attempt: " + document["native_output"])
+    for artifact in document.get("native_artifacts", []):
+        if not Path(artifact).is_file():
+            raise ValueError("Missing retained native artifact: " + artifact)
+
+
 def load_document(path, shared_cache=None, raw=None):
     document = read_document(path, shared_cache, raw)
     if document.get("schema") != SCHEMA:
         raise ValueError("Unrecognized DeepSafe state: " + str(path))
     if document.get("context_sha256") != digest(document["context"]):
         raise ValueError("DeepSafe context changed: " + str(path))
+    verify_native_artifacts(document)
     context = document["context"]
     expected = stages._identity(context["sample"], context["records"],
                                 context["config"], context["work"])
@@ -258,15 +268,20 @@ def evidence_record(document):
 
 
 def initialize_output(native, isolate):
-    """Only reset this job's declared native directory when Snakemake runs it."""
+    """Allocate a retained attempt; scheduler state never owns native bytes."""
     native = Path(native).absolute()
     base = (Path(isolate).resolve() / "safety/deepsafe/native").resolve()
-    if native.is_symlink() or not native.resolve().is_relative_to(base) or native.resolve() == base:
+    if (not native.is_relative_to(base) or native == base
+            or ".attempts" in native.relative_to(base).parts
+            or not native.parent.resolve().is_relative_to(base)):
         raise ValueError("DeepSafe job output is outside its owned native directory")
-    if native.exists():
-        shutil.rmtree(native)
-    native.mkdir(parents=True)
-    return native
+    if native.is_symlink() and not native.resolve().is_relative_to(base):
+        raise ValueError("DeepSafe job output is outside its owned native directory")
+    attempt = new_attempt(native)
+    payload = attempt / "data"
+    payload.mkdir()
+    publish_link(native, payload)
+    return payload
 
 
 def main(argv=None):
@@ -288,7 +303,7 @@ def main(argv=None):
     from .runtime import DirectRunner
     if args.threads < 1:
         raise ValueError("DeepSafe threads must be positive")
-    # Check persisted inputs before deleting this job's interrupted native dir.
+    # Check persisted inputs before allocating this job's next retained attempt.
     shared_cache = {}
     parent = None
     if args.action != "prepare":
@@ -311,7 +326,9 @@ def main(argv=None):
     document["native_output"] = str(native)
     document["native_artifacts"] = [str(p) for p in sorted(native.rglob("*")) if p.is_file()]
     if args.evidence:
+        preserve_existing(args.evidence)
         write(args.evidence, evidence_record(document))
+    preserve_existing(args.output)
     write_document(args.output, document)
 
 

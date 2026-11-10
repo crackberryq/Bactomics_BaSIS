@@ -227,9 +227,12 @@ def _reference_cache(sequences, labels, panel, config, runner, identities, work)
             (staged / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
             _validate_cache(staged, key)
             os.replace(staged, directory)
-        finally:
-            if staged.exists():
-                shutil.rmtree(staged)
+        except BaseException as error:
+            # Failed native builds are retained; only validated caches are reused.
+            (staged / "failure.json").write_text(json.dumps({
+                "status": "failed", "error": str(error) or type(error).__name__,
+                "cache_key": key}, indent=2) + "\n")
+            raise
     return directory, manifest, False
 
 

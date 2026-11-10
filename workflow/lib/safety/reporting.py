@@ -7,6 +7,8 @@ incomplete scope even when every selected analysis has finished.
 """
 from __future__ import annotations
 
+from basis.retention import preserve_existing
+
 import argparse
 import copy
 import csv
@@ -219,7 +221,7 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
     run = {
         "schema": "basis-snakemake-run-v1", "run_id": hashlib.sha256(serialized).hexdigest()[:20],
         "report_view": view,
-        "version": config.get("version", "0.4.0a6"), "engine": "snakemake",
+        "version": config.get("version", "0.4.0a7"), "engine": "snakemake",
         "options": {"deep": bool(deep_records), "extend": "pathogenfinder2" in seen},
         "validation_mode": config.get("validation_mode", "research_screening"),
         "enabled_modules": sorted(m for m, d in decisions.items() if d.get("requested") and m != "deepsafe"),
@@ -379,7 +381,7 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
         # logs, and all native files remain available on disk.
         for relative in ("deferred-candidates.tsv", "tables/deferred-candidates.tsv",
                          "metadata/deep-workflow.json", "metadata/deep-workflow.tsv"):
-            (root / relative).unlink(missing_ok=True)
+            preserve_existing(root / relative)
     for original, new in RELOCATIONS.items():
         source, target = root / original, root / new
         target.parent.mkdir(parents=True, exist_ok=True)

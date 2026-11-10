@@ -23,7 +23,8 @@ def safety_deep_sources(*, finalization=False):
     return [str(ROOT / "workflow/lib/safety/deep.py"),
             str(ROOT / "workflow/lib/safety/state_storage.py"),
             str(ROOT / "workflow/lib/safety/deep_resources.py"),
-            str(ROOT / "workflow/lib/safety/runtime.py")] + [
+            str(ROOT / "workflow/lib/safety/runtime.py"),
+            str(ROOT / "workflow/vendor/basis/retention.py")] + [
         str(ROOT / "workflow/vendor/basis" / name) for name in names]
 
 
@@ -62,6 +63,8 @@ def safety_deep_state(path):
     # input list depend on whether a non-checkpoint parent exists would cause
     # unnecessary reruns on every transition from an empty to a populated DAG.
     if Path(path).is_file():
+        from safety.deep import verify_native_artifacts
+        verify_native_artifacts(json.loads(Path(path).read_text()))
         for blob in object_paths(path):
             if not blob.is_file():
                 raise ValueError("Missing shared state object: " + str(blob))
@@ -96,9 +99,8 @@ checkpoint safety_deep_prepare:
         family_resources=safety_deep_resource_paths,
         source=safety_deep_sources()
     output:
-        state="{isolate}/safety/deepsafe/states/prepare.json",
-        native=directory("{isolate}/safety/deepsafe/native/prepare")
-    params: python=PYTHON, code=CODE_PATH
+        state="{isolate}/safety/deepsafe/states/prepare.json"
+    params: python=PYTHON, code=CODE_PATH, native="{isolate}/safety/deepsafe/native/prepare"
     conda: CTX.env("deepsafe")
     threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
     resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
@@ -107,7 +109,7 @@ checkpoint safety_deep_prepare:
     message: "DeepSafe: select candidates and extract context for {wildcards.isolate}"
     shell:
         "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep prepare "
-        "--isolate {wildcards.isolate:q} --output {output.state:q} --native {output.native:q} "
+        "--isolate {wildcards.isolate:q} --output {output.state:q} --native {params.native:q} "
         "--family-inputs {input.family_inputs:q} --records {input.records:q} --config {input.config:q} "
         "--threads {threads} --log {log:q} >> {log:q} 2>&1"
 
@@ -117,12 +119,11 @@ rule safety_deep_candidate:
         previous=safety_deep_parent,
         source=safety_deep_sources()
     output:
-        state="{isolate}/safety/deepsafe/candidates/{candidate}/{phase}.json",
-        native=directory("{isolate}/safety/deepsafe/native/{phase}/{candidate}")
+        state="{isolate}/safety/deepsafe/candidates/{candidate}/{phase}.json"
     wildcard_constraints:
         candidate="cand_[a-f0-9]{20}",
         phase="domains|phylogeny|patterns|profiles|motifs|placement"
-    params: python=PYTHON, code=CODE_PATH
+    params: python=PYTHON, code=CODE_PATH, native="{isolate}/safety/deepsafe/native/{phase}/{candidate}"
     conda: CTX.env("deepsafe")
     threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
     resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
@@ -132,7 +133,7 @@ rule safety_deep_candidate:
     shell:
         "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep {wildcards.phase:q} "
         "--isolate {wildcards.isolate:q} --parent {input.previous:q} --candidate {wildcards.candidate:q} "
-        "--output {output.state:q} --native {output.native:q} --threads {threads} "
+        "--output {output.state:q} --native {params.native:q} --threads {threads} "
         "--log {log:q} >> {log:q} 2>&1"
 
 
@@ -142,9 +143,8 @@ rule safety_deep_references:
         candidates=lambda wc: safety_deep_targets(wc, "domains"),
         source=safety_deep_sources()
     output:
-        state="{isolate}/safety/deepsafe/states/references.json",
-        native=directory("{isolate}/safety/deepsafe/native/references")
-    params: python=PYTHON, code=CODE_PATH
+        state="{isolate}/safety/deepsafe/states/references.json"
+    params: python=PYTHON, code=CODE_PATH, native="{isolate}/safety/deepsafe/native/references"
     conda: CTX.env("deepsafe")
     threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
     resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
@@ -154,7 +154,7 @@ rule safety_deep_references:
     shell:
         "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep references "
         "--isolate {wildcards.isolate:q} --parent {input.parent:q} --children {input.candidates:q} "
-        "--output {output.state:q} --native {output.native:q} --threads {threads} "
+        "--output {output.state:q} --native {params.native:q} --threads {threads} "
         "--log {log:q} >> {log:q} 2>&1"
 
 
@@ -163,9 +163,8 @@ rule safety_deep_tree_plan:
         parent=lambda wc: safety_deep_state(wc.isolate + "/safety/deepsafe/states/references.json"),
         source=safety_deep_sources()
     output:
-        state="{isolate}/safety/deepsafe/states/tree-plan.json",
-        native=directory("{isolate}/safety/deepsafe/native/tree-plan")
-    params: python=PYTHON, code=CODE_PATH
+        state="{isolate}/safety/deepsafe/states/tree-plan.json"
+    params: python=PYTHON, code=CODE_PATH, native="{isolate}/safety/deepsafe/native/tree-plan"
     conda: CTX.env("deepsafe")
     threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
     resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
@@ -174,7 +173,7 @@ rule safety_deep_tree_plan:
     shell:
         "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep tree-plan "
         "--isolate {wildcards.isolate:q} --parent {input.parent:q} --output {output.state:q} "
-        "--native {output.native:q} --threads {threads} --log {log:q} >> {log:q} 2>&1"
+        "--native {params.native:q} --threads {threads} --log {log:q} >> {log:q} 2>&1"
 
 
 rule safety_deep_placement_plan:
@@ -183,9 +182,8 @@ rule safety_deep_placement_plan:
         candidates=lambda wc: safety_deep_targets(wc, "motifs"),
         source=safety_deep_sources()
     output:
-        state="{isolate}/safety/deepsafe/states/placement-plan.json",
-        native=directory("{isolate}/safety/deepsafe/native/placement-plan")
-    params: python=PYTHON, code=CODE_PATH
+        state="{isolate}/safety/deepsafe/states/placement-plan.json"
+    params: python=PYTHON, code=CODE_PATH, native="{isolate}/safety/deepsafe/native/placement-plan"
     conda: CTX.env("deepsafe")
     threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
     resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
@@ -194,7 +192,7 @@ rule safety_deep_placement_plan:
     shell:
         "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep placement-plan "
         "--isolate {wildcards.isolate:q} --parent {input.parent:q} --children {input.candidates:q} "
-        "--output {output.state:q} --native {output.native:q} --threads {threads} "
+        "--output {output.state:q} --native {params.native:q} --threads {threads} "
         "--log {log:q} >> {log:q} 2>&1"
 
 
@@ -205,9 +203,8 @@ rule safety_deep_finalize:
         source=safety_deep_sources(finalization=True)
     output:
         state="{isolate}/safety/deepsafe/states/finalize.json",
-        evidence="{isolate}/safety/evidence/deepsafe.json",
-        native=directory("{isolate}/safety/deepsafe/native/finalize")
-    params: python=PYTHON, code=CODE_PATH
+        evidence="{isolate}/safety/evidence/deepsafe.json"
+    params: python=PYTHON, code=CODE_PATH, native="{isolate}/safety/deepsafe/native/finalize"
     conda: CTX.env("deepsafe")
     threads: lambda wc: CTX.deep_config(wc.isolate)["threads"]
     resources: mem_mb=lambda wc: CTX.deep_config(wc.isolate)["memory_mb"]
@@ -217,5 +214,5 @@ rule safety_deep_finalize:
     shell:
         "PYTHONPATH={params.code:q} {params.python:q} -m safety.deep finalize "
         "--isolate {wildcards.isolate:q} --parent {input.parent:q} --children {input.candidates:q} "
-        "--output {output.state:q} --native {output.native:q} --evidence {output.evidence:q} "
+        "--output {output.state:q} --native {params.native:q} --evidence {output.evidence:q} "
         "--threads {threads} --log {log:q} >> {log:q} 2>&1"

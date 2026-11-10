@@ -5,6 +5,8 @@ converts similarity, a nearest tree tip, or an ML score into a safety verdict.
 """
 from __future__ import annotations
 
+from .retention import preserve_existing
+
 from .progress import emit
 
 import hashlib
@@ -522,7 +524,7 @@ def _scan_domains(candidate: dict, config: dict, directory: Path, runner) -> dic
     if cutoff not in {None, "ga", "tc", "nc"}:
         raise ValueError("Profile domain native_cutoff must be ga, tc, nc, or absent")
     output = directory / "domains.domtblout"
-    output.unlink(missing_ok=True)
+    preserve_existing(output)
     stdout = directory / "domains.hmmscan.txt"
     argv = [config.get("executables", {}).get("hmmscan", "hmmscan"), "--noali", "--cpu", str(int(config.get("threads", 1))),
             "--domtblout", str(output)]
@@ -621,7 +623,7 @@ def _search(queries: dict[str, str], catalog, config: dict, directory: Path, run
     write_fasta({key: catalog.sequences[ref] for key, ref in idmap.items()}, search_fasta)
     (directory / "search_reference_ids.json").write_text(json.dumps(idmap, indent=2) + "\n")
     output = directory / "reference_search.tsv"
-    output.unlink(missing_ok=True)
+    preserve_existing(output)
     columns = "qseqid sseqid pident length qlen slen qstart qend sstart send evalue bitscore"
     threads = int(config.get("threads", 1))
     if threads < 1:
@@ -772,7 +774,7 @@ def _build_phylogeny(query_id: str, sequence: str, references: list[dict], catal
             raise ValueError(f"Alignment altered protein sequence for {key}")
     prefix = directory / "phylogeny"
     tree = Path(str(prefix) + ".treefile")
-    tree.unlink(missing_ok=True)
+    preserve_existing(tree)
     runner.run([executables.get("iqtree", "iqtree"), "-s", str(alignment), "-m", "MFP", "-bb", "1000",
                 "-nt", threads, "-seed", str(int(config.get("phylogeny_seed", 42))),
                 "-pre", str(prefix), "-redo"])

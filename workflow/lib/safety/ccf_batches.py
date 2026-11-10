@@ -16,6 +16,7 @@ import re
 import tempfile
 import uuid
 
+from basis.retention import preserve_existing
 from basis import inputs
 from basis.adapters import crisprcasfinder as ccf
 from safety import extend, runtime
@@ -234,7 +235,7 @@ def run_batch(full_config, contigs, batch, native, receipt, log_directory, threa
     elif extend.read_json(execution_record) != context:
         raise ValueError("CRISPR execution identity record was modified")
     with work_lock(native, batch):
-        receipt.unlink(missing_ok=True)
+        preserve_existing(receipt)
         completed, reused, prepared = {}, [], None
         for safe in plan["batches"][batch]:
             info = mapping[safe]

@@ -41,6 +41,47 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual((Path(failure["payload_preserved"]) / "partial.txt").read_text(), "partial download")
         self.assertFalse(list((self.root / "snapshots").rglob("completed.json")))
 
+    def test_success_and_failure_logs_survive_later_scheduler_log_replacement(self):
+        logfile = self.root / "job.log"
+
+        def fail(spec, data, runner):
+            logfile.write_text("first attempt diagnostic\n")
+            (data / "partial.txt").write_text("partial")
+            raise RuntimeError("synthetic failure")
+
+        with patch("safety.resources._provider", side_effect=fail):
+            with self.assertRaisesRegex(RuntimeError, "synthetic failure"):
+                prepare("vfdb", {}, self.root, logfile, runner=object())
+        failure_path = next((self.root / "snapshots/vfdb").glob("*/attempt-*/failure.json"))
+        failure = json.loads(failure_path.read_text())
+        failed_log = Path(failure["retained_logfile"])
+        self.assertEqual(failed_log.read_text(), "first attempt diagnostic\n")
+
+        def succeed(spec, data, runner):
+            logfile.write_text("second attempt diagnostic\n")
+            return self._provider(spec, data, runner)
+
+        with patch("safety.resources._provider", side_effect=succeed):
+            receipt = prepare("vfdb", {}, self.root, logfile, runner=object())
+        completed_log = Path(receipt["payload_root"]).parent / "commands.log"
+        logfile.write_text("later scheduler invocation\n")
+        self.assertEqual(failed_log.read_text(), "first attempt diagnostic\n")
+        self.assertEqual(completed_log.read_text(), "second attempt diagnostic\n")
+        self.assertEqual((failure_path.parent / "data/partial.txt").read_text(), "partial")
+
+    def test_failed_log_snapshot_error_is_recorded_without_masking_provider_error(self):
+        logfile = self.root / "job.log"
+        logfile.write_text("diagnostic remains at source")
+        with patch("safety.resources._provider", side_effect=RuntimeError("provider failure")), \
+                patch("safety.resources.shutil.copyfile", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(RuntimeError, "provider failure"):
+                prepare("vfdb", {}, self.root, logfile, runner=object())
+        failure_path = next((self.root / "snapshots/vfdb").glob("*/attempt-*/failure.json"))
+        failure = json.loads(failure_path.read_text())
+        self.assertIn("disk full", failure["log_retention_error"])
+        self.assertEqual(logfile.read_text(), "diagnostic remains at source")
+        self.assertFalse((self.root / "vfdb/provenance.json").exists())
+
     def test_completed_resource_inventory_detects_changed_payload(self):
         def provider(spec, data, runner):
             database = data / "database.txt"

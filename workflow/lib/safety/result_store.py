@@ -277,29 +277,15 @@ def _publish_link(destination, payload):
         temporary.unlink(missing_ok=True)
 
 
-def _prune_failed(root, keep):
-    failures = []
-    for failure in root.glob("*/attempt-*/failure.json"):
-        attempt = failure.parent
-        if ((attempt / "completed.json").exists() or attempt.is_symlink() or failure.is_symlink()
-                or attempt.parent.is_symlink() or not re.fullmatch(r"[0-9a-f]{64}", attempt.parent.name)
-                or not re.fullmatch(r"attempt-[0-9a-f]{32}", attempt.name)
-                or not attempt.resolve().is_relative_to(root.resolve())):
-            continue
-        row = _read(failure)
-        if row.get("schema") == SCHEMA and row.get("status") == "failed":
-            failures.append((failure.stat().st_mtime_ns, attempt))
-    for _, attempt in sorted(failures, reverse=True)[keep:]:
-        shutil.rmtree(attempt)
-
-
 def run_cached(name, identity, destination, receipt, store_root, execute, verify, *,
                failed_retention=3, allow_reuse=True):
     """Execute and verify into a durable attempt, returning ``(record, reused)``.
 
     ``execute(payload)`` and ``verify(payload)`` are supplied by the owning
-    native module. Only the receipt is a Snakemake output. Successful snapshots
-    and existing legacy output directories are never automatically pruned.
+    native module. Only the receipt is a Snakemake output. Successful snapshots,
+    failed attempts, and existing legacy output directories are never automatically
+    pruned. ``failed_retention`` is accepted for configuration compatibility but
+    does not discard files; cleanup requires an explicit user action.
     """
     if not re.fullmatch(r"[a-z][a-z0-9_-]*", name):
         raise ValueError("Invalid native result name")
@@ -352,5 +338,4 @@ def run_cached(name, identity, destination, receipt, store_root, execute, verify
                        "key": key, "identity": identity, "payload_root": str(payload),
                        "started_at": started, "finished_at": datetime.now(timezone.utc).isoformat(),
                        "error": str(error) or type(error).__name__})
-            _prune_failed(root, failed_retention)
             raise

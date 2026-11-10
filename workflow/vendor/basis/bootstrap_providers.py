@@ -24,6 +24,7 @@ import urllib.parse
 import urllib.request
 
 from .inputs import read_fasta
+from .retention import preserve_existing
 from .util import atomic_json, hash_object, sha256_file
 
 
@@ -98,7 +99,7 @@ def _download(url, path, maximum=250_000_000):
         raise ValueError("Refusing to overwrite an existing download artifact: " + str(path))
     for attempt in range(1, 4):
         if attempt > 1 and path.exists():
-            path.unlink()
+            preserve_existing(path)
         print(f"Downloading {url} (attempt {attempt}/3)", flush=True)
         try:
             result = _download_once(url, path, maximum)

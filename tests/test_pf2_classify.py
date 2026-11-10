@@ -152,7 +152,9 @@ class PredictionOnlyConfigurationTests(unittest.TestCase):
             # Exercise the documented default loader/schema branch at the
             # native boundary, without importing torch or evaluating a model.
             sys.modules["pathogenfinder2.utils.configuration"].ConfigurationPF2(mode="Prediction")
-            folder = Path(argv[argv.index("-o") + 1]) / "predictionPF2/results_PF2"
+            stage = Path(argv[argv.index("-o") + 1])
+            (stage / "extra-map.svg").write_text("synthetic native map")
+            folder = stage / "predictionPF2/results_PF2"
             folder.mkdir(parents=True)
             fields = ["File Name", "Prediction Mean", "Prediction STD", "Binary Prediction Mean",
                       "Phenotype", "Prediction_0", "Prediction_1", "Prediction_2", "Prediction_3"]
@@ -172,6 +174,9 @@ class PredictionOnlyConfigurationTests(unittest.TestCase):
                          [str(self.bundled / f"weights_model{n}.pt") for n in range(1, 5)])
         audit = json.loads((self.output / "classifier-weights.json").read_text())
         self.assertEqual(set(audit["sha256"]), set(saved["Model Parameters"]["Network Weights"]))
+        self.assertTrue(self.output.is_symlink())
+        self.assertEqual((self.output.resolve().parent / "extra-map.svg").read_text(),
+                         "synthetic native map")
 
     def test_native_failure_does_not_change_embeddings_or_manifest(self):
         before = file_snapshot(self.embeddings, self.manifest)
@@ -221,7 +226,8 @@ class ClassifierRuleMigrationTests(unittest.TestCase):
             dependencies = ("workflow/lib/safety/extend.py", "workflow/lib/safety/runtime.py",
                             "workflow/vendor/basis/adapters/extend.py", "workflow/vendor/basis/inputs.py",
                             "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py",
-                            "workflow/lib/safety/pf2_classify.py")
+                            "workflow/lib/safety/pf2_classify.py", "workflow/vendor/basis/retention.py",
+                            "workflow/lib/safety/artifact_retention.py")
             for relative in dependencies:
                 target = workflow_root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -231,6 +237,7 @@ class ClassifierRuleMigrationTests(unittest.TestCase):
             package.mkdir(parents=True)
             (package / "__init__.py").write_text("")
             shutil.copy2(ROOT / "workflow/lib/safety/runtime.py", package / "runtime.py")
+            shutil.copy2(ROOT / "workflow/lib/safety/artifact_retention.py", package / "artifact_retention.py")
             synthetic = textwrap.dedent(r'''
                 import argparse, hashlib, json, os, sys
                 from pathlib import Path

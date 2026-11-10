@@ -144,17 +144,20 @@ are verified during DAG construction as well as before reuse/normalization; this
 adds file-reading cost to a restart but detects changed outputs on an idle run.
 
 New attempts never replace a previous successful payload. Failed attempts retain
-their logs and partial files. `modules.<name>.failed_attempts_to_keep` keeps the
-newest three failed attempts by default, and accepts integers from 1 to 100.
-Only failed attempts in that module's owned store are pruned. Successful and
-legacy payloads are not automatically deleted. `cache: false` prevents verified
+their logs, partial files, and intermediates. No successful, failed, or legacy
+payloads are automatically deleted. The legacy
+`modules.<name>.failed_attempts_to_keep` setting still accepts integers from 1 to
+100 for compatibility, but no longer limits retention. Reclaiming disk space
+requires explicit deletion by the user after reviewing retained attempts.
+Resource preparation also snapshots its command log inside each durable attempt,
+so later replacement of a scheduler log cannot erase that attempt's diagnostics.
+`cache: false` prevents verified
 reuse when the job executes; it does not force an otherwise up-to-date Snakemake
 job to run.
 
 RGI database loading is independent of sample sequences. Analysis uses a private
 writable copy so generated indexes cannot alter the verified loader snapshot.
-The private copy is removed after successful verification and retained on
-failure. A reused result requires neither a new copy nor a native call.
+The private copy and generated indexes are retained after success and failure. A reused result requires neither a new copy nor a native call.
 
 Each worker now consumes `safety/metadata/configs/<module>.json`. Changes to a
 downstream AWARE policy do not invalidate completed core, CRISPR or embedding
@@ -247,3 +250,31 @@ identity files as ordinary cache cleanup. Retained failed downloads, older
 snapshots and previous contigs consume space; this update does not automatically
 purge them. Review their provenance and active references before any later
 cleanup. Conda deployment recovery remains Snakemake's responsibility.
+
+## Generated-file retention (0.4.0a7)
+
+Native attempts and their logs/intermediates are retained. Legacy
+`failed_attempts_to_keep`/`failed_retention` settings remain accepted for compatibility
+but no longer authorize deletion. RGI working database copies also remain in their
+attempt directories, including generated indexes.
+
+The standalone `BaSIS.smk` and `Followup.smk` entry points archive previous declared
+outputs, logs and benchmarks before scheduler job preparation, including retries
+within one invocation. Histories are under `safety/retained/<attempt>/files/` or
+`<resource-root>/retained/<attempt>/files/`. Incomplete and temporary products remain.
+Unowned/in-place outputs and unsupported scheduler APIs stop before replacement.
+Snakemake 9.6.2 and 9.27.1 are the supported adapter versions.
+
+DeepSafe and PF2 retain raw work in `.attempts/` below their native output parents.
+DeepSafe native directories are no longer disposable scheduler outputs; saved state
+records actual attempt paths. PF2 preserves the whole stage, including sidecars
+outside `predictionPF2`. Placement build failures stay in unique `.build-*` folders.
+Helper-level replacements are archived under `.previous-results/`. No retention
+directory is a success signal or an automatic cache hit.
+
+Retention requires disk capacity. No automatic purge is performed. Inspect manifests
+and completion records, then explicitly archive or remove files as appropriate.
+External resource symlink targets remain external inputs; retaining a link does not
+copy its database. Files deleted by prior versions cannot be reconstructed. Upstream
+tools may have private internal cleanup behavior; this policy covers artifacts
+exposed to and managed by BaSIS, not bytes an executable never leaves on disk.

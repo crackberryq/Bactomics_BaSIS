@@ -4,7 +4,7 @@
   "source_tag": "v0.3.0rc8",
   "source_commit": "bedf903300e2450b1ced5f5585e8dd6b56db58c9",
   "source_version": "0.3.0rc8",
-  "standalone_version": "0.4.0a6",
+  "standalone_version": "0.4.0a7",
   "scope": "Selected scientific parsers, analysis and report functions plus their original scientific resources. Snakemake owns the standalone workflow; the previous CLI, GUI, environment managers and scheduler are not included.",
   "changed_files": [
     {
@@ -659,6 +659,51 @@
         "path": "workflow/vendor/basis/report_dashboard.py",
         "base_sha256": "2fbcfd87c6837e8af58a77731b8d3947f8e06c17625a1923d45726985c1fd00b",
         "updated_sha256": "c92be5b112741577ecb293d1a0effd4839c16cce8ba8e31efed924bd446e8323"
+      }
+    ]
+  },
+  "artifact_retention_update": {
+    "base_commit": "6128b06279fec2f51015a76f798d0364a4b81602",
+    "scope": "Retain generated outputs, logs, partial downloads and intermediate work on success, failure and rerun; no scientific analysis changes.",
+    "native_analysis_settings_changed": false,
+    "scientific_thresholds_changed": false,
+    "evidence_classification_changed": false,
+    "candidate_selection_changed": false,
+    "files": [
+      {
+        "path": "workflow/vendor/basis/bootstrap_deep.py",
+        "base_sha256": "a5ac190de09940c123ab64fc05371cb5c50651401aed9d316d6d82d78d98df6c",
+        "updated_sha256": "147ebe82b63adfa301d603c9596258644481b2bd9c5b9588da73f5227fa71d44"
+      },
+      {
+        "path": "workflow/vendor/basis/bootstrap_providers.py",
+        "base_sha256": "f0cfc6e10e70b653e6bdfe95f5944e92630eea51d143a58b87dbe31181bfa325",
+        "updated_sha256": "d71901bbbfa1ec02cd7f37f08684a6812f5b4f0cf817bf70bf637678cd84eb9f"
+      },
+      {
+        "path": "workflow/vendor/basis/deep.py",
+        "base_sha256": "10328a3d25dd19f40587a968cb7c2fe2d8acac2c688093302374e9bb1302d178",
+        "updated_sha256": "1b7ca677d5a98f218561a80d1f14482c6c9d34c84c05e637b1651349c430702b"
+      },
+      {
+        "path": "workflow/vendor/basis/placement_native.py",
+        "base_sha256": "abd5308f5e795b0378b3607489d389a9f8d9dfee1e0225bfa26b014263dfbb3b",
+        "updated_sha256": "c52ebfd0d4f471aeabdbe9386459a229bcbd97f539fce443607a85d79cf4f963"
+      },
+      {
+        "path": "workflow/vendor/basis/references.py",
+        "base_sha256": "936aaf7e5d2ec4d69d7ab2a89ccf76f31aba93fb116dc29296828468b5dfc447",
+        "updated_sha256": "c3c4ebbef747d93a885540816693606071855218f9bb41e9cc1a689dacf5e584"
+      },
+      {
+        "path": "workflow/vendor/basis/report.py",
+        "base_sha256": "672f0199d1b4da22907e766f4444260b38e04e90d986b6a5641b34c7c5384cfa",
+        "updated_sha256": "a7e165d756378d876f37237b2d4a1cfa058404c17fa130b21426b75a0a748793"
+      },
+      {
+        "path": "workflow/vendor/basis/retention.py",
+        "base_sha256": null,
+        "updated_sha256": "30297f06fda5c49151d476dc65f27fb616280bc111d3716cbf73c61c27c52e6b"
       }
     ]
   }
