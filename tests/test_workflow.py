@@ -200,7 +200,8 @@ class StandaloneWorkflowTests(unittest.TestCase):
         return snapshot
 
     def test_direct_failure_resume_noop_and_report_only_refresh(self):
-        self.assertEqual(importlib.metadata.version("snakemake"), "9.6.2")
+        import snakemake
+        self.assertEqual(snakemake.__version__, "9.6.2")
         preview = self.snake("--dry-run")
         self.assertIn("minced", preview.stdout)
         self.assertFalse(self.calls.exists(), "Dry-run invoked a native analysis")

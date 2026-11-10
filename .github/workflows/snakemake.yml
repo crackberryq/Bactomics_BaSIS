@@ -85,9 +85,64 @@ jobs:
             acceptance-environment-recovery/summary.json
             acceptance-environment-recovery/**/*.log
 
+  native-conda-controller:
+    name: Native Conda controller retention (${{ matrix.snakemake }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        snakemake: ["9.6.2", "9.27.1"]
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: "25.9.1-0"
+          activate-environment: basis-retention-native
+          python-version: "3.11"
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          auto-activate-base: false
+      - name: Install the native Conda controller, without a pip replacement
+        run: conda install --yes --strict-channel-priority "snakemake-minimal=${{ matrix.snakemake }}" pytest
+      - name: Record and verify the actual imported controller
+        env:
+          EXPECTED_SNAKEMAKE: ${{ matrix.snakemake }}
+        run: |
+          snakemake --version
+          python - <<'PYTHON'
+          import importlib.metadata, json, os, pathlib, snakemake, sys
+          sys.path.insert(0, str(pathlib.Path("workflow/lib").resolve()))
+          from safety.artifact_retention import verified_snakemake_version
+          try:
+              distribution = importlib.metadata.version("snakemake")
+          except importlib.metadata.PackageNotFoundError:
+              distribution = None
+          proof = {"python": sys.executable, "runtime": snakemake.__version__,
+                   "distribution_metadata": distribution,
+                   "verified_runtime": verified_snakemake_version()}
+          pathlib.Path("native-controller-proof.json").write_text(json.dumps(proof, indent=2) + "\n")
+          print(json.dumps(proof, indent=2))
+          assert proof["verified_runtime"] == os.environ["EXPECTED_SNAKEMAKE"]
+          PYTHON
+          conda list --json > native-controller-packages.json
+      - name: Exercise real scheduler failure, retry, forced rerun, and retained artifacts
+        run: python -m unittest discover -s tests -p test_artifact_retention.py -v
+      - name: Preserve native controller evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-controller-retention-${{ matrix.snakemake }}
+          path: |
+            native-controller-proof.json
+            native-controller-packages.json
+
   publish:
     name: Publish checked BaSIS AWARE prerelease
-    needs: [workflow, report-browser, real-conda-deployment]
+    needs: [workflow, report-browser, real-conda-deployment, native-conda-controller]
     if: github.repository == 'crackberryq/Bactomics_BaSIS' && github.ref == 'refs/heads/basis-aware' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:

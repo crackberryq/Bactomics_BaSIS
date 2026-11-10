@@ -1,5 +1,6 @@
 """Storage-only retention contracts; no biological tools or data."""
 import importlib.util
+import importlib.metadata
 import json
 import os
 from pathlib import Path
@@ -7,11 +8,42 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "workflow/lib"), str(ROOT / "workflow/vendor")]
-from safety.artifact_retention import archive_paths
+from safety.artifact_retention import archive_paths, verified_snakemake_version
 from basis.retention import preserve_existing, new_attempt, publish_link
+
+
+class ControllerVersionTests(unittest.TestCase):
+    def checked(self, runtime, metadata):
+        module = SimpleNamespace(__version__=runtime)
+        with patch.dict(sys.modules, {"snakemake": module}), patch(
+                "safety.artifact_retention.importlib.metadata.version",
+                side_effect=metadata if isinstance(metadata, Exception) else None,
+                return_value=metadata):
+            return verified_snakemake_version()
+
+    def test_supported_runtime_accepts_conda_placeholder_metadata(self):
+        for version in ("9.6.2", "9.27.1"):
+            with self.subTest(version=version):
+                self.assertEqual(self.checked(version, "0.0.0"), version)
+
+    def test_supported_runtime_accepts_matching_or_absent_distribution(self):
+        self.assertEqual(self.checked("9.6.2", "9.6.2"), "9.6.2")
+        self.assertEqual(self.checked("9.27.1", importlib.metadata.PackageNotFoundError("snakemake")), "9.27.1")
+
+    def test_distribution_metadata_never_blesses_unknown_runtime(self):
+        for runtime in (None, "", "0.0.0", "9.6.3", "10.0.0"):
+            with self.subTest(runtime=runtime), self.assertRaisesRegex(RuntimeError, "runtime"):
+                self.checked(runtime, "9.6.2")
+
+    def test_conflicting_or_unrecognized_metadata_fails_closed(self):
+        for metadata in ("9.27.1", "9.6.3", "", "unknown"):
+            with self.subTest(metadata=metadata), self.assertRaisesRegex(RuntimeError, "conflicts"):
+                self.checked("9.6.2", metadata)
 
 
 class RetentionTests(unittest.TestCase):

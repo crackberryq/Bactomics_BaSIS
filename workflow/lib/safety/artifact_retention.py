@@ -20,6 +20,27 @@ import uuid
 SUPPORTED_SNAKEMAKE = {"9.6.2", "9.27.1"}
 
 
+def verified_snakemake_version():
+    """Check the running engine, accommodating Conda's 0.0.0 metadata stub.
+
+    The imported runtime supplies the scheduler API we wrap. Distribution
+    metadata is a consistency check when it contains a real version, not an
+    alternative authority for an unknown or unsupported runtime.
+    """
+    import snakemake
+
+    version = getattr(snakemake, "__version__", None)
+    if version not in SUPPORTED_SNAKEMAKE:
+        raise RuntimeError(f"Output retention has not been verified for Snakemake runtime {version!r}; use one of {sorted(SUPPORTED_SNAKEMAKE)}")
+    try:
+        distribution = importlib.metadata.version("snakemake")
+    except importlib.metadata.PackageNotFoundError:
+        distribution = None
+    if distribution not in {None, "0.0.0", version}:
+        raise RuntimeError(f"Snakemake runtime version {version} conflicts with distribution metadata {distribution!r}; repair the controller environment before running")
+    return version
+
+
 def _write_manifest(path, value):
     temporary = path.with_suffix(".pending")
     with temporary.open("w", encoding="utf-8") as handle:
@@ -118,10 +139,8 @@ def install(workflow, base_dirs):
     ``params.retention_paths`` lists directories/files exclusively owned by a
     rule. Do not list a shared work directory or a rule's inputs there.
     """
+    verified_snakemake_version()
     from snakemake.jobs import Job
-    version = importlib.metadata.version("snakemake")
-    if version not in SUPPORTED_SNAKEMAKE:
-        raise RuntimeError(f"Output retention has not been verified for Snakemake {version}; use one of {sorted(SUPPORTED_SNAKEMAKE)}")
     original = Job.remove_existing_output
     if not inspect.iscoroutinefunction(original) or list(inspect.signature(original).parameters) != ["self"]:
         raise RuntimeError("Snakemake output preparation changed; refusing to run without output retention")

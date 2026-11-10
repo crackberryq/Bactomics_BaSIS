@@ -209,7 +209,8 @@ class PredictionOnlyConfigurationTests(unittest.TestCase):
 class ClassifierRuleMigrationTests(unittest.TestCase):
     def test_classifier_fix_and_later_edit_preserve_completed_embedding_rule(self):
         """Use the production rules with a synthetic Python module boundary."""
-        self.assertEqual(importlib.metadata.version("snakemake"), "9.6.2")
+        import snakemake
+        self.assertEqual(snakemake.__version__, "9.6.2")
         with tempfile.TemporaryDirectory(prefix="pf2-rule-migration-") as temporary:
             root = Path(temporary)
             workflow_root = root / "workflow-copy"
