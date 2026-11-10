@@ -236,6 +236,11 @@ class NativePlacementTests(unittest.TestCase):
                 result = self.run_candidate(NativeStandIn(fault=fault), attempt=fault, config=config)
                 self.assertEqual(result["status"], "failed")
                 self.assertEqual(result["scores"], {})
+                if fault != "native_epa":
+                    retained = list(Path(config["placement_cache_dir"]).glob(".build-*/failure.json"))
+                    self.assertEqual(len(retained), 1)
+                    self.assertTrue((retained[0].parent / "reference_alignment.faa").is_file())
+                    self.assertTrue((retained[0].parent / "references.faa").is_file())
 
     def test_old_epa_version_rejected(self):
         result = self.run_candidate(NativeStandIn(epa_version="0.3.3"))

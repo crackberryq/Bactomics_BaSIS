@@ -19,7 +19,7 @@ def native_parser_sources(module):
     group = ("amr" if module in {"amrfinder", "rgi", "vfdb", "bacmet"} else
              "minced" if module == "minced" else "typing_defense" if module == "mlst" else "context")
     sources = [str(ROOT / "workflow/lib/safety" / name) for name in
-            ("native.py", "native_execution.py", "result_store.py", "runtime.py")] + [
+            ("native.py", "native_execution.py", "result_store.py", "runtime.py", "artifact_retention.py")] + [
             str(ROOT / "workflow/vendor/basis/adapters" / (group + ".py")),
             str(ROOT / "workflow/vendor/basis/inputs.py")]
     if module == "integronfinder":
@@ -543,7 +543,8 @@ rule normalize_native:
         validation=lambda w: native_metadata(w.isolate, "validation.json"),
         native=native_normalization_inputs,
         parser=lambda w: native_parser_sources(w.module) + [str(ROOT / "workflow/vendor/basis/normalize.py"),
-                                                        str(ROOT / "workflow/vendor/basis/util.py")]
+                                                        str(ROOT / "workflow/vendor/basis/util.py"),
+                                                        str(ROOT / "workflow/vendor/basis/retention.py")]
     output:
         "{isolate}/safety/evidence/{module}.json"
     wildcard_constraints:

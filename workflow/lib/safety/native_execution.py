@@ -67,11 +67,8 @@ def execute(module, sample, config, destination, receipt, store_root, *, threads
                 raise ValueError("RGI local database preparation did not create localDB")
         else:
             native.verify(module, sample, settings, payload)
-            if loaded_database:
-                # This workspace is reproducible from the loader snapshot. Keep
-                # it on failure for diagnostics, but do not retain a database
-                # duplicate after the native output has passed verification.
-                shutil.rmtree(payload.parent / "database-work")
+            # Retain database-work too: tools can create diagnostic indexes and
+            # intermediate files here. Completion never authorizes their deletion.
 
     record, reused = run_cached(module + ("_database" if load_database else ""), identity,
                                 destination, receipt, store_root, run, check,

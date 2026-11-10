@@ -15,6 +15,12 @@ for path in reversed(CODE_PATH.split(os.pathsep)):
 from safety.followup import SavedFollowupContext
 CTX = SavedFollowupContext(config, ROOT)
 SAMPLES = CTX.samples
+
+# Retain each job's existing outputs/logs before scheduler cleanup, including
+# retries. Generated failure artifacts remain inspectable until explicit cleanup.
+from safety.artifact_retention import install as install_output_retention
+install_output_retention(workflow, [Path(path) / "safety" for path in SAMPLES] +
+                         ([Path(CTX.resource_root)] if hasattr(CTX, "resource_root") else []))
 ISOLATE_PATTERN = re.escape(CTX.isolate)
 
 wildcard_constraints:

@@ -6,8 +6,8 @@ authors:
   - family-names: Goldstein
     given-names: Jimi
     orcid: https://orcid.org/0000-0002-7829-0090
-version: 0.4.0a6
-date-released: 2026-11-09
+version: 0.4.0a7
+date-released: 2026-11-10
 repository-code: https://github.com/crackberryq/Bactomics_BaSIS
 license: MIT
 

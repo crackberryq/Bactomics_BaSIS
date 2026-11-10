@@ -158,16 +158,27 @@ class DeepWorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "one state"):
                 deep.combine(prepared, children)
 
-    def test_native_cleanup_only_touches_this_rule_output(self):
+    def test_native_attempts_preserve_interrupted_and_other_rule_outputs(self):
         first = self.native("domains/cand_" + "1" * 20)
         second = self.native("patterns/cand_" + "1" * 20)
         (first / "old.txt").write_text("interrupted")
         (second / "keep.txt").write_text("completed")
-        deep.initialize_output(first, self.isolate)
-        self.assertFalse((first / "old.txt").exists())
+        replacement = self.native("domains/cand_" + "1" * 20)
+        self.assertNotEqual(replacement, first)
+        self.assertEqual((first / "old.txt").read_text(), "interrupted")
         self.assertTrue((second / "keep.txt").exists())
         with self.assertRaises(ValueError):
             deep.initialize_output(self.isolate, self.isolate)
+
+    def test_missing_retained_native_artifact_is_not_silent_completion(self):
+        folder = self.native("prepare")
+        output = folder / "native.txt"
+        output.write_text("retained")
+        document = {"native_output": str(folder), "native_artifacts": [str(output)]}
+        deep.verify_native_artifacts(document)
+        output.unlink()
+        with self.assertRaisesRegex(ValueError, "Missing retained native artifact"):
+            deep.verify_native_artifacts(document)
 
     def test_stage_identity_tampering_is_rejected(self):
         document = self.prepared()

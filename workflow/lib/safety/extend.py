@@ -15,6 +15,7 @@ import re
 import shutil
 import tempfile
 
+from basis.retention import new_attempt, publish_link
 from basis.adapters import extend as pf2
 from basis.adapters import crisprcasfinder as ccf
 from basis.inputs import read_fasta
@@ -176,7 +177,8 @@ def embed(sample, config, destination, manifest_path):
     proteins = Path(sample["proteins"]).resolve(strict=True)
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(destination.name + ".part")
+    stage = new_attempt(destination)
+    temporary = stage / destination.name
     reused = bool(config.get("embeddings"))
     device = {"selected": "external_verified_embeddings"}
     if reused:
@@ -197,9 +199,11 @@ def embed(sample, config, destination, manifest_path):
         embedder.get_embeddings(seq_path=proteins, emb_path=temporary,
                                 pool_mode="mean", split_kmer=True)
     metrics = validate_embeddings(temporary, proteins)
-    temporary.replace(destination)
-    write_json(manifest_path, embedding_manifest(destination, proteins, config,
+    retained_manifest = stage / "embeddings_manifest.json"
+    write_json(retained_manifest, embedding_manifest(temporary, proteins, config,
                **metrics, inference_device=device, external_embeddings_reused=reused))
+    publish_link(destination, temporary)
+    publish_link(manifest_path, retained_manifest)
 
 
 def prepare_classifier_configuration(config):
@@ -234,12 +238,10 @@ def classify(sample, config, embeddings, manifest, destination, logfile):
     pf2._validate_reuse(embeddings, Path(manifest), Path(sample["proteins"]),
                        config["prot_t5_identity"])
     validate_embeddings(embeddings, sample["proteins"])
-    destination = Path(destination).resolve()
+    destination = Path(destination).absolute()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        raise ValueError("Classifier output already exists; Snakemake must clean incomplete outputs")
     device = select_device(config)
-    stage = Path(tempfile.mkdtemp(prefix="classifier-attempt-", dir=destination.parent))
+    stage = new_attempt(destination)
     native_config = stage / "classifier-config.json"
     write_json(native_config, prepare_classifier_configuration(config))
     argv = [config.get("executable", "pathogenfinder2"), "predict", "-i", str(embeddings),
@@ -262,8 +264,7 @@ def classify(sample, config, embeddings, manifest, destination, logfile):
         "matches_pinned_bundled_ensemble": True,
         "sha256": {path: pf2._sha256(Path(path)) for path in
                    read_json(native_config)["Model Parameters"]["Network Weights"]}})
-    native.rename(destination)
-    shutil.rmtree(stage)
+    publish_link(destination, native)
 
 
 def collect_pf2(sample, config, native, embeddings, manifest):

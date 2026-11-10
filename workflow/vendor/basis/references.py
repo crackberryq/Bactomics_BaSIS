@@ -18,6 +18,8 @@ from urllib.request import Request, urlopen
 
 import yaml
 
+from .retention import new_attempt, preserve_existing
+
 
 PROTEIN_ALPHABET = re.compile(r"^[ACDEFGHIKLMNPQRSTVWYBXZJUO*]+$")
 CATALOG_FIELDS = (
@@ -266,30 +268,36 @@ def prepare_accession_catalog(requests_tsv: Path, out_fasta: Path, out_metadata:
 
     User assertions of family/group/review remain visible. Retrieval does not verify
     biological function. A failure raises before either final catalogue is written.
+    Downloaded responses, including invalid responses, remain in a durable attempt.
     An injectable fetcher(accession)->FASTA text makes this independently testable.
     """
-    import tempfile
     with Path(requests_tsv).open(encoding="utf-8-sig", newline="") as handle:
         requests = list(csv.DictReader(handle, delimiter="\t"))
     if not requests or len(requests) > maximum_accessions:
         raise ValueError(f"Provide 1–{maximum_accessions} accession rows")
     fetcher = fetcher or _fetch_protein
     sequences, rows = {}, []
+    responses = new_attempt(out_fasta)
     timestamp = datetime.now(timezone.utc).isoformat()
-    for row in requests:
+    for index, row in enumerate(requests, 1):
         accession = (row.get("accession") or "").strip()
         if not re.fullmatch(r"[A-Za-z]{1,6}_?\d+(?:\.\d+)?", accession):
             raise ValueError(f"Not a public protein accession: {accession!r}")
         ref = (row.get("reference_id") or accession).strip()
         if ref in sequences or re.search(r"\s", ref):
             raise ValueError(f"Duplicate/invalid reference_id {ref!r}")
+        (responses / f"request-{index:04}.json").write_text(json.dumps({
+            "accession": accession, "reference_id": ref,
+            "requested_at": timestamp}) + "\n", encoding="utf-8")
         content = fetcher(accession)
+        path = responses / f"response-{index:04}.faa"
+        if isinstance(content, str):
+            path.write_text(content, encoding="utf-8")
+        elif isinstance(content, bytes):
+            path.with_suffix(".bin").write_bytes(content)
         if not isinstance(content, str) or len(content) > 8_000_000:
             raise ValueError(f"Invalid response size for {accession}")
-        with tempfile.TemporaryDirectory(prefix="basis-ref-") as temporary:
-            path = Path(temporary) / "response.faa"
-            path.write_text(content, encoding="utf-8")
-            fetched = read_fasta(path)
+        fetched = read_fasta(path)
         if len(fetched) != 1:
             raise ValueError(f"Expected exactly one protein for {accession}")
         fetched_id, sequence = next(iter(fetched.items()))
@@ -309,11 +317,14 @@ def prepare_accession_catalog(requests_tsv: Path, out_fasta: Path, out_metadata:
     for row in rows:
         if row["role"] not in {"reference", "anchor", "outgroup"} or row["review_status"] not in {"reviewed", "unreviewed", "rejected"}:
             raise ValueError("Invalid role or review_status in accession requests")
+    preserve_existing(out_fasta)
     write_fasta(sequences, Path(out_fasta))
+    preserve_existing(out_metadata)
     Path(out_metadata).parent.mkdir(parents=True, exist_ok=True)
     with Path(out_metadata).open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=CATALOG_FIELDS, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
     return {"reference_count": len(rows), "fasta": str(out_fasta), "metadata": str(out_metadata),
+            "responses_directory": str(responses),
             "note": "Retrieved public protein sequences; biological labels remain user-supplied."}

@@ -211,16 +211,25 @@ class ResultStoreTests(unittest.TestCase):
         self.assertTrue((failures[0].parent / "data/result.txt").is_file())
         self.assertFalse((failures[0].parent / "completed.json").exists())
 
-    def test_failed_attempt_retention_is_bounded_without_pruning_success(self):
+    def test_legacy_retention_cap_never_prunes_generated_attempts(self):
         first, _ = self.run_job()
         self.config["modules"]["example"]["threshold"] = 2
+        failures_created = []
         def fail(payload):
             (payload / "partial.txt").write_text("diagnostic")
+            (payload / "tool.log").write_text("native failure details")
+            (payload / "intermediate").mkdir()
+            (payload / "intermediate/work.txt").write_text("unfinished output")
+            failures_created.append(payload)
             raise RuntimeError("synthetic interrupted command")
         for _ in range(4):
             with self.assertRaises(RuntimeError):
                 self.run_job(execute=fail, failed_retention=2)
-        self.assertEqual(len(list(self.store.glob("*/attempt-*/failure.json"))), 2)
+        self.assertEqual(len(list(self.store.glob("*/attempt-*/failure.json"))), 4)
+        for payload in failures_created:
+            self.assertEqual((payload / "partial.txt").read_text(), "diagnostic")
+            self.assertEqual((payload / "tool.log").read_text(), "native failure details")
+            self.assertEqual((payload / "intermediate/work.txt").read_text(), "unfinished output")
         self.assertTrue(Path(first["payload_root"]).is_dir())
 
     def test_input_change_during_run_never_publishes_success(self):

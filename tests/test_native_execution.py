@@ -208,7 +208,8 @@ class NativeExecutionTests(unittest.TestCase):
         workspace = Path(analysis["payload_root"]).parent / "database-work"
         self.assertEqual(Path(observed["cwd"]), workspace)
         self.assertNotEqual(workspace, Path(database["payload_root"]))
-        self.assertFalse(workspace.exists())
+        self.assertEqual((workspace / "localDB/generated-index.txt").read_text(),
+                         "synthetic generated index\n")
         self.assertEqual(Path(observed["output_directory"]), Path(analysis["payload_root"]))
         self.assertNotEqual(Path(analysis["payload_root"]), Path(database["payload_root"]))
         self.assertTrue(observed["local_database_present"])

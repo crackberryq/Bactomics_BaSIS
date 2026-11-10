@@ -12,8 +12,8 @@ import argparse
 from importlib.metadata import version
 from pathlib import Path
 import shutil
-import tempfile
 
+from basis.retention import new_attempt, publish_link
 from basis.adapters import extend as pf2
 from safety.extend import (
     check_pf2_config, read_json, select_device, settings, validate_embeddings,
@@ -67,13 +67,11 @@ def classify(sample, config, embeddings, manifest, destination, logfile):
     pf2._validate_reuse(embeddings, Path(manifest), Path(sample["proteins"]),
                         config["prot_t5_identity"])
     validate_embeddings(embeddings, sample["proteins"])
-    destination = Path(destination).resolve()
+    destination = Path(destination).absolute()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        raise ValueError("Classifier output already exists; Snakemake must clean incomplete outputs")
     effective_config, weight_audit = prepare_classifier_configuration(config)
     device = select_device(config)
-    stage = Path(tempfile.mkdtemp(prefix="classifier-attempt-", dir=destination.parent))
+    stage = new_attempt(destination)
     native_config = stage / "classifier-config.json"
     write_json(native_config, effective_config)
     write_json(stage / "classifier-weights.json", weight_audit)
@@ -95,8 +93,7 @@ def classify(sample, config, embeddings, manifest, destination, logfile):
     shutil.copyfile(native_config, native / "classifier-config.json")
     shutil.copyfile(stage / "classifier-weights.json", native / "classifier-weights.json")
     write_json(native / "device.json", device)
-    native.rename(destination)
-    shutil.rmtree(stage)
+    publish_link(destination, native)
 
 
 def main(argv=None):

@@ -2,12 +2,12 @@
 PF2_CODE = [str(ROOT / path) for path in (
     "workflow/lib/safety/extend.py", "workflow/lib/safety/runtime.py",
     "workflow/vendor/basis/adapters/extend.py", "workflow/vendor/basis/inputs.py",
-    "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py")]
+    "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py", "workflow/vendor/basis/retention.py")]
 CCF_CODE = [str(ROOT / path) for path in (
     "workflow/lib/safety/extend.py", "workflow/lib/safety/ccf_assembly.py",
     "workflow/lib/safety/result_store.py", "workflow/lib/safety/runtime.py",
     "workflow/vendor/basis/adapters/crisprcasfinder.py", "workflow/vendor/basis/inputs.py",
-    "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py")]
+    "workflow/vendor/basis/normalize.py", "workflow/vendor/basis/util.py", "workflow/vendor/basis/retention.py")]
 
 
 def extend_metadata(isolate, name):

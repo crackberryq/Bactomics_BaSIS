@@ -17,6 +17,12 @@ configfile: str(ROOT / "config.yaml")
 from safety.context import SafetyContext
 CTX = SafetyContext(config, ROOT)
 SAMPLES = CTX.samples
+
+# Retain each job's existing outputs/logs before scheduler cleanup, including
+# retries. Generated failure artifacts remain inspectable until explicit cleanup.
+from safety.artifact_retention import install as install_output_retention
+install_output_retention(workflow, [Path(path) / "safety" for path in SAMPLES] +
+                         ([Path(CTX.resource_root)] if hasattr(CTX, "resource_root") else []))
 ISOLATE_PATTERN = "|".join(re.escape(path) for path in SAMPLES) or "(?!)"
 
 wildcard_constraints:

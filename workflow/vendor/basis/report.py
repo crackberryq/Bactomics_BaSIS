@@ -5,6 +5,8 @@ screening result into an organism-level safety classification.
 """
 from __future__ import annotations
 
+from basis.retention import preserve_existing
+
 from .progress import tracked
 
 import csv
@@ -670,7 +672,7 @@ def _write_report(run: dict, samples: list[dict], records: list[dict], deep_reco
     artifacts["html"].write_text(content, encoding="utf-8")
     if not include_deep:
         # This table is renderer-owned. Historical analysis inputs stay intact.
-        (outdir / "deferred-candidates.tsv").unlink(missing_ok=True)
+        preserve_existing(outdir / "deferred-candidates.tsv")
     from .report_navigation import write_navigation_index
     artifacts["report_navigation_json"] = write_navigation_index(run, deep_records, outdir)
     return {key: str(path) for key, path in artifacts.items()}

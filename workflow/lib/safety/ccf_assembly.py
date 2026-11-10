@@ -311,7 +311,7 @@ def run_assembly(sample, full_config, destination, receipt, store_root, *, threa
         runtime.write_json(payload / "parsed.json", parsed)
         # The completed snapshot is self-contained. The already verified model
         # resource is identity-bound above; do not copy it into every result.
-        (payload / "models").unlink()
+        (payload / "models").rename(payload.parent / "models-resource-link")
 
     record, reused = result_store.run_cached("crisprcasfinder", identity, destination, receipt,
         store_root, execute, verify, failed_retention=settings.get("failed_attempts_to_keep", 3),

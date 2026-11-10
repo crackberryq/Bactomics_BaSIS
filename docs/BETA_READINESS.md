@@ -1,9 +1,9 @@
 # Preparing BaSIS AWARE 0.4.0b1
 
-**Status: beta preparation, not a published beta. Updated 2026-11-09.**
+**Status: beta preparation, not a published beta. Updated 2026-11-10.**
 
-The current repair candidate is **0.4.0a6**, described in
-[the release notes](RELEASE_0.4.0a6.md). It carries the reviewed annotation-coverage,
+The current repair candidate is **0.4.0a7**, described in
+[the release notes](RELEASE_0.4.0a7.md). It adds generated-file retention across retries and carries the reviewed annotation-coverage,
 native-coordinate and report-warning fixes already implemented in development at
 `53c61df005443b2d258664e1da1d3dd9a0a2591e`. The `basis-aware` and `development`
 branches remain separate installation channels. Publication of the new alpha is

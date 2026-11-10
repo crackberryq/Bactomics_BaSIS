@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import tempfile
 import time
 
@@ -135,7 +136,7 @@ def source_inputs(spec, workflow_root):
         return list(map(str, paths))
     vendor = root / "workflow/vendor/basis"
     name = spec.get("provider", spec.get("id"))
-    common = ["inputs.py", "util.py"]
+    common = ["inputs.py", "util.py", "retention.py"]
     if name in {"prosite", "prott5", "deep_catalogue"}:
         common += ["bootstrap_deep.py", "references.py"]
         if name == "prosite":
@@ -440,6 +441,17 @@ def _protect_legacy(destination, receipt_path):
               "directory before resuming; no download was started.")
 
 
+def _retain_attempt_log(attempt, logfile):
+    """Keep generated provider diagnostics outside scheduler-owned log paths."""
+    source = Path(logfile)
+    target = Path(attempt) / "commands.log"
+    if source.is_file() and source.resolve() != target.resolve():
+        # Each attempt is unique. Never overwrite another attempt's log, and
+        # do not move the live log while a caller may still hold it open.
+        shutil.copyfile(source, target)
+    return target
+
+
 def prepare(name, spec, resource_root, logfile, *, threads=1, dependency_receipts=(),
             environment_receipt=None, runner=None):
     """Publish a small receipt; payloads and failed attempts outlive workflow jobs.
@@ -517,7 +529,8 @@ def prepare(name, spec, resource_root, logfile, *, threads=1, dependency_receipt
                 "status": "started", "resource": name, "cache_key": key,
                 "preparation_identity": identity,
                 "started_at_utc": datetime.now(timezone.utc).isoformat(),
-                "logfile": str(Path(logfile).resolve()), "payload_root": str(data)})
+                "logfile": str(Path(logfile).resolve()),
+                "retained_logfile": str(attempt / "commands.log"), "payload_root": str(data)})
             spec["dependency_resources"] = [entry["result"] for entry in dependencies]
             spec["threads"] = int(threads)
             spec["cache_directory"] = str(root)
@@ -529,15 +542,26 @@ def prepare(name, spec, resource_root, logfile, *, threads=1, dependency_receipt
                     runner = DirectRunner({**spec.get("module_config", {}), "threads": threads,
                         "command_prefix": [], "timeout_seconds": spec.get("timeout_seconds", 14400)}, logfile)
                 result = _provider(spec, data, runner)
+                _retain_attempt_log(attempt, getattr(runner, "logfile", logfile))
                 roots = _roots([data, *_named_paths(result)], owned=data)
                 receipt = _completed_receipt(name, spec, result, roots, identity, key,
                                              dependency_receipts, payload=data)
                 atomic_json(attempt / "receipt.json", receipt)
             except BaseException as exc:
+                log_error = None
+                try:
+                    _retain_attempt_log(attempt, getattr(runner, "logfile", logfile))
+                except OSError as error:
+                    # Keep the original provider error and expose any failure
+                    # to snapshot the live log instead of silently losing it.
+                    log_error = str(error)
+                    exc.add_note("Could not retain provider log: " + log_error)
                 atomic_json(attempt / "failure.json", {
                     "status": "failed", "resource": name, "cache_key": key,
                     "failed_at_utc": datetime.now(timezone.utc).isoformat(),
                     "error_type": type(exc).__name__, "logfile": str(Path(logfile).resolve()),
+                    "retained_logfile": str(attempt / "commands.log"),
+                    "log_retention_error": log_error,
                     "payload_preserved": str(data), "success_receipt_published": False})
                 raise
         # The cache manifest commits a verified resource before the disposable

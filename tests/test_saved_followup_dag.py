@@ -348,7 +348,7 @@ class SavedFollowupDagTests(unittest.TestCase):
 
     def test_candidate_rules_exclude_summary_helper_but_consumers_track_it(self):
         helper = self.isolate_workflow_sources()
-        inventory = self.work / "declared-sources.json"
+        inventory = self.isolate / "safety/metadata/declared-sources.json"
         snakefile = self.workflow_root / "Followup.smk"
         with snakefile.open("a") as stream:
             stream.write(
