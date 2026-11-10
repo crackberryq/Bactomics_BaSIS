@@ -278,3 +278,11 @@ External resource symlink targets remain external inputs; retaining a link does 
 copy its database. Files deleted by prior versions cannot be reconstructed. Upstream
 tools may have private internal cleanup behavior; this policy covers artifacts
 exposed to and managed by BaSIS, not bytes an executable never leaves on disk.
+
+### Conda controller identification (0.4.0a8)
+
+The retention adapter verifies `snakemake.__version__` from the imported runtime.
+Some Conda `snakemake-minimal` builds report `0.0.0` in Python distribution metadata
+while running the supported 9.6.2 engine. That placeholder (or missing distribution
+metadata) is accepted only with a supported runtime. A meaningful metadata/runtime
+conflict, unsupported runtime, or changed scheduler API still prevents execution.

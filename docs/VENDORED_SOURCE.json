@@ -4,7 +4,7 @@
   "source_tag": "v0.3.0rc8",
   "source_commit": "bedf903300e2450b1ced5f5585e8dd6b56db58c9",
   "source_version": "0.3.0rc8",
-  "standalone_version": "0.4.0a7",
+  "standalone_version": "0.4.0a8",
   "scope": "Selected scientific parsers, analysis and report functions plus their original scientific resources. Snakemake owns the standalone workflow; the previous CLI, GUI, environment managers and scheduler are not included.",
   "changed_files": [
     {
@@ -704,6 +704,21 @@
         "path": "workflow/vendor/basis/retention.py",
         "base_sha256": null,
         "updated_sha256": "30297f06fda5c49151d476dc65f27fb616280bc111d3716cbf73c61c27c52e6b"
+      }
+    ]
+  },
+  "conda_controller_retention_update": {
+    "base_commit": "749e178cc8c1f74b1997e11eca0a624822f92aee",
+    "scope": "Use the supported imported Snakemake runtime version; tolerate the Conda distribution placeholder, reject real conflicts, and require native Conda controller CI before publication.",
+    "native_analysis_settings_changed": false,
+    "scientific_thresholds_changed": false,
+    "evidence_classification_changed": false,
+    "candidate_selection_changed": false,
+    "files": [
+      {
+        "path": "workflow/lib/safety/artifact_retention.py",
+        "base_sha256": "adeec8d58ccb79ae05978e62ac0c73b59b3156c330b1662f815d47a0abe510c3",
+        "updated_sha256": "bf5147aea0a4a65e913489a85b289d1305a8521de1a4a15ba6cef192b800bd11"
       }
     ]
   }
