@@ -43,6 +43,7 @@ def write_citations(outdir: str | Path, version: str | None = None) -> dict[str,
     if available. Omitting it explicitly cites the currently installed version.
     Invalid values fail before creating files instead of entering citation syntax.
     """
+    current_installation = version is None
     version = _version(version)
     cff = {
         "cff-version": "1.2.0",
@@ -51,8 +52,12 @@ def write_citations(outdir: str | Path, version: str | None = None) -> dict[str,
         "title": TITLE,
         "authors": [{"family-names": "Goldstein", "given-names": "Jimi", "orcid": ORCID}],
         "version": version,
-        "license": "MIT",
     }
+    if current_installation:
+        cff["license-url"] = (
+            "https://github.com/crackberryq/Bactomics_BaSIS/blob/"
+            "licensing/v0.4.0a8-research-v1/LICENSE"
+        )
     # @misc is portable to classic BibTeX as well as contemporary managers.
     bib = (
         "@misc{goldstein_basis,\n"
