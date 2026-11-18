@@ -90,4 +90,4 @@ Retain the exact source commit or release artifact, installed-package verificati
 
 **Author:** Jimi Goldstein · [ORCID 0000-0002-7829-0090](https://orcid.org/0000-0002-7829-0090). Reports include citation downloads. Please also cite the underlying tools and databases used in your analysis.
 
-BaSIS is distributed under the [Noncommercial Research Software Licence](LICENSE). Commercial use requires prior written permission from Jimi Goldstein. External tools, datasets and model weights retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+BaSIS is distributed under the [MIT license](LICENSE). External tools, datasets and model weights retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).

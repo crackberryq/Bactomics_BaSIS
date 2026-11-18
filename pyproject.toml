@@ -9,7 +9,7 @@ description = "Bacterial Adaptive Safety Investigation System"
 authors = [{name = "Jimi Goldstein"}]
 readme = "README.md"
 requires-python = ">=3.11"
-license = "LicenseRef-Noncommercial-Research-1.0"
+license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 dependencies = ["PyYAML>=6.0,<7", "snakemake==9.6.2"]
 

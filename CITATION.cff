@@ -7,4 +7,4 @@ authors:
     given-names: Jimi
     orcid: https://orcid.org/0000-0002-7829-0090
 version: 0.3.0rc8
-license-url: https://github.com/crackberryq/Bactomics_BaSIS/blob/309ab8acc38633f57276ea6989d81331449421b2/LICENSE
+license: MIT
