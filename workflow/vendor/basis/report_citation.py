@@ -56,7 +56,7 @@ def write_citations(outdir: str | Path, version: str | None = None) -> dict[str,
     if current_installation:
         cff["license-url"] = (
             "https://github.com/crackberryq/Bactomics_BaSIS/blob/"
-            "licensing/v0.4.0a8-research-v1/LICENSE"
+            "309ab8acc38633f57276ea6989d81331449421b2/LICENSE"
         )
     # @misc is portable to classic BibTeX as well as contemporary managers.
     bib = (
