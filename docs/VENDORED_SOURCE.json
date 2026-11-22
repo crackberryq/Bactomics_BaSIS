@@ -4,7 +4,7 @@
   "source_tag": "v0.3.0rc8",
   "source_commit": "bedf903300e2450b1ced5f5585e8dd6b56db58c9",
   "source_version": "0.3.0rc8",
-  "standalone_version": "0.4.0a8",
+  "standalone_version": "0.4.0a9",
   "scope": "Selected scientific parsers, analysis and report functions plus their original scientific resources. Snakemake owns the standalone workflow; the previous CLI, GUI, environment managers and scheduler are not included.",
   "changed_files": [
     {
@@ -54,6 +54,12 @@
       "source_sha256": "43b5ed421481094b93bb0b27a46030ebb156c2fcfa29369f54b734d18e9573e6",
       "standalone_sha256": "17951423a58ef85560453eec202a2e4bd0f260bd2b4aacd8b6d3f17e1649241d",
       "reason": "Record placement artifact checksums at production and show verified inline tree previews with explicit recovery guidance."
+    },
+    {
+      "path": "workflow/vendor/basis/adapters/typing_defense.py",
+      "source_sha256": "f4a6d60a71e2e4ad619872de24f286d45aa75daf610f07b6fc97f0ada766d340",
+      "standalone_sha256": "6b1b2ca79b6914faacfff92a726b495e2f5584c7f59ec8e74bf2dd1479a51537",
+      "reason": "Verify absolute MLST input aliases by filesystem identity and preserve exact sample-ID matching."
     }
   ],
   "removed_files": [

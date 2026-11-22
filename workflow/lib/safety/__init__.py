@@ -1,3 +1,3 @@
 """Helpers for the standalone, Snakemake-owned BaSIS workflow."""
-__version__ = "0.4.0a8"
+__version__ = "0.4.0a9"
 

@@ -91,6 +91,25 @@ class NativeContracts(unittest.TestCase):
         self.assertEqual(payload["interpretation"], "inconclusive")
         self.assertEqual(payload["metrics"]["typing_status"], "no_matching_scheme")
 
+    def test_mlst_assembly_alias_and_identity(self):
+        assembly = Path(self.sample["assembly"])
+        alias = self.root / "run-local.fna"
+        alias.symlink_to(assembly)
+        other = self.root / "copy.fna"
+        other.write_bytes(assembly.read_bytes())
+        (self.native / "mlst.tsv").write_text("FILE\tSCHEME\tST\tSTATUS\tSCORE\tALLELES\nfixture\t-\t-\tNONE\t0\t\n")
+        for filename, sample_id, valid in [(alias, "fixture", True), (other, "fixture", False),
+                                           (alias, "wrong", False), (alias.name, "fixture", False),
+                                           (self.root / "missing", "fixture", False)]:
+            with self.subTest(filename=filename, sample_id=sample_id):
+                (self.native / "mlst.json").write_text(json.dumps([dict(filename=str(filename),
+                    id=sample_id, scheme="-", sequence_type="-", alleles=None)]))
+                if valid:
+                    verify("mlst", self.sample, self.settings, self.native)
+                else:
+                    with self.assertRaisesRegex(ValueError, "input identity mismatch"):
+                        verify("mlst", self.sample, self.settings, self.native)
+
     def test_shell_quotes_paths_and_retains_failure_log(self):
         native = self.root / "space and ' quote"
         executable = self.root / "tool ' space"

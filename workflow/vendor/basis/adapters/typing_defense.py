@@ -24,7 +24,14 @@ def parse_mlst(json_path, tsv_path, assembly, sample_id, *, requested_scheme=Non
     if not isinstance(records, list) or len(records) != 1 or not isinstance(records[0], dict):
         raise ValueError("MLST JSON must account for exactly one submitted assembly")
     row = records[0]
-    if row.get("filename") != str(Path(assembly).resolve()) or row.get("id") != sample_id:
+    filename = row.get("filename")
+    if row.get("id") != sample_id or not isinstance(filename, str) or not Path(filename).is_absolute():
+        raise ValueError("MLST output input identity mismatch")
+    try:
+        same_input = Path(filename).samefile(assembly)
+    except (OSError, ValueError):
+        same_input = False
+    if not same_input:
         raise ValueError("MLST output input identity mismatch")
     scheme, st, alleles = row.get("scheme"), row.get("sequence_type"), row.get("alleles")
     if not isinstance(scheme, str) or not re.fullmatch(r"[A-Za-z0-9_]+|-", scheme):
