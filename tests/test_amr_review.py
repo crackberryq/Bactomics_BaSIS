@@ -220,6 +220,62 @@ class AmrReviewTests(unittest.TestCase):
         self.assertIn('href="tables/amr-review.tsv"', Path(result["html"]).read_text())
         self.assertEqual({p: p.read_bytes() for p in paths}, original)
 
+    def test_screening_snapshot_includes_only_exact_verified_companion_rows(self):
+        safety = self.root / "safety"
+        meta, evidence = safety / "metadata", safety / "evidence"
+        meta.mkdir(parents=True)
+        evidence.mkdir()
+        sample = meta / "sample.json"
+        sample.write_text(json.dumps(self.sample))
+        config = meta / "config.json"
+        config.write_text(json.dumps({"deep": {"enabled": True},
+                                      "modules": {"amrfinder": {"enabled": True}}}))
+        native, deep = evidence / "amrfinder.json", evidence / "deepsafe.json"
+        rows = [dict(copy.deepcopy(self.finding), finding_id=f"f{i}", protein_id=f"p{i}",
+                     contig=f"c{i}") for i in range(6)]
+        record = dict(self.record, findings=rows)
+        native.write_text(json.dumps(record))
+        candidates = self.candidates(records=[record])
+        for i, candidate in enumerate(candidates):
+            if candidate["selected"]:
+                candidate.update(execution="completed", assessment={"interpretation": "unresolved"})
+                placement = ({"status": "completed"} if i == 0 else
+                             {"status": "insufficient_evidence", "reason": "reference_panel_inadequate",
+                              "panel": {"adequacy": {"reasons": ["no_supported_family_panel"]}}})
+                candidate["analyses"] = {"family_placement": placement}
+        extra = copy.deepcopy(candidates[0])
+        extra.update(candidate_id="unrelated-same-protein")
+        extra["source_evidence"][0]["attributes"]["raw"]["Method"] = "CHANGED"
+        deep.write_text(json.dumps(self.parent([*candidates, extra])))
+        original = {path: path.read_bytes() for path in (sample, config, native, deep)}
+        with patch("subprocess.Popen", side_effect=AssertionError("Reporting attempted native execution")):
+            render(sample, config, [native, deep], safety / "deepsafe-report", view="deep", evidence_root=safety)
+            render(sample, config, [native], safety, view="screening", evidence_root=safety)
+        bundle = json.loads((safety / "evidence.json").read_text())
+        self.assertFalse(bundle["deep_records"])
+        self.assertFalse(bundle["run"]["options"]["deep"])
+        self.assertEqual(bundle["run"]["review_followup_sources"][0]["module"], "deepsafe")
+        rows = bundle["amr_review"]["rows"]
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(sum(r["followup_status"] == ["completed_unresolved"] for r in rows), 5)
+        self.assertEqual(sum(r["followup_status"] == ["deferred"] for r in rows), 1)
+        self.assertTrue(all(len(row["candidate_ids"]) == 1 for row in rows))
+        page = (safety / "report.html").read_text()
+        self.assertIn("Completed placement 1 · No supported panel 4 · Deferred 1", page)
+        self.assertEqual(page.count("No supported reference panel"), 4)
+        self.assertEqual(page.count("Reference placement completed"), 1)
+        self.assertIn('href="deepsafe-report/report.html"', page)
+        with (safety / "tables/amr-review.tsv").open() as stream:
+            exported = list(csv.DictReader(stream, delimiter="\t"))
+        self.assertEqual(len(exported), 6)
+        self.assertTrue(all(json.loads(row["candidate_ids"]) for row in exported))
+        self.assertEqual({path: path.read_bytes() for path in original}, original)
+        deep.write_text(deep.read_text() + "\n")
+        render(sample, config, [native], safety, view="screening", evidence_root=safety)
+        stale = json.loads((safety / "evidence.json").read_text())
+        self.assertTrue(all(r["followup_status"] == ["no_linked_followup"] for r in stale["amr_review"]["rows"]))
+        self.assertNotIn("review_followup_sources", stale["run"])
+
     def test_invalid_scope_rejected_and_explicit_legacy_scope_retained(self):
         with self.assertRaises(ValueError):
             SafetyContext({"deep": {"aware": {"scope": "typo"}}}, ROOT)

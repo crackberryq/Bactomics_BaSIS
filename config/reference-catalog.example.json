@@ -1,0 +1,21 @@
+{
+  "schema": "basis-reference-catalog-spec-v1",
+  "name": "Lab reference catalog",
+  "version": "0.1.0",
+  "records": [
+    {
+      "id": "calibration-notes",
+      "kind": "reference",
+      "status": "pending",
+      "path": "reference-files/calibration-notes.tsv",
+      "sha256": "",
+      "source": "",
+      "source_version": "",
+      "citation": "",
+      "license": "",
+      "reviewer": "",
+      "reviewed_on": "",
+      "notes": "Replace this example with a file you have reviewed."
+    }
+  ]
+}

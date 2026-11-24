@@ -1,14 +1,14 @@
 # BaSIS AWARE · standalone Snakemake workflow
 
-**Version 0.4.0a9 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
+**Version 0.4.0a10 — alpha prerelease.** BaSIS AWARE collects bacterial genomic screening evidence and focused DeepSafe follow-up in separate offline reports. This edition runs directly from `BaSIS.smk`. Snakemake owns workflow scheduling, tool environments, dependencies and restart decisions. There is no BaSIS package installation or Streamlit launcher in this edition.
 
 This is a separate development line derived from the 0.3.0rc8 scientific and reporting code. Existing RC releases remain available. Infrastructure checks do **not** establish biological accuracy; independent biological validation of this rebuilt workflow has not been completed.
 
 The [acceptance checklist](docs/ACCEPTANCE.md) distinguishes completed software
 checks from the native integration evidence still required before beta promotion.
 The release branch is `basis-aware`, and the product name is **BaSIS AWARE**,
-consistent with **HybAs AWARE**. See the [0.4.0a9 release notes](docs/RELEASE_0.4.0a9.md).
-The installation command below selects `basis-aware`; use `--branch v0.4.0a9`
+consistent with **HybAs AWARE**. See the [0.4.0a10 release notes](docs/RELEASE_0.4.0a10.md).
+The installation command below selects `basis-aware`; use `--branch v0.4.0a10`
 instead to check out the fixed alpha release.
 
 ## Install the workflow controller
@@ -73,8 +73,9 @@ and `<user>` with your Linux username:
 Screening results are written to `safety/report.html`. When DeepSafe is enabled,
 its follow-up is written separately to `safety/deepsafe-report/report.html`.
 Use the `screening_reports` or `followup_reports` workflow target to request the
-corresponding bundle. Screening rendering does not wait for DeepSafe analysis,
-although enabled resources still share the setup barrier. See
+corresponding bundle independently. The default integrated run renders the main
+page after its DeepSafe companion so screening findings include recorded follow-up.
+An explicit screening-only target can still render while DeepSafe is pending. See
 [separate reports and saved-evidence rendering](docs/REPORT_SEPARATION.md) for
 commands, disabled/provisional states and navigation behavior.
 
@@ -160,6 +161,8 @@ development placement panel**. Those are different kinds of evidence coverage.
 The workflow is reusable across configured families; this distribution does not
 claim universal family coverage or independently validated functional prediction.
 Trees and conditional placement weights do not establish a resistance phenotype.
+
+Researchers can [build and verify a versioned local reference catalog](docs/REFERENCE_CATALOG.md) from their review records and source files. An approved existing placement registry can be included in the catalog.
 
 Existing reviewed resources can be selected in a study configuration:
 

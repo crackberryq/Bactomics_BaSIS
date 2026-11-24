@@ -230,6 +230,9 @@ def render_screening_findings(findings, names, source_paths):
                  '<option value="review">Main review findings</option><option value="">All saved findings</option>'
                  '<option value="exploratory">Exploratory / below threshold</option>'
                  '<option value="provisional">Provisional · module incomplete</option></select></label></div>'
+                 '<label class="finding-print-option"><input id="finding-print-all" type="checkbox"> '
+                 'Print all ' + f'{len(rows):,}' + ' saved findings</label>'
+                 '<p class="small finding-print-full">All ' + f'{len(rows):,}' + ' saved findings are included.</p>'
                  '<p id="finding-count" class="small muted" role="status" aria-live="polite">'
                  + str(len(rows)) + ' saved findings. Filters and pages require JavaScript; all rows are available below without it.</p>'
                  '<div class="table-wrap"><table id="finding-table"><thead><tr>'
@@ -277,7 +280,8 @@ def render_screening_findings(findings, names, source_paths):
                  '<span id="finding-page" class="small"></span>'
                  '<button class="button" id="finding-next" type="button">Next page</button></div>'
                  '<p class="small muted">Search covers every saved screening row, including rows on other pages. '
-                 'The readable TSV and printed table contain all evidence groups. Missing source fields are shown as not recorded.</p></article>')
+                 'Print includes the displayed findings page unless you select all saved findings. '
+                 'The complete table is available in <a href="screening-findings.tsv">screening-findings.tsv</a>.</p></article>')
     return ''.join(parts)
 
 
@@ -302,6 +306,10 @@ CSS = r"""
 .finding-pages[hidden],#finding-table tr[hidden],#finding-empty[hidden]{display:none}
 .screening-reader .filters label[hidden]{display:none}
 .finding-pages button:disabled{opacity:.45;cursor:default}
-@media print{#finding-table tr[hidden]{display:table-row!important}.finding-pages{display:none!important}
+.finding-print-option{display:block;margin:12px 0}.finding-print-full{display:none}
+@media print{.finding-print-option,.finding-pages{display:none!important}
+ .screening-reader:has(#finding-print-all:checked) #finding-table tr[hidden]{display:table-row!important}
+ .screening-reader:has(#finding-print-all:checked) .finding-print-full{display:block}
+ .screening-reader:has(#finding-print-all:checked) :is(#finding-count,#finding-empty){display:none}
  .screening-reader .table-wrap{overflow:visible}.screening-reader #finding-table{min-width:0;font-size:10px}}
 """

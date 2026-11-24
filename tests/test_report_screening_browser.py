@@ -99,7 +99,7 @@ class ScreeningBrowserTests(unittest.TestCase):
         self.screenshot(page, "screening-mobile.png")
         self.assertEqual(self.errors, [])
 
-    def test_no_javascript_and_print_keep_the_complete_record_set(self):
+    def test_no_javascript_and_full_print_preserve_all_rows_and_default_print_respects_filters(self):
         page = self.page(java_script_enabled=False, viewport={"width": 1440, "height": 1000})
         self.assertEqual(page.locator("#finding-table tbody tr:visible").count(), 303)
         self.assertIn("farawaydrug", page.locator("#finding-table").inner_text())
@@ -108,7 +108,16 @@ class ScreeningBrowserTests(unittest.TestCase):
         page.locator("#finding-search").fill("farawaydrug")
         self.assertEqual(page.locator("#finding-table tbody tr:visible").count(), 1)
         page.emulate_media(media="print")
+        self.assertEqual(page.locator("#finding-table tbody tr:visible").count(), 1)
+        self.assertIn("303 saved", page.locator("#finding-count").inner_text())
+        page.emulate_media(media="screen")
+        page.locator("#finding-print-all").check()
+        page.emulate_media(media="print")
         self.assertEqual(page.locator("#finding-table tbody tr:visible").count(), 303)
+        self.assertTrue(page.locator(".finding-print-full").is_visible())
+        self.assertFalse(page.locator("#finding-count").is_visible())
+        page.emulate_media(media="screen")
+        self.assertEqual(page.locator("#finding-table tbody tr:visible").count(), 1)
 
     def test_amr_review_notice_and_download_are_available_offline(self):
         saved = json.loads((self.root / "evidence.json").read_text())

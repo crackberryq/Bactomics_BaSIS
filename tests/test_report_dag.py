@@ -223,6 +223,17 @@ class IndependentReportDagTests(unittest.TestCase):
         self.assertEqual(resumed.returncode, 0, resumed.stdout[-6000:])
         self.assertIn("Nothing to be done", resumed.stdout)
 
+    def test_integrated_run_publishes_screening_with_verified_companion(self):
+        self.write("evidence/deepsafe.json", {
+            "sample_id": "synthetic", "module": "deepsafe", "execution_status": "completed",
+            "findings": [], "metrics": {}, "artifacts": [], "candidates": []})
+        result = self.snake()
+        self.assertEqual(result.returncode, 0, result.stdout[-6000:])
+        self.assertIn('href="deepsafe-report/report.html"', (self.safety / "report.html").read_text())
+        snapshot = json.loads((self.safety / "evidence.json").read_text())
+        self.assertEqual([s["module"] for s in snapshot["run"]["review_followup_sources"]], ["deepsafe"])
+        self.assertEqual(snapshot["deep_records"], [])
+
     def test_enabled_default_dag_requests_both_bundles(self):
         self.write("evidence/deepsafe.json", {"synthetic": True})
         result = self.snake("--dry-run", "--summary")

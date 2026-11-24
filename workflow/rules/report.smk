@@ -12,9 +12,16 @@ REPORTING_SOURCE.append(str(Path(ROOT) / "workflow/vendor/basis/amr_review.py"))
 
 
 def safety_report_evidence(wildcards):
-    # The screening report has no dependency on follow-up evidence. It can be
-    # rendered as soon as the recorded screening scope is available.
     return list(CTX.evidence_targets(wildcards.isolate))
+
+
+def screening_companion(wildcards):
+    # A full integrated run publishes its primary page after the matching
+    # companion. Explicit screening-only and file targets remain independent.
+    targets = workflow.dag_settings.targets or set()
+    if CTX.deep_enabled and (not targets or "all" in targets or "followup_reports" in targets):
+        return [f"{wildcards.isolate}/safety/deepsafe-report/metadata/report-navigation.json"]
+    return []
 
 
 if not getattr(CTX, "followup_only", False):
@@ -33,6 +40,7 @@ if not getattr(CTX, "followup_only", False):
             sample="{isolate}/safety/metadata/sample.json",
             config="{isolate}/safety/metadata/config.json",
             evidence=safety_report_evidence,
+            companion=screening_companion,
             source=REPORTING_SOURCE,
         output:
             html="{isolate}/safety/report.html",

@@ -8,13 +8,41 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from html import escape
 import json
+import re
 
 from .amr_review import VERSION, REASONS, review_finding
 from .deep_reporting import parent_execution
 
 COLUMNS = ("sample_id", "finding_id", "protein_id", "gene", "native_method",
            "source_execution", "review_status", "investigation_required", "review_reasons",
-           "followup_status", "candidate_ids", "recorded_interpretations", "policy")
+           "followup_status", "candidate_ids", "recorded_interpretations", "policy", "placements")
+
+
+def _snapshot(run):
+    """Compare saved source bytes, excluding the extra follow-up record."""
+    inputs = run["report_inputs"]
+    values = [(key, inputs[key]["sha256"]) for key in ("sample", "config")]
+    sources = run["evidence_sources"]
+    modules = [item["module"] for item in sources]
+    if len(modules) != len(set(modules)):
+        raise ValueError("Duplicate report source")
+    if ("deepsafe" in modules) != (run["report_view"] == "deep"):
+        raise ValueError("Unexpected DeepSafe source for report view")
+    values.extend(("evidence:" + item["module"], item["sha256"]) for item in sources)
+    if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+           for _, value in values):
+        raise ValueError("Invalid report snapshot hash")
+    return sorted(pair for pair in values if pair[0] != "evidence:deepsafe")
+
+
+def matching_screening_snapshot(screening_run, deep_run):
+    """Whether both report headers record the same screening input bytes."""
+    try:
+        return (screening_run.get("report_view") == "screening"
+                and deep_run.get("report_view") == "deep"
+                and _snapshot(screening_run) == _snapshot(deep_run))
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return False
 
 
 def _key(sid, finding):
@@ -43,14 +71,18 @@ def _followup(candidate, parent):
     for decision in (candidate.get("aware") or {}).get("evidence", []):
         if not decision.get("eligible"):
             reasons.extend(decision.get("reasons") or [])
+    placement = (candidate.get("analyses") or {}).get("family_placement") or {}
+    adequacy = ((placement.get("panel") or {}).get("adequacy") or {}).get("reasons") or []
     return {"candidate_id": candidate.get("candidate_id"), "status": status,
+            "placement_status": placement.get("status"), "placement_reason": placement.get("reason"),
+            "placement_adequacy": adequacy,
             "parent_execution": parent_execution(parent), "recorded_execution": state,
             "recorded_interpretation": assessment.get("interpretation"),
             "function_established": assessment.get("function_established"),
             "reasons": sorted(set(reasons))}
 
 
-def build_review_summary(records, deep_records=()):
+def build_review_summary(records, deep_records=(), *, include_orphaned_sources=True):
     from .report import _all_findings
 
     findings = _all_findings(records)
@@ -66,6 +98,8 @@ def build_review_summary(records, deep_records=()):
                 if source.get("sample_id") not in (None, "", sid) or review_finding(source) is None:
                     continue
                 key = _key(sid, source)
+                if key not in keys and not include_orphaned_sources:
+                    continue
                 if followup not in linked[key]:
                     linked[key].append(followup)
                 if key not in keys:
@@ -89,6 +123,9 @@ def build_review_summary(records, deep_records=()):
                      "investigation_required": review["investigation_required"],
                      "review_reasons": review["reasons"], "followups": followups,
                      "followup_status": sorted({f["status"] for f in followups}) or ["no_linked_followup"],
+                     "placements": [{"candidate_id": f["candidate_id"], "status": f["placement_status"],
+                                     "reason": f["placement_reason"], "adequacy": f["placement_adequacy"]}
+                                    for f in followups if f["placement_status"]],
                      "candidate_ids": sorted({str(f["candidate_id"]) for f in followups if f["candidate_id"]}),
                      "recorded_interpretations": sorted({str(f["recorded_interpretation"]) for f in followups
                                                          if f["recorded_interpretation"]})})
@@ -111,19 +148,31 @@ def build_review_summary(records, deep_records=()):
                           "deferral and an empty queue never constitute expert review closure or deployment authorization."}
 
 
-def render_review_summary(summary):
+def render_review_summary(summary, *, followup_href=None, screening_only=False):
     if not summary["rows"]:
         return ""
     esc = lambda value: escape(str(value if value is not None else "Not recorded"), quote=True)
     counts = summary["counts"]
     number = counts["investigation_findings"]
     investigation = str(number) + (" finding requires investigation" if number == 1 else " findings require investigation")
+    linked = {(row["sample_id"], f["candidate_id"]): f
+              for row in summary["rows"] for f in row["followups"] if f["candidate_id"]}
+    overview = ""
+    if linked:
+        completed = [f for f in linked.values() if f["status"].startswith("completed_")]
+        placed = sum(f["placement_status"] == "completed" for f in completed)
+        no_panel = sum("no_supported_family_panel" in f["placement_adequacy"] for f in completed)
+        deferred = sum(f["status"] == "deferred" for f in linked.values())
+        overview = (f'<p><strong>Linked candidates {len(linked)}</strong> · Completed follow-up {len(completed)}'
+                    f' · Completed placement {placed} · No supported panel {no_panel} · Deferred {deferred}</p>')
+    if followup_href:
+        overview += '<p><a href="' + esc(followup_href) + '">Open matched DeepSafe follow-up report</a></p>'
     body = ('<article class="panel" id="amr-review"><h3>AMR evidence review outstanding</h3>'
             '<p><strong>' + investigation + '</strong>; '
             + str(counts["native_call_findings"]) + ' other native AMR calls remain for context review.</p>'
             '<p>Follow-up selection and completed jobs do not close these review questions. '
             'Deferred, failed and inconclusive follow-up remains visible.</p>'
-            '<a class="button" href="amr-review.tsv" download>All AMR review findings · TSV</a>'
+            + overview + '<a class="button" href="amr-review.tsv" download>All AMR review findings · TSV</a>'
             '<details><summary>Why these findings need review · ' + str(counts["review_findings"]) + ' source rows</summary>'
             '<p class="small">Showing up to 10 rows; the download contains every row and linked candidate ID.</p>'
             '<div class="table-wrap"><table><thead><tr><th>Sample / finding</th><th>Review reason</th>'
@@ -133,6 +182,15 @@ def render_review_summary(summary):
         if row["source_execution"] != "completed":
             why += " Source completion is not established; this finding remains provisional."
         status = "; ".join(value.replace("_", " ") for value in row["followup_status"])
+        if screening_only and row["followup_status"] == ["no_linked_followup"]:
+            status = "No matching follow-up in this report snapshot"
+        for placement in row["placements"]:
+            if "no_supported_family_panel" in placement["adequacy"]:
+                status += " · No supported reference panel"
+            elif placement["status"] == "completed":
+                status += " · Reference placement completed"
+            else:
+                status += " · Placement " + str(placement["status"]).replace("_", " ")
         reasons = sorted({reason for followup in row["followups"] for reason in followup["reasons"]})
         if reasons:
             status += ": " + "; ".join(reason.replace("_", " ") for reason in reasons)

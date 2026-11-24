@@ -69,9 +69,12 @@ report.
 
 ## Dependency and failure behavior
 
-The screening report has no dependency on DeepSafe evidence or the follow-up
-report. Once its own screening evidence and metadata are ready, it can render
-while DeepSafe analysis is pending.
+For an integrated run with DeepSafe enabled, the default target finishes the
+DeepSafe report before publishing the primary page. The screening overview,
+evidence JSON and AMR review TSV include the outcomes of matching source
+findings, with the follow-up evidence hash in the screening snapshot. Screening
+module counts keep their original scope. An explicit `screening_reports` target
+remains independent and can render while DeepSafe analysis is pending.
 
 There is still a shared setup barrier. `sample_setup_ready` requires every
 resource and environment selected by the effective configuration and produces
@@ -180,9 +183,9 @@ sample/configuration hashes and screening evidence hashes match. The counterpart
 HTML and evidence must also match their recorded hashes. Missing, stale, edited
 or malformed counterparts receive no link.
 
-This check does not add a dependency between reports. If the other report appears
-later, re-render the first report to refresh its navigation; an existing report
-does not automatically update. The two report paths remain usable directly.
+If the reports are rendered individually, a companion may appear after the
+screening page was written. Render the screening page again from saved evidence
+to include its verified follow-up. Both report paths remain usable directly.
 
 Reviewed `Followup.smk` executions deliberately use a separate effective
 configuration. Its hash differs from the original screening configuration, so

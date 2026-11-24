@@ -221,7 +221,7 @@ def aggregate(sample: dict, config: dict, paths: list[Path], *,
     run = {
         "schema": "basis-snakemake-run-v1", "run_id": hashlib.sha256(serialized).hexdigest()[:20],
         "report_view": view,
-        "version": config.get("version", "0.4.0a9"), "engine": "snakemake",
+        "version": config.get("version", "0.4.0a10"), "engine": "snakemake",
         "options": {"deep": bool(deep_records), "extend": "pathogenfinder2" in seen},
         "validation_mode": config.get("validation_mode", "research_screening"),
         "enabled_modules": sorted(m for m, d in decisions.items() if d.get("requested") and m != "deepsafe"),
@@ -363,12 +363,21 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
                                          for key, path in coverage_artifacts.items()}
     from basis.report import write_report
     from basis.run_summary import build_run_summary, write_run_summary
+    from .report_links import matching_report_bundle
+    match = matching_report_bundle(run, source_root)
+    counterpart, bundle = match if match else (None, {})
+    companion_records = bundle.get("deep_records", []) if view == "screening" else []
+    if companion_records:
+        run["review_followup_sources"] = [source for source in bundle["run"]["evidence_sources"]
+                                          if source["module"] == "deepsafe"]
     # The vendored renderer is presentation only. Disable its legacy heartbeat;
     # Snakemake owns job-level progress and writes the render log itself.
     previous = os.environ.pop("BASIS_VERBOSE", None)
     try:
         artifacts = write_report(run, [sample], records, deep_records, root,
-                                 evidence_root=source_root if evidence_root is not None else None)
+                                 evidence_root=source_root if evidence_root is not None else None,
+                                 review_followup_records=companion_records,
+                                 followup_href=counterpart[0] if companion_records else None)
         summary = build_run_summary(run, [sample], records, deep_records)
         artifacts.update(write_run_summary(summary, root))
         artifacts.update({"deep_workflow_" + key: path for key, path in coverage_artifacts.items()})
@@ -391,8 +400,6 @@ def render(sample_path: Path, config_path: Path, evidence_paths: list[Path], out
         for key, value in list(artifacts.items()):
             if Path(value) == source:
                 artifacts[key] = str(target)
-    from .report_links import matching_report_link
-    counterpart = matching_report_link(run, source_root)
     related = ('<a class="button" href="' + html.escape(counterpart[0], quote=True) + '">'
                + html.escape(counterpart[1]) + '</a>') if counterpart else ""
     text = text.replace('<div class="topbar-actions">', '<div class="topbar-actions">' + related + '<a class="button" href="metadata/files.html">Run files</a>')

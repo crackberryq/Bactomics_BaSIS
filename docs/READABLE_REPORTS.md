@@ -43,8 +43,10 @@ Use **Read screening findings** at the top of the report. The finding table show
 Search by gene, drug, description, classification, reference or location. Search
 and tool filters cover every saved row, including rows beyond the former
 250-record display limit. Interactive pages display 50 matching rows at a time.
-Without JavaScript the complete table remains visible. Printing includes all
-evidence groups, including rows outside the current interactive filter.
+Printing from the interactive report includes the visible page and its matching and saved row counts.
+Select **Print all saved findings** above the table for a complete printout across evidence groups.
+Large reports can contain thousands of rows. The readable TSV contains the complete table.
+Without JavaScript all rows remain visible on screen and in print.
 
 **Main review findings** uses the existing evidence classification. Use the
 evidence-group selector to inspect **Exploratory / below threshold** records,
@@ -98,7 +100,7 @@ evidence. It uses synthetic annotations only.
 
 The dedicated `report-browser` CI job checks actual offline Chromium behavior:
 search beyond row 250, pagination, evidence filters, source-field expansion,
-phone-width containment, no-JavaScript access and complete printed tables.
+phone-width containment, no-JavaScript access, filtered prints and full-table printing.
 It preserves screenshots of the synthetic fixture. Local browser tests use
 `BASIS_TEST_REPORT_BROWSER=1`; an explicitly chosen compatible Chromium can be
 supplied with `BASIS_CHROMIUM_EXECUTABLE`.
